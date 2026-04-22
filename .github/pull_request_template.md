@@ -98,7 +98,7 @@ What was personally validated beyond CI:
 - Agent tools used (if any):
 - Workflow/plan summary (if any):
 - Verification focus:
-- Confirmation: naming + architecture boundaries followed (`AGENTS.md` + `CONTRIBUTING.md`):
+- Confirmation: naming + architecture boundaries followed (`AGENTS.md` + `docs/contributing/README.md`):
 
 ## Rollback Plan (required)
 

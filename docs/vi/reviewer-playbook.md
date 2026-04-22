@@ -8,7 +8,7 @@ Tài liệu này là người bạn đồng hành vận hành của [`docs/pr-wo
 - **Mục đích:** định nghĩa mô hình vận hành reviewer mang tính quyết định, duy trì chất lượng review cao khi khối lượng PR lớn.
 - **Đối tượng:** maintainer, reviewer và reviewer có hỗ trợ agent.
 - **Phạm vi:** triage intake, phân tuyến rủi ro-sang-độ-sâu, kiểm tra review sâu, ghi đè tự động hóa và giao thức bàn giao.
-- **Ngoài phạm vi:** thay thế thẩm quyền chính sách PR trong `CONTRIBUTING.md` hoặc thẩm quyền workflow trong các file CI.
+- **Ngoài phạm vi:** thay thế thẩm quyền chính sách PR trong `docs/contributing/pr-workflow.md` hoặc thẩm quyền workflow trong các file CI.
 
 ---
 
@@ -97,7 +97,7 @@ Nếu bất kỳ yêu cầu intake nào thất bại, để lại một comment 
 - Tác động tương thích/migration rõ ràng.
 - Không có rò rỉ dữ liệu cá nhân/nhạy cảm trong diff artifact; ví dụ/test giữ trung lập và theo phạm vi dự án.
 - Nếu có ngôn ngữ giống danh tính, nó sử dụng vai trò gốc ZeroClaw/dự án (không phải danh tính cá nhân hay thực tế).
-- Quy ước đặt tên và ranh giới kiến trúc tuân theo hợp đồng dự án (`AGENTS.md`, `CONTRIBUTING.md`).
+- Quy ước đặt tên và ranh giới kiến trúc tuân theo hợp đồng dự án (`AGENTS.md` ở thư mục gốc kho, và `docs/contributing/README.md` / sổ tay này).
 
 ### 3.3 Checklist review sâu (rủi ro cao)
 

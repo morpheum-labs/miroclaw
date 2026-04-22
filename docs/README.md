@@ -2,7 +2,7 @@
 
 This page is the primary entry point for the documentation system.
 
-Last refreshed: **February 21, 2026**.
+Last refreshed: **April 22, 2026**.
 
 ## Start Here
 
@@ -64,7 +64,7 @@ Last refreshed: **February 21, 2026**.
 
 ### Contributors / Maintainers
 
-- [../CONTRIBUTING.md](../CONTRIBUTING.md)
+- [contributing/README.md](contributing/README.md) (human workflow; for AI/cross-tool rules see [../AGENTS.md](../AGENTS.md))
 - [pr-workflow.md](contributing/pr-workflow.md)
 - [reviewer-playbook.md](contributing/reviewer-playbook.md)
 - [ci-map.md](contributing/ci-map.md)

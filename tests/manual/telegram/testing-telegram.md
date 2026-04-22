@@ -348,5 +348,5 @@ zeroclaw channel doctor
 
 - [Telegram Bot API Documentation](https://core.telegram.org/bots/api)
 - [ZeroClaw Main README](../../README.md)
-- [Contributing Guide](../../CONTRIBUTING.md)
+- [Contributing docs hub](../../../docs/contributing/README.md)
 - [Issue Tracker](https://github.com/zeroclaw-labs/zeroclaw/issues)

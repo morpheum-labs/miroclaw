@@ -61,7 +61,7 @@
 
 ### Người đóng góp / Bảo trì
 
-- [../../CONTRIBUTING.md](../../CONTRIBUTING.md)
+- [../contributing/README.md](../contributing/README.md)
 - [pr-workflow.md](pr-workflow.md)
 - [reviewer-playbook.md](reviewer-playbook.md)
 - [ci-map.md](ci-map.md)

@@ -8,7 +8,8 @@ For contributors, reviewers, and maintainers.
 
 ## Core Policies
 
-- Contribution guide: [../../CONTRIBUTING.md](../../CONTRIBUTING.md)
+- Cross-tool agent and repo conventions: [../../AGENTS.md](../../AGENTS.md) (repo root)
+- Human contributor policies and links below (there is no top-level `CONTRIBUTING.md`; this directory is the hub)
 - PR workflow rules: [./pr-workflow.md](./pr-workflow.md)
 - Reviewer playbook: [./reviewer-playbook.md](./reviewer-playbook.md)
 - CI map and ownership: [./ci-map.md](./ci-map.md)
@@ -18,7 +19,6 @@ For contributors, reviewers, and maintainers.
 
 ## Suggested Reading Order
 
-1. `CONTRIBUTING.md`
-2. `pr-workflow.md`
-3. `reviewer-playbook.md`
-4. `ci-map.md`
+1. `pr-workflow.md` and this `README.md`
+2. `reviewer-playbook.md`
+3. `ci-map.md`
