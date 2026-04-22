@@ -8,7 +8,7 @@ Dành cho contributor, reviewer và maintainer.
 
 ## Chính sách cốt lõi
 
-- Hướng dẫn đóng góp: [../../../CONTRIBUTING.md](../../../CONTRIBUTING.md)
+- Hướng dẫn đóng góp: [../../contributing/README.md](../../contributing/README.md) (cùng repo; bản gốc tiếng Anh ở `docs/contributing/`)
 - Sổ tay thay đổi theo loại mở rộng (provider, kênh, tool, compaction, system prompt, hook): [change-playbooks.md](change-playbooks.md)
 - Bản đồ kho mã nguồn (module `agent/`, `system_prompt`, v.v.): [../maintainers/repo-map.md](../maintainers/repo-map.md)
 - Quy tắc quy trình PR: [../pr-workflow.md](../pr-workflow.md)
@@ -18,7 +18,7 @@ Dành cho contributor, reviewer và maintainer.
 
 ## Thứ tự đọc được đề xuất
 
-1. `CONTRIBUTING.md`
+1. `../pr-workflow.md` và các tài liệu trong mục trên
 2. `../pr-workflow.md`
 3. `../reviewer-playbook.md`
 4. `../ci-map.md`

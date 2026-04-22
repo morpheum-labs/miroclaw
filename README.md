@@ -68,7 +68,7 @@ brew install zeroclaw
 ```bash
 git clone https://github.com/morpheum-labs/zeroclaw.git
 cd zeroclaw
-.script/install.sh
+bash scripts/install.sh
 ```
 
 `zeroclaw onboard` runs automatically after install to configure your workspace and provider.
@@ -80,7 +80,7 @@ Full beginner guide (auth, pairing, channels): [Getting started](docs/setup-guid
 Detailed command lines (non-interactive install, gateway ports, daemon, auth, completions): [Quick start command reference](docs/setup-guides/quick-start-command-reference.md)
 
 ```bash
-./install.sh
+bash scripts/install.sh
 zeroclaw gateway
 zeroclaw agent -m "Hello, ZeroClaw!"
 zeroclaw status
@@ -121,7 +121,7 @@ This migrates your memory entries, workspace files, and configuration from `~/.o
 
 ZeroClaw connects to real messaging surfaces. Treat inbound DMs as untrusted input.
 
-Full security guide: [SECURITY.md](SECURITY.md)
+Full security guide: [docs/security/README.md](docs/security/README.md)
 
 Default behavior on all channels:
 
@@ -444,7 +444,7 @@ Full commands reference: [docs/reference/cli/commands-reference.md](docs/referen
 Or skip the steps above and install everything (system deps, Rust, ZeroClaw) in a single command:
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/morpheum-labs/zeroclaw/master/install.sh | bash
+curl -LsSf https://raw.githubusercontent.com/morpheum-labs/zeroclaw/master/scripts/install.sh | bash
 ```
 
 #### Compilation resource requirements
@@ -502,11 +502,11 @@ Use these when you're past the onboarding flow and want the deeper reference.
 
 ### Collaboration docs
 
-- Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Contributor hub: [docs/contributing/README.md](docs/contributing/README.md)
 - PR workflow policy: [docs/contributing/pr-workflow.md](docs/contributing/pr-workflow.md)
 - CI workflow guide: [docs/contributing/ci-map.md](docs/contributing/ci-map.md)
 - Reviewer playbook: [docs/contributing/reviewer-playbook.md](docs/contributing/reviewer-playbook.md)
-- Security disclosure policy: [SECURITY.md](SECURITY.md)
+- Security documentation: [docs/security/README.md](docs/security/README.md)
 - Documentation template: [docs/contributing/doc-template.md](docs/contributing/doc-template.md)
 
 ### Deployment + operations
@@ -541,9 +541,9 @@ We're building in the open because the best ideas come from everywhere. If you'r
 
 ## Contributing
 
-New to ZeroClaw? Look for issues labeled [`good first issue`](https://github.com/morpheum-labs/zeroclaw/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — see our [Contributing Guide](CONTRIBUTING.md#first-time-contributors) for how to get started. AI/vibe-coded PRs welcome! 🤖
+New to ZeroClaw? Look for issues labeled [`good first issue`](https://github.com/morpheum-labs/zeroclaw/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — start with [the contributor documentation](docs/contributing/README.md#suggested-reading-order). AI/vibe-coded PRs welcome! 🤖
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [CLA.md](docs/contributing/cla.md). Implement a trait, submit a PR:
+See [docs/contributing/README.md](docs/contributing/README.md) and the [CLA](docs/contributing/cla.md). Implement a trait, submit a PR:
 
 - CI workflow guide: [docs/contributing/ci-map.md](docs/contributing/ci-map.md)
 - New `Provider` → `src/providers/`
@@ -589,7 +589,7 @@ The **ZeroClaw** name and logo are trademarks of ZeroClaw Labs. This license doe
 
 - You **retain copyright** of your contributions
 - **Patent grant** (Apache 2.0) shields you from patent claims by other contributors
-- Your contributions are **permanently attributed** in commit history and [NOTICE](NOTICE)
+- Your contributions are **permanently attributed** in commit history and the repository’s contributor records
 - No trademark rights are transferred by contributing
 
 ---

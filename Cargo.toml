@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/robot-kit", "crates/aardvark-sys", "apps/tauri"]
+members = [".", "crates/aardvark-sys"]
 resolver = "2"
 
 [package]
@@ -21,8 +21,6 @@ include = [
   "/Cargo.lock",
   "/LICENSE*",
   "/README.md",
-  "/web/dist/**/*",
-  "/tool_descriptions/**/*",
 ]
 
 [[bin]]
@@ -230,7 +228,6 @@ default = [
     "channel-nostr",
     "channel-lark",
     "skill-creation",
-    "embedded-web-ui",
 ]
 # Bundle `web/dist/` into the gateway binary (rust-embed). Omit from `--no-default-features`
 # builds that ship only an external `[webui].external_path` tree to reduce binary size.
@@ -281,7 +278,6 @@ plugins-wasm = ["dep:extism"]
 # Meta-feature for CI: all features except those requiring system C libraries
 # not available on standard CI runners (e.g., voice-wake needs libasound2-dev).
 ci-all = [
-    "embedded-web-ui",
     "channel-nostr",
     "hardware",
     "channel-matrix",
@@ -348,7 +344,3 @@ path = "tests/test_system.rs"
 [[test]]
 name = "live"
 path = "tests/test_live.rs"
-
-[[bench]]
-name = "agent_benchmarks"
-harness = false

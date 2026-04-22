@@ -139,4 +139,4 @@ curl -s \"https://api.z.ai/api/coding/paas/v4/models\" \
 
 - [ZeroClaw 说明文档](../../../../README.md)
 - [自定义提供商端点](../contributing/custom-providers.zh-CN.md)
-- [贡献指南](../../../../CONTRIBUTING.md)
+- [贡献指南](../../../contributing/README.md)
