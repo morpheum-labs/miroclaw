@@ -10,13 +10,9 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Full pre-PR validation (recommended):
+Use `.github/workflows/ci-run.yml` as the merge gate; keep `cargo fmt`, `cargo clippy`, and `cargo test` green before opening a PR.
 
-```bash
-./dev/ci.sh all
-```
-
-Docs-only changes: run markdown lint and link-integrity checks. If touching bootstrap scripts: `bash -n install.sh && bash -n scripts/install.sh`.
+Docs-only changes: run markdown lint and link-integrity checks. If touching bootstrap scripts: `bash -n scripts/install.sh`.
 
 ## Project Snapshot
 
