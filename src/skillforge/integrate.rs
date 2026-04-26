@@ -75,7 +75,7 @@ stars = {stars}
 updated_at = "{updated}"
 
 [skill.requirements]
-runtime = "zeroclaw >= 0.1"
+runtime = "miroclaw >= 0.1"
 
 [skill.metadata]
 auto_integrated = true

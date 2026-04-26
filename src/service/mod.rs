@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
-const SERVICE_LABEL: &str = "com.zeroclaw.daemon";
-const WINDOWS_TASK_NAME: &str = "ZeroClaw Daemon";
+const SERVICE_LABEL: &str = "com.miroclaw.daemon";
+const WINDOWS_TASK_NAME: &str = "Miroclaw Daemon";
 
 /// Supported init systems for service management
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -114,13 +114,13 @@ pub fn is_running() -> bool {
 
 fn is_running_linux() -> bool {
     // Try systemd first, then OpenRC — mirrors detect_init_system() order
-    if run_capture(Command::new("systemctl").args(["--user", "is-active", "zeroclaw.service"]))
+    if run_capture(Command::new("systemctl").args(["--user", "is-active", "miroclaw.service"]))
         .map(|out| out.trim() == "active")
         .unwrap_or(false)
     {
         return true;
     }
-    run_capture(Command::new("rc-service").args(["zeroclaw", "status"]))
+    run_capture(Command::new("rc-service").args(["miroclaw", "status"]))
         .map(|out| out.contains("started"))
         .unwrap_or(false)
 }
@@ -186,10 +186,10 @@ fn start_linux(init_system: InitSystem) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
-            run_checked(Command::new("systemctl").args(["--user", "start", "zeroclaw.service"]))?;
+            run_checked(Command::new("systemctl").args(["--user", "start", "miroclaw.service"]))?;
         }
         InitSystem::Openrc => {
-            run_checked(Command::new("rc-service").args(["zeroclaw", "start"]))?;
+            run_checked(Command::new("rc-service").args(["miroclaw", "start"]))?;
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -228,10 +228,10 @@ fn stop_linux(init_system: InitSystem) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             let _ =
-                run_checked(Command::new("systemctl").args(["--user", "stop", "zeroclaw.service"]));
+                run_checked(Command::new("systemctl").args(["--user", "stop", "miroclaw.service"]));
         }
         InitSystem::Openrc => {
-            let _ = run_checked(Command::new("rc-service").args(["zeroclaw", "stop"]));
+            let _ = run_checked(Command::new("rc-service").args(["miroclaw", "stop"]));
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -266,10 +266,10 @@ fn restart_linux(init_system: InitSystem) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
-            run_checked(Command::new("systemctl").args(["--user", "restart", "zeroclaw.service"]))?;
+            run_checked(Command::new("systemctl").args(["--user", "restart", "miroclaw.service"]))?;
         }
         InitSystem::Openrc => {
-            run_checked(Command::new("rc-service").args(["zeroclaw", "restart"]))?;
+            run_checked(Command::new("rc-service").args(["miroclaw", "restart"]))?;
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -332,17 +332,17 @@ fn status_linux(config: &Config, init_system: InitSystem) -> Result<()> {
             let out = run_capture(Command::new("systemctl").args([
                 "--user",
                 "is-active",
-                "zeroclaw.service",
+                "miroclaw.service",
             ]))
             .unwrap_or_else(|_| "unknown".into());
             println!("Service state: {}", out.trim());
             println!("Unit: {}", linux_service_file(config)?.display());
         }
         InitSystem::Openrc => {
-            let out = run_capture(Command::new("rc-service").args(["zeroclaw", "status"]))
+            let out = run_capture(Command::new("rc-service").args(["miroclaw", "status"]))
                 .unwrap_or_else(|_| "unknown".into());
             println!("Service state: {}", out.trim());
-            println!("Unit: /etc/init.d/zeroclaw");
+            println!("Unit: /etc/init.d/miroclaw");
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -376,7 +376,7 @@ fn uninstall(config: &Config, init_system: InitSystem) -> Result<()> {
             .parent()
             .map_or_else(|| PathBuf::from("."), PathBuf::from)
             .join("logs")
-            .join("zeroclaw-daemon.cmd");
+            .join("miroclaw-daemon.cmd");
         if wrapper.exists() {
             fs::remove_file(&wrapper).ok();
         }
@@ -399,19 +399,19 @@ fn uninstall_linux(config: &Config, init_system: InitSystem) -> Result<()> {
             println!("✅ Service uninstalled ({})", file.display());
         }
         InitSystem::Openrc => {
-            let init_script = Path::new("/etc/init.d/zeroclaw");
+            let init_script = Path::new("/etc/init.d/miroclaw");
             if init_script.exists() {
                 if let Err(err) =
-                    run_checked(Command::new("rc-update").args(["del", "zeroclaw", "default"]))
+                    run_checked(Command::new("rc-update").args(["del", "miroclaw", "default"]))
                 {
                     eprintln!(
-                        "⚠️  Warning: Could not remove zeroclaw from OpenRC default runlevel: {err}"
+                        "⚠️  Warning: Could not remove miroclaw from OpenRC default runlevel: {err}"
                     );
                 }
                 fs::remove_file(init_script)
                     .with_context(|| format!("Failed to remove {}", init_script.display()))?;
             }
-            println!("✅ Service uninstalled (/etc/init.d/zeroclaw)");
+            println!("✅ Service uninstalled (/etc/init.d/miroclaw)");
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -419,7 +419,7 @@ fn uninstall_linux(config: &Config, init_system: InitSystem) -> Result<()> {
 }
 
 /// Detect if the executable lives under a Homebrew prefix and return the
-/// corresponding `var/zeroclaw` directory.
+/// corresponding `var/miroclaw` directory.
 ///
 /// Homebrew installs binaries into `<prefix>/Cellar/<formula>/<version>/bin/`
 /// and symlinks them to `<prefix>/bin/`. The canonical `var` directory is
@@ -427,21 +427,21 @@ fn uninstall_linux(config: &Config, init_system: InitSystem) -> Result<()> {
 fn detect_homebrew_var_dir(exe: &Path) -> Option<PathBuf> {
     let path_str = exe.to_string_lossy();
 
-    // Symlinked binary: <prefix>/bin/zeroclaw
-    // Cellar binary:    <prefix>/Cellar/zeroclaw/<version>/bin/zeroclaw
+    // Symlinked binary: <prefix>/bin/miroclaw
+    // Cellar binary:    <prefix>/Cellar/miroclaw/<version>/bin/miroclaw
     let prefix = if path_str.contains("/Cellar/") {
-        // Walk up from .../Cellar/zeroclaw/<ver>/bin/zeroclaw to the prefix
+        // Walk up from .../Cellar/miroclaw/<ver>/bin/miroclaw to the prefix
         let mut ancestor = exe.to_path_buf();
         while let Some(parent) = ancestor.parent() {
             ancestor = parent.to_path_buf();
             if ancestor.file_name().map_or(false, |n| n == "Cellar") {
                 // prefix is one level above Cellar
-                return ancestor.parent().map(|p| p.join("var").join("zeroclaw"));
+                return ancestor.parent().map(|p| p.join("var").join("miroclaw"));
             }
         }
         return None;
     } else if let Some(bin_parent) = exe.parent() {
-        // <prefix>/bin/zeroclaw → check if <prefix>/Cellar exists (Homebrew marker)
+        // <prefix>/bin/miroclaw → check if <prefix>/Cellar exists (Homebrew marker)
         if let Some(prefix) = bin_parent.parent() {
             if prefix.join("Cellar").is_dir() {
                 Some(prefix.to_path_buf())
@@ -455,7 +455,7 @@ fn detect_homebrew_var_dir(exe: &Path) -> Option<PathBuf> {
         None
     };
 
-    prefix.map(|p| p.join("var").join("zeroclaw"))
+    prefix.map(|p| p.join("var").join("miroclaw"))
 }
 
 fn install_macos(config: &Config) -> Result<()> {
@@ -467,7 +467,7 @@ fn install_macos(config: &Config) -> Result<()> {
     let exe = std::env::current_exe().context("Failed to resolve current executable")?;
 
     // When installed via Homebrew, use the Homebrew var directory for runtime
-    // data so that `brew services start zeroclaw` works out of the box.
+    // data so that `brew services start miroclaw` works out of the box.
     let homebrew_var_dir = detect_homebrew_var_dir(&exe);
     if let Some(ref var_dir) = homebrew_var_dir {
         fs::create_dir_all(var_dir).with_context(|| {
@@ -546,7 +546,7 @@ fn install_macos(config: &Config) -> Result<()> {
     if let Some(ref var_dir) = homebrew_var_dir {
         println!("   Homebrew var: {}", var_dir.display());
     }
-    println!("   Start with: zeroclaw service start");
+    println!("   Start with: miroclaw service start");
     Ok(())
 }
 
@@ -567,7 +567,7 @@ fn install_linux_systemd(config: &Config) -> Result<()> {
     let exe = std::env::current_exe().context("Failed to resolve current executable")?;
     let unit = format!(
         "[Unit]\n\
-         Description=ZeroClaw daemon\n\
+         Description=Miroclaw daemon\n\
          After=network.target\n\
          \n\
          [Service]\n\
@@ -588,9 +588,9 @@ fn install_linux_systemd(config: &Config) -> Result<()> {
 
     fs::write(&file, unit)?;
     let _ = run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]));
-    let _ = run_checked(Command::new("systemctl").args(["--user", "enable", "zeroclaw.service"]));
+    let _ = run_checked(Command::new("systemctl").args(["--user", "enable", "miroclaw.service"]));
     println!("✅ Installed systemd user service: {}", file.display());
-    println!("   Start with: zeroclaw service start");
+    println!("   Start with: miroclaw service start");
     Ok(())
 }
 
@@ -918,7 +918,7 @@ fn ensure_openrc_runtime_path_writable(path: &Path) -> Result<()> {
         };
         bail!(
             "OpenRC runtime user 'zeroclaw' cannot write {} ({details}). \
-             Re-run `sudo zeroclaw service install` and ensure ownership is zeroclaw:zeroclaw.",
+             Re-run `sudo miroclaw service install` and ensure ownership is zeroclaw:zeroclaw.",
             path.display(),
         );
     }
@@ -954,7 +954,7 @@ fn warn_if_binary_in_home(exe_path: &Path) {
         eprintln!(
             "⚠️  Warning: Binary path '{}' appears to be in a user home directory.\n\
              For system-wide OpenRC service, consider installing to /usr/local/bin:\n\
-             sudo cp '{}' /usr/local/bin/zeroclaw",
+             sudo cp '{}' /usr/local/bin/miroclaw",
             exe_path.display(),
             exe_path.display()
         );
@@ -966,8 +966,8 @@ fn generate_openrc_script(exe_path: &Path, config_dir: &Path) -> String {
     format!(
         r#"#!/sbin/openrc-run
 
-name="zeroclaw"
-description="ZeroClaw daemon"
+name="miroclaw"
+description="Miroclaw daemon"
 
 command="{exe}"
 command_args="--config-dir {config_dir} daemon"
@@ -997,7 +997,7 @@ start_pre() {{
 }
 
 fn resolve_openrc_executable() -> Result<PathBuf> {
-    let preferred = Path::new("/usr/local/bin/zeroclaw");
+    let preferred = Path::new("/usr/local/bin/miroclaw");
     if preferred.exists() {
         return Ok(preferred.to_path_buf());
     }
@@ -1010,7 +1010,7 @@ fn install_linux_openrc(config: &Config) -> Result<()> {
     if !is_root() {
         bail!(
             "OpenRC service installation requires root privileges.\n\
-             Please run with sudo: sudo zeroclaw service install"
+             Please run with sudo: sudo miroclaw service install"
         );
     }
 
@@ -1107,7 +1107,7 @@ fn install_linux_openrc(config: &Config) -> Result<()> {
     }
 
     let init_script = generate_openrc_script(&exe, config_dir);
-    let init_path = Path::new("/etc/init.d/zeroclaw");
+    let init_path = Path::new("/etc/init.d/miroclaw");
     fs::write(init_path, init_script)
         .with_context(|| format!("Failed to write {}", init_path.display()))?;
 
@@ -1118,10 +1118,10 @@ fn install_linux_openrc(config: &Config) -> Result<()> {
             .with_context(|| format!("Failed to set permissions on {}", init_path.display()))?;
     }
 
-    run_checked(Command::new("rc-update").args(["add", "zeroclaw", "default"]))?;
-    println!("✅ Installed OpenRC service: /etc/init.d/zeroclaw");
+    run_checked(Command::new("rc-update").args(["add", "miroclaw", "default"]))?;
+    println!("✅ Installed OpenRC service: /etc/init.d/miroclaw");
     println!("   Config path: /etc/zeroclaw/config.toml");
-    println!("   Start with: sudo zeroclaw service start");
+    println!("   Start with: sudo miroclaw service start");
     let _ = config;
     Ok(())
 }
@@ -1136,7 +1136,7 @@ fn install_windows(config: &Config) -> Result<()> {
     fs::create_dir_all(&logs_dir)?;
 
     // Create a wrapper script that redirects output to log files
-    let wrapper = logs_dir.join("zeroclaw-daemon.cmd");
+    let wrapper = logs_dir.join("miroclaw-daemon.cmd");
     let stdout_log = logs_dir.join("daemon.stdout.log");
     let stderr_log = logs_dir.join("daemon.stderr.log");
 
@@ -1171,7 +1171,7 @@ fn install_windows(config: &Config) -> Result<()> {
     println!("✅ Installed Windows scheduled task: {}", task_name);
     println!("   Wrapper: {}", wrapper.display());
     println!("   Logs: {}", logs_dir.display());
-    println!("   Start with: zeroclaw service start");
+    println!("   Start with: miroclaw service start");
     Ok(())
 }
 
@@ -1194,7 +1194,7 @@ fn linux_service_file(config: &Config) -> Result<PathBuf> {
         .join(".config")
         .join("systemd")
         .join("user")
-        .join("zeroclaw.service"))
+        .join("miroclaw.service"))
 }
 
 fn run_checked(command: &mut Command) -> Result<()> {
@@ -1262,12 +1262,12 @@ mod tests {
     fn linux_service_file_has_expected_suffix() {
         let file = linux_service_file(&Config::default()).unwrap();
         let path = file.to_string_lossy();
-        assert!(path.ends_with(".config/systemd/user/zeroclaw.service"));
+        assert!(path.ends_with(".config/systemd/user/miroclaw.service"));
     }
 
     #[test]
     fn windows_task_name_is_constant() {
-        assert_eq!(windows_task_name(), "ZeroClaw Daemon");
+        assert_eq!(windows_task_name(), "Miroclaw Daemon");
     }
 
     #[cfg(target_os = "windows")]
@@ -1329,13 +1329,13 @@ mod tests {
     fn generate_openrc_script_contains_required_directives() {
         use std::path::PathBuf;
 
-        let exe_path = PathBuf::from("/usr/local/bin/zeroclaw");
+        let exe_path = PathBuf::from("/usr/local/bin/miroclaw");
         let script = generate_openrc_script(&exe_path, Path::new("/etc/zeroclaw"));
 
         assert!(script.starts_with("#!/sbin/openrc-run"));
-        assert!(script.contains("name=\"zeroclaw\""));
-        assert!(script.contains("description=\"ZeroClaw daemon\""));
-        assert!(script.contains("command=\"/usr/local/bin/zeroclaw\""));
+        assert!(script.contains("name=\"miroclaw\""));
+        assert!(script.contains("description=\"Miroclaw daemon\""));
+        assert!(script.contains("command=\"/usr/local/bin/miroclaw\""));
         assert!(script.contains("command_args=\"--config-dir /etc/zeroclaw daemon\""));
         assert!(!script.contains("env ZEROCLAW_CONFIG_DIR"));
         assert!(!script.contains("env ZEROCLAW_WORKSPACE"));
@@ -1354,7 +1354,7 @@ mod tests {
     fn generate_openrc_script_sets_home_for_browser() {
         use std::path::PathBuf;
 
-        let exe_path = PathBuf::from("/usr/local/bin/zeroclaw");
+        let exe_path = PathBuf::from("/usr/local/bin/miroclaw");
         let script = generate_openrc_script(&exe_path, Path::new("/etc/zeroclaw"));
 
         assert!(
@@ -1367,7 +1367,7 @@ mod tests {
     fn generate_openrc_script_creates_home_directory() {
         use std::path::PathBuf;
 
-        let exe_path = PathBuf::from("/usr/local/bin/zeroclaw");
+        let exe_path = PathBuf::from("/usr/local/bin/miroclaw");
         let script = generate_openrc_script(&exe_path, Path::new("/etc/zeroclaw"));
 
         assert!(
@@ -1383,12 +1383,12 @@ mod tests {
     #[test]
     fn systemd_unit_contains_home_and_pass_environment() {
         let unit = "[Unit]\n\
-             Description=ZeroClaw daemon\n\
+             Description=Miroclaw daemon\n\
              After=network.target\n\
              \n\
              [Service]\n\
              Type=simple\n\
-             ExecStart=/usr/local/bin/zeroclaw daemon\n\
+             ExecStart=/usr/local/bin/miroclaw daemon\n\
              Restart=always\n\
              RestartSec=3\n\
              # Ensure HOME is set so headless browsers can create profile/cache dirs.\n\
@@ -1415,14 +1415,14 @@ mod tests {
     fn warn_if_binary_in_home_detects_home_path() {
         use std::path::PathBuf;
 
-        let home_path = PathBuf::from("/home/user/.cargo/bin/zeroclaw");
+        let home_path = PathBuf::from("/home/user/.cargo/bin/miroclaw");
         assert!(home_path.to_string_lossy().contains("/home/"));
         assert!(home_path.to_string_lossy().contains(".cargo/bin"));
 
-        let cargo_path = PathBuf::from("/home/user/.cargo/bin/zeroclaw");
+        let cargo_path = PathBuf::from("/home/user/.cargo/bin/miroclaw");
         assert!(cargo_path.to_string_lossy().contains(".cargo/bin"));
 
-        let system_path = PathBuf::from("/usr/local/bin/zeroclaw");
+        let system_path = PathBuf::from("/usr/local/bin/miroclaw");
         assert!(!system_path.to_string_lossy().contains("/home/"));
         assert!(!system_path.to_string_lossy().contains(".cargo/bin"));
     }
@@ -1457,21 +1457,21 @@ mod tests {
 
     #[test]
     fn detect_homebrew_var_dir_from_cellar_path() {
-        let exe = PathBuf::from("/opt/homebrew/Cellar/zeroclaw/1.2.3/bin/zeroclaw");
+        let exe = PathBuf::from("/opt/homebrew/Cellar/miroclaw/1.2.3/bin/miroclaw");
         let var_dir = detect_homebrew_var_dir(&exe);
-        assert_eq!(var_dir, Some(PathBuf::from("/opt/homebrew/var/zeroclaw")));
+        assert_eq!(var_dir, Some(PathBuf::from("/opt/homebrew/var/miroclaw")));
     }
 
     #[test]
     fn detect_homebrew_var_dir_intel_cellar_path() {
-        let exe = PathBuf::from("/usr/local/Cellar/zeroclaw/1.0.0/bin/zeroclaw");
+        let exe = PathBuf::from("/usr/local/Cellar/miroclaw/1.0.0/bin/miroclaw");
         let var_dir = detect_homebrew_var_dir(&exe);
-        assert_eq!(var_dir, Some(PathBuf::from("/usr/local/var/zeroclaw")));
+        assert_eq!(var_dir, Some(PathBuf::from("/usr/local/var/miroclaw")));
     }
 
     #[test]
     fn detect_homebrew_var_dir_non_homebrew_path() {
-        let exe = PathBuf::from("/home/user/.cargo/bin/zeroclaw");
+        let exe = PathBuf::from("/home/user/.cargo/bin/miroclaw");
         let var_dir = detect_homebrew_var_dir(&exe);
         assert_eq!(var_dir, None);
     }

@@ -495,15 +495,21 @@ fn resolve_quick_setup_dirs_with_home(home: &Path) -> (PathBuf, PathBuf) {
 
 fn homebrew_prefix_for_exe(exe: &Path) -> Option<&'static str> {
     let exe = exe.to_string_lossy();
-    if exe == "/opt/homebrew/bin/zeroclaw"
+    if exe == "/opt/homebrew/bin/miroclaw"
+        || exe == "/opt/homebrew/bin/zeroclaw"
+        || exe.starts_with("/opt/homebrew/Cellar/miroclaw/")
         || exe.starts_with("/opt/homebrew/Cellar/zeroclaw/")
+        || exe.starts_with("/opt/homebrew/opt/miroclaw/")
         || exe.starts_with("/opt/homebrew/opt/zeroclaw/")
     {
         return Some("/opt/homebrew");
     }
 
-    if exe == "/usr/local/bin/zeroclaw"
+    if exe == "/usr/local/bin/miroclaw"
+        || exe == "/usr/local/bin/zeroclaw"
+        || exe.starts_with("/usr/local/Cellar/miroclaw/")
         || exe.starts_with("/usr/local/Cellar/zeroclaw/")
+        || exe.starts_with("/usr/local/opt/miroclaw/")
         || exe.starts_with("/usr/local/opt/zeroclaw/")
     {
         return Some("/usr/local");
@@ -512,13 +518,24 @@ fn homebrew_prefix_for_exe(exe: &Path) -> Option<&'static str> {
     None
 }
 
+/// `brew` var directory (e.g. `.../var/miroclaw`) for the current binary layout.
+fn homebrew_var_name_for_exe_path(exe: &Path) -> &'static str {
+    let s = exe.to_string_lossy();
+    if s.contains("miroclaw") {
+        "miroclaw"
+    } else {
+        "zeroclaw"
+    }
+}
+
 fn quick_setup_homebrew_service_note(
     config_path: &Path,
     workspace_dir: &Path,
     exe: &Path,
 ) -> Option<String> {
     let prefix = homebrew_prefix_for_exe(exe)?;
-    let service_root = Path::new(prefix).join("var").join("zeroclaw");
+    let var_name = homebrew_var_name_for_exe_path(exe);
+    let service_root = Path::new(prefix).join("var").join(var_name);
     let service_config = service_root.join("config.toml");
     let service_workspace = service_root.join("workspace");
 
@@ -6259,17 +6276,21 @@ mod tests {
     #[test]
     fn homebrew_prefix_for_exe_detects_supported_layouts() {
         assert_eq!(
-            homebrew_prefix_for_exe(Path::new("/opt/homebrew/bin/zeroclaw")),
+            homebrew_prefix_for_exe(Path::new("/opt/homebrew/bin/miroclaw")),
             Some("/opt/homebrew")
         );
         assert_eq!(
             homebrew_prefix_for_exe(Path::new(
-                "/opt/homebrew/Cellar/zeroclaw/0.5.0/bin/zeroclaw",
+                "/opt/homebrew/Cellar/miroclaw/0.5.0/bin/miroclaw",
             )),
             Some("/opt/homebrew")
         );
         assert_eq!(
-            homebrew_prefix_for_exe(Path::new("/usr/local/bin/zeroclaw")),
+            homebrew_prefix_for_exe(Path::new("/opt/homebrew/bin/zeroclaw")),
+            Some("/opt/homebrew")
+        );
+        assert_eq!(
+            homebrew_prefix_for_exe(Path::new("/usr/local/bin/miroclaw")),
             Some("/usr/local")
         );
         assert_eq!(homebrew_prefix_for_exe(Path::new("/tmp/zeroclaw")), None);
@@ -6280,24 +6301,24 @@ mod tests {
         let note = quick_setup_homebrew_service_note(
             Path::new("/Users/alix/.zeroclaw/config.toml"),
             Path::new("/Users/alix/.zeroclaw/workspace"),
-            Path::new("/opt/homebrew/bin/zeroclaw"),
+            Path::new("/opt/homebrew/bin/miroclaw"),
         )
         .expect("homebrew installs should emit a service workspace note");
 
-        assert!(note.contains("/opt/homebrew/var/zeroclaw/workspace"));
-        assert!(note.contains("/opt/homebrew/var/zeroclaw/config.toml"));
+        assert!(note.contains("/opt/homebrew/var/miroclaw/workspace"));
+        assert!(note.contains("/opt/homebrew/var/miroclaw/config.toml"));
         assert!(note.contains("/Users/alix/.zeroclaw/config.toml"));
     }
 
     #[test]
     fn quick_setup_homebrew_service_note_skips_matching_service_layout() {
-        let service_config = Path::new("/opt/homebrew/var/zeroclaw/config.toml");
-        let service_workspace = Path::new("/opt/homebrew/var/zeroclaw/workspace");
+        let service_config = Path::new("/opt/homebrew/var/miroclaw/config.toml");
+        let service_workspace = Path::new("/opt/homebrew/var/miroclaw/workspace");
 
         assert!(quick_setup_homebrew_service_note(
             service_config,
             service_workspace,
-            Path::new("/opt/homebrew/bin/zeroclaw"),
+            Path::new("/opt/homebrew/bin/miroclaw"),
         )
         .is_none());
     }

@@ -1905,8 +1905,12 @@ impl SlackChannel {
             .and_then(|v| v.as_str())?;
 
         let command = match action_id {
-            "zeroclaw_config_provider" => format!("/models {selected_value}"),
-            "zeroclaw_config_model" => format!("/model {selected_value}"),
+            "zeroclaw_config_provider" | "miroclaw_config_provider" => {
+                format!("/models {selected_value}")
+            }
+            "zeroclaw_config_model" | "miroclaw_config_model" => {
+                format!("/model {selected_value}")
+            }
             _ => return None,
         };
 

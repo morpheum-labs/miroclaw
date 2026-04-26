@@ -20,7 +20,7 @@ fi
 
 if [[ ! -x "$BIN_PATH" ]]; then
   echo "Building zeroclaw..."
-  cargo build --bin zeroclaw >/dev/null
+  cargo build --bin miroclaw >/dev/null
 fi
 
 mkdir -p "$TMP_ROOT"

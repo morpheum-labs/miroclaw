@@ -199,7 +199,7 @@ Local machine quick benchmark (macOS arm64, Feb 2026) normalized for 0.8GHz edge
 
 ```bash
 cargo build --release
-ls -lh target/release/zeroclaw
+ls -lh target/release/miroclaw
 ```
 
 `/usr/bin/time -l` profiling for the binary: [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#benchmarking-local-memory--startup).

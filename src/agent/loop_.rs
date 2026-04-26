@@ -2844,8 +2844,7 @@ pub(crate) async fn run_tool_call_loop_body(
             crate::agent::state::TransitionReason::PreModelCompaction,
             None,
         );
-        let workspace_for_compaction =
-            system_prompt_refresh.map(|r| r.workspace_dir.to_path_buf());
+        let workspace_for_compaction = system_prompt_refresh.map(|r| r.workspace_dir.to_path_buf());
         let mut ctx = crate::agent::compaction_pipeline::CompactionContext::new(
             iteration,
             last_round_tool_names.clone(),
@@ -2853,11 +2852,8 @@ pub(crate) async fn run_tool_call_loop_body(
             workspace_for_compaction,
         );
         ctx.log_context_signals = iteration > 0;
-        let memory_injection = crate::agent::compaction_pipeline::run_pre_llm_phases(
-            history,
-            history_pruning,
-            &ctx,
-        )?;
+        let memory_injection =
+            crate::agent::compaction_pipeline::run_pre_llm_phases(history, history_pruning, &ctx)?;
 
         // Rebuild tool_specs each iteration so newly activated deferred tools appear.
         let mut tool_specs: Vec<crate::tools::ToolSpec> = tools_registry
@@ -2918,9 +2914,7 @@ pub(crate) async fn run_tool_call_loop_body(
                 None
             };
             let merged_layered: Option<String> = {
-                let inj = memory_injection
-                    .as_deref()
-                    .filter(|s| !s.trim().is_empty());
+                let inj = memory_injection.as_deref().filter(|s| !s.trim().is_empty());
                 match (&layered_memory_cell, inj) {
                     (Some(a), Some(b)) => Some(format!("{a}\n\n{b}")),
                     (Some(a), None) => Some(a.clone()),
@@ -4059,12 +4053,7 @@ pub async fn run(
 
     // Register skill-defined tools as callable tool specs in the tool registry
     // so the LLM can invoke them via native function calling, not just XML prompts.
-    tools::register_skill_tools(
-        &mut tools_registry,
-        &skills,
-        security.clone(),
-        shell_engine,
-    );
+    tools::register_skill_tools(&mut tools_registry, &skills, security.clone(), shell_engine);
 
     let mut tool_descs: Vec<(&str, &str)> = vec![
         (
@@ -5076,12 +5065,7 @@ pub async fn process_message(
     let skills = crate::skills::load_skills_with_config(&config.workspace_dir, &config);
 
     // Register skill-defined tools as callable tool specs (process_message path).
-    tools::register_skill_tools(
-        &mut tools_registry,
-        &skills,
-        security.clone(),
-        shell_engine,
-    );
+    tools::register_skill_tools(&mut tools_registry, &skills, security.clone(), shell_engine);
 
     let mut tool_descs: Vec<(&str, &str)> = vec![
         ("shell", "Execute terminal commands."),

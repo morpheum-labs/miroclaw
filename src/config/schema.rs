@@ -8947,7 +8947,8 @@ impl Config {
                     tracing::info!(path = %bak_path.display(), "Wrote config backup before shell table migration");
                 }
             }
-            let merged = toml::to_string(&root).context("Failed to serialize config after shell migration")?;
+            let merged = toml::to_string(&root)
+                .context("Failed to serialize config after shell migration")?;
 
             // Deserialize the config with the standard TOML parser.
             //

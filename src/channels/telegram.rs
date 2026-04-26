@@ -196,12 +196,7 @@ const TELEGRAM_MAX_INLINE_TEXT_ATTACHMENT_BYTES: usize = 100 * 1024;
 fn is_telegram_inline_text_extension(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| {
-            matches!(
-                ext.to_ascii_lowercase().as_str(),
-                "txt" | "md" | "markdown"
-            )
-        })
+        .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "txt" | "md" | "markdown"))
 }
 
 /// Appends UTF-8 file contents after the path marker for small `.txt` / `.md` / `.markdown` files.
@@ -688,7 +683,10 @@ impl TelegramChannel {
             .json()
             .await
             .unwrap_or_else(|_| serde_json::json!({ "ok": false, "description": "invalid json" }));
-        let ok = data.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
+        let ok = data
+            .get("ok")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
         if !ok || !status.is_success() {
             let desc = data
                 .get("description")

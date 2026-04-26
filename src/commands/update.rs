@@ -246,8 +246,8 @@ async fn validate_binary(path: &Path) -> Result<()> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    if !stdout.contains("zeroclaw") {
-        bail!("downloaded binary does not appear to be zeroclaw");
+    if !stdout.contains("miroclaw") {
+        bail!("downloaded binary does not appear to be miroclaw");
     }
 
     Ok(())

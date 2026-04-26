@@ -24,7 +24,7 @@ include = [
 ]
 
 [[bin]]
-name = "zeroclaw"
+name = "miroclaw"
 path = "src/main.rs"
 
 [lib]
@@ -233,7 +233,7 @@ default = [
 # builds that ship only an external `[webui].external_path` tree to reduce binary size.
 embedded-web-ui = []
 # Same channel/observability defaults as `default` but without `embedded-web-ui` (smaller binary;
-# serve the dashboard from disk via `[webui].external_path` or `zeroclaw gateway start --webui-external-path`).
+# serve the dashboard from disk via `[webui].external_path` or `miroclaw gateway start --webui-external-path`).
 # Example: `cargo build --release --no-default-features --features default-without-embedded-web-ui`
 default-without-embedded-web-ui = [
     "observability-prometheus",

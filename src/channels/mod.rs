@@ -289,8 +289,8 @@ fn runtime_config_store() -> &'static Mutex<HashMap<PathBuf, RuntimeConfigState>
 
 const SYSTEMD_STATUS_ARGS: [&str; 3] = ["--user", "is-active", "zeroclaw.service"];
 const SYSTEMD_RESTART_ARGS: [&str; 3] = ["--user", "restart", "zeroclaw.service"];
-const OPENRC_STATUS_ARGS: [&str; 2] = ["zeroclaw", "status"];
-const OPENRC_RESTART_ARGS: [&str; 2] = ["zeroclaw", "restart"];
+const OPENRC_STATUS_ARGS: [&str; 2] = ["miroclaw", "status"];
+const OPENRC_RESTART_ARGS: [&str; 2] = ["miroclaw", "restart"];
 
 #[derive(Clone, Copy)]
 #[allow(clippy::struct_excessive_bools)]
@@ -724,14 +724,16 @@ fn strip_tool_summary_prefix(text: &str) -> String {
 
 fn parse_runtime_command(channel_name: &str, content: &str) -> Option<ChannelRuntimeCommand> {
     use runtime_slash::ParsedRuntimeSlash as P;
-    Some(match runtime_slash::parse_runtime_slash(channel_name, content)? {
-        P::ShowProviders => ChannelRuntimeCommand::ShowProviders,
-        P::SetProvider(s) => ChannelRuntimeCommand::SetProvider(s),
-        P::ShowModel => ChannelRuntimeCommand::ShowModel,
-        P::SetModel(s) => ChannelRuntimeCommand::SetModel(s),
-        P::ShowConfig => ChannelRuntimeCommand::ShowConfig,
-        P::NewSession => ChannelRuntimeCommand::NewSession,
-    })
+    Some(
+        match runtime_slash::parse_runtime_slash(channel_name, content)? {
+            P::ShowProviders => ChannelRuntimeCommand::ShowProviders,
+            P::SetProvider(s) => ChannelRuntimeCommand::SetProvider(s),
+            P::ShowModel => ChannelRuntimeCommand::ShowModel,
+            P::SetModel(s) => ChannelRuntimeCommand::SetModel(s),
+            P::ShowConfig => ChannelRuntimeCommand::ShowConfig,
+            P::NewSession => ChannelRuntimeCommand::NewSession,
+        },
+    )
 }
 
 fn resolved_default_provider(config: &Config) -> String {
@@ -1607,8 +1609,11 @@ async fn handle_control_hub_command_if_needed(
     msg: &traits::ChannelMessage,
     target_channel: Option<&Arc<dyn Channel>>,
 ) -> bool {
-    if !control_hub::telegram_control_hub_should_handle(ctx.prompt_config.as_ref(), &msg.channel, &msg.content)
-    {
+    if !control_hub::telegram_control_hub_should_handle(
+        ctx.prompt_config.as_ref(),
+        &msg.channel,
+        &msg.content,
+    ) {
         return false;
     }
 
@@ -3487,7 +3492,7 @@ fn maybe_restart_managed_daemon_service() -> Result<bool> {
 
     if cfg!(target_os = "linux") {
         // OpenRC (system-wide) takes precedence over systemd (user-level)
-        let openrc_init_script = PathBuf::from("/etc/init.d/zeroclaw");
+        let openrc_init_script = PathBuf::from("/etc/init.d/miroclaw");
         if openrc_init_script.exists() {
             if let Ok(status_output) = Command::new("rc-service").args(OPENRC_STATUS_ARGS).output()
             {
@@ -9249,8 +9254,8 @@ This is an example JSON object for profile settings."#;
 
     #[test]
     fn maybe_restart_daemon_openrc_args_regression() {
-        assert_eq!(OPENRC_STATUS_ARGS, ["zeroclaw", "status"]);
-        assert_eq!(OPENRC_RESTART_ARGS, ["zeroclaw", "restart"]);
+        assert_eq!(OPENRC_STATUS_ARGS, ["miroclaw", "status"]);
+        assert_eq!(OPENRC_RESTART_ARGS, ["miroclaw", "restart"]);
     }
 
     #[test]

@@ -30,7 +30,7 @@ RPI_PORT="${RPI_PORT:-22}"
 RPI_DIR="${RPI_DIR:-/home/${RPI_USER}/zeroclaw}"
 TARGET="aarch64-unknown-linux-gnu"
 FEATURES="hardware,peripheral-rpi"
-BINARY="target/${TARGET}/release/zeroclaw"
+BINARY="target/${TARGET}/release/miroclaw"
 SSH_OPTS="-p ${RPI_PORT} -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 # scp uses -P (uppercase) for port; ssh uses -p (lowercase)
 SCP_OPTS="-P ${RPI_PORT} -o StrictHostKeyChecking=no -o ConnectTimeout=10"
@@ -138,8 +138,8 @@ ${SSH_CMD} ${SSH_OPTS} "${RPI_USER}@${RPI_HOST}" "mkdir -p ${RPI_DIR}"
 
 # ── 4. Deploy binary ──────────────────────────────────────────────────────────
 echo ""
-echo "==> Deploying binary to ${RPI_USER}@${RPI_HOST}:${RPI_DIR}/zeroclaw"
-${SCP_CMD} ${SCP_OPTS} "${BINARY}" "${RPI_USER}@${RPI_HOST}:${RPI_DIR}/zeroclaw"
+echo "==> Deploying binary to ${RPI_USER}@${RPI_HOST}:${RPI_DIR}/miroclaw"
+${SCP_CMD} ${SCP_OPTS} "${BINARY}" "${RPI_USER}@${RPI_HOST}:${RPI_DIR}/miroclaw"
 
 # ── 4. Create .env skeleton (if it doesn't exist) ────────────────────────────
 ENV_DEST="${RPI_DIR}/.env"

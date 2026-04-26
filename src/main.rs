@@ -49,7 +49,7 @@ fn parse_temperature(s: &str) -> std::result::Result<f64, String> {
 
 fn print_no_command_help() -> Result<()> {
     println!("No command provided.");
-    println!("Try `zeroclaw onboard` to initialize your workspace.");
+    println!("Try `miroclaw onboard` to initialize your workspace.");
     println!();
 
     let mut cmd = Cli::command();
@@ -107,11 +107,11 @@ mod providers;
 mod runtime;
 mod security;
 mod service;
+mod shell;
 mod skillforge;
 mod skills;
 mod sop;
 mod tools;
-mod shell;
 mod tunnel;
 mod util;
 mod verifiable_intent;
@@ -153,7 +153,7 @@ enum EstopLevelArg {
 
 /// `ZeroClaw` - Zero overhead. Zero compromise. 100% Rust.
 #[derive(Parser, Debug)]
-#[command(name = "zeroclaw")]
+#[command(name = "miroclaw")]
 #[command(author = "theonlyhennygod")]
 #[command(version)]
 #[command(about = "The fastest, smallest AI assistant.", long_about = None)]
@@ -204,10 +204,10 @@ Launches an interactive chat session with the configured AI provider. \
 Use --message for single-shot queries without entering interactive mode.
 
 Examples:
-  zeroclaw agent                              # interactive session
-  zeroclaw agent -m \"Summarize today's logs\"  # single message
-  zeroclaw agent -p anthropic --model claude-sonnet-4-20250514
-  zeroclaw agent --peripheral nucleo-f401re:/dev/ttyACM0")]
+  miroclaw agent                              # interactive session
+  miroclaw agent -m \"Summarize today's logs\"  # single message
+  miroclaw agent -p anthropic --model claude-sonnet-4-20250514
+  miroclaw agent --peripheral nucleo-f401re:/dev/ttyACM0")]
     Agent {
         /// Single message mode (don't enter interactive mode)
         #[arg(short, long)]
@@ -242,9 +242,9 @@ Start, restart, or inspect the HTTP/WebSocket gateway that accepts \
 incoming webhook events and WebSocket connections.
 
 Examples:
-  zeroclaw gateway start              # start gateway
-  zeroclaw gateway restart            # restart gateway
-  zeroclaw gateway get-paircode       # show pairing code")]
+  miroclaw gateway start              # start gateway
+  miroclaw gateway restart            # restart gateway
+  miroclaw gateway get-paircode       # show pairing code")]
     Gateway {
         #[command(subcommand)]
         gateway_command: Option<zeroclaw::GatewayCommands>,
@@ -259,13 +259,13 @@ channels (Telegram, Discord, Slack, etc.), heartbeat monitor, and \
 the cron scheduler. This is the recommended way to run ZeroClaw in \
 production or as an always-on assistant.
 
-Use 'zeroclaw service install' to register the daemon as an OS \
+Use 'miroclaw service install' to register the daemon as an OS \
 service (systemd/launchd) for auto-start on boot.
 
 Examples:
-  zeroclaw daemon                   # use config defaults
-  zeroclaw daemon -p 9090           # gateway on port 9090
-  zeroclaw daemon --host 127.0.0.1  # localhost only")]
+  miroclaw daemon                   # use config defaults
+  miroclaw daemon -p 9090           # gateway on port 9090
+  miroclaw daemon --host 127.0.0.1  # localhost only")]
     Daemon {
         /// Port to listen on (use 0 for random available port); defaults to config gateway.port
         #[arg(short, long)]
@@ -302,19 +302,19 @@ Examples:
     /// Engage, inspect, and resume emergency-stop states.
     ///
     /// Examples:
-    /// - `zeroclaw estop`
-    /// - `zeroclaw estop --level network-kill`
-    /// - `zeroclaw estop --level domain-block --domain "*.chase.com"`
-    /// - `zeroclaw estop --level tool-freeze --tool shell --tool browser`
-    /// - `zeroclaw estop status`
-    /// - `zeroclaw estop resume --network`
-    /// - `zeroclaw estop resume --domain "*.chase.com"`
-    /// - `zeroclaw estop resume --tool shell`
+    /// - `miroclaw estop`
+    /// - `miroclaw estop --level network-kill`
+    /// - `miroclaw estop --level domain-block --domain "*.chase.com"`
+    /// - `miroclaw estop --level tool-freeze --tool shell --tool browser`
+    /// - `miroclaw estop status`
+    /// - `miroclaw estop resume --network`
+    /// - `miroclaw estop resume --domain "*.chase.com"`
+    /// - `miroclaw estop resume --tool shell`
     Estop {
         #[command(subcommand)]
         estop_command: Option<EstopSubcommands>,
 
-        /// Level used when engaging estop from `zeroclaw estop`.
+        /// Level used when engaging estop from `miroclaw estop`.
         #[arg(long, value_enum)]
         level: Option<EstopLevelArg>,
 
@@ -339,15 +339,15 @@ Cron expressions use the standard 5-field format: \
 override with --tz and an IANA timezone name.
 
 Examples:
-  zeroclaw cron list
-  zeroclaw cron add '0 9 * * 1-5' 'Good morning' --tz America/New_York --agent
-  zeroclaw cron add '*/30 * * * *' 'Check system health' --agent
-  zeroclaw cron add '*/5 * * * *' 'echo ok'
-  zeroclaw cron add-at 2025-01-15T14:00:00Z 'Send reminder' --agent
-  zeroclaw cron add-every 60000 'Ping heartbeat'
-  zeroclaw cron once 30m 'Run backup in 30 minutes' --agent
-  zeroclaw cron pause <task-id>
-  zeroclaw cron update <task-id> --expression '0 8 * * *' --tz Europe/London")]
+  miroclaw cron list
+  miroclaw cron add '0 9 * * 1-5' 'Good morning' --tz America/New_York --agent
+  miroclaw cron add '*/30 * * * *' 'Check system health' --agent
+  miroclaw cron add '*/5 * * * *' 'echo ok'
+  miroclaw cron add-at 2025-01-15T14:00:00Z 'Send reminder' --agent
+  miroclaw cron add-every 60000 'Ping heartbeat'
+  miroclaw cron once 30m 'Run backup in 30 minutes' --agent
+  miroclaw cron pause <task-id>
+  miroclaw cron update <task-id> --expression '0 8 * * *' --tz Europe/London")]
     Cron {
         #[command(subcommand)]
         cron_command: CronCommands,
@@ -371,12 +371,12 @@ to messaging platforms. Supported channel types: telegram, discord, \
 slack, whatsapp, matrix, imessage, email.
 
 Examples:
-  zeroclaw channel list
-  zeroclaw channel doctor
-  zeroclaw channel add telegram '{\"bot_token\":\"...\",\"name\":\"my-bot\"}'
-  zeroclaw channel remove my-bot
-  zeroclaw channel bind-telegram zeroclaw_user
-  zeroclaw channel send 'Alert!' --channel-id telegram --recipient 123456789")]
+  miroclaw channel list
+  miroclaw channel doctor
+  miroclaw channel add telegram '{\"bot_token\":\"...\",\"name\":\"my-bot\"}'
+  miroclaw channel remove my-bot
+  miroclaw channel bind-telegram miroclaw_user
+  miroclaw channel send 'Alert!' --channel-id telegram --recipient 123456789")]
     Channel {
         #[command(subcommand)]
         channel_command: ChannelCommands,
@@ -415,9 +415,9 @@ Enumerate connected USB devices, identify known development boards \
 probe-rs / ST-Link.
 
 Examples:
-  zeroclaw hardware discover
-  zeroclaw hardware introspect /dev/ttyACM0
-  zeroclaw hardware info --chip STM32F401RETx")]
+  miroclaw hardware discover
+  miroclaw hardware introspect /dev/ttyACM0
+  miroclaw hardware info --chip STM32F401RETx")]
     Hardware {
         #[command(subcommand)]
         hardware_command: zeroclaw::HardwareCommands,
@@ -432,11 +432,11 @@ to the agent (GPIO, sensors, actuators). Supported boards: \
 nucleo-f401re, rpi-gpio, esp32, arduino-uno.
 
 Examples:
-  zeroclaw peripheral list
-  zeroclaw peripheral add nucleo-f401re /dev/ttyACM0
-  zeroclaw peripheral add rpi-gpio native
-  zeroclaw peripheral flash --port /dev/cu.usbmodem12345
-  zeroclaw peripheral flash-nucleo")]
+  miroclaw peripheral list
+  miroclaw peripheral add nucleo-f401re /dev/ttyACM0
+  miroclaw peripheral add rpi-gpio native
+  miroclaw peripheral flash --port /dev/cu.usbmodem12345
+  miroclaw peripheral flash-nucleo")]
     Peripheral {
         #[command(subcommand)]
         peripheral_command: zeroclaw::PeripheralCommands,
@@ -451,11 +451,11 @@ Supports filtering by category and session, pagination, and \
 batch clearing with confirmation.
 
 Examples:
-  zeroclaw memory stats
-  zeroclaw memory list
-  zeroclaw memory list --category core --limit 10
-  zeroclaw memory get <key>
-  zeroclaw memory clear --category conversation --yes")]
+  miroclaw memory stats
+  miroclaw memory list
+  miroclaw memory list --category core --limit 10
+  miroclaw memory get <key>
+  miroclaw memory clear --category conversation --yes")]
     Memory {
         #[command(subcommand)]
         memory_command: MemoryCommands,
@@ -482,8 +482,8 @@ the full JSON Schema for the config file, which documents every \
 available key, type, and default value.
 
 Examples:
-  zeroclaw config schema              # print JSON Schema to stdout
-  zeroclaw config schema > schema.json")]
+  miroclaw config schema              # print JSON Schema to stdout
+  miroclaw config schema > schema.json")]
     Config {
         #[command(subcommand)]
         config_command: ConfigCommands,
@@ -502,10 +502,10 @@ Use --force to skip the confirmation prompt.
 Use --version to target a specific release instead of latest.
 
 Examples:
-  zeroclaw update                      # download and install latest
-  zeroclaw update --check              # check only, don't install
-  zeroclaw update --force              # install without confirmation
-  zeroclaw update --version 0.6.0      # install specific version")]
+  miroclaw update                      # download and install latest
+  miroclaw update --check              # check only, don't install
+  miroclaw update --force              # install without confirmation
+  miroclaw update --version 0.6.0      # install specific version")]
     Update {
         /// Only check for updates, don't install
         #[arg(long)]
@@ -527,8 +527,8 @@ By default, runs the full test suite including network checks \
 checks for faster offline validation.
 
 Examples:
-  zeroclaw self-test             # full suite
-  zeroclaw self-test --quick     # quick checks only (no network)")]
+  miroclaw self-test             # full suite
+  miroclaw self-test --quick     # quick checks only (no network)")]
     SelfTest {
         /// Run quick checks only (no network)
         #[arg(long)]
@@ -537,14 +537,14 @@ Examples:
 
     /// Generate shell completion script to stdout
     #[command(long_about = "\
-Generate shell completion scripts for `zeroclaw`.
+Generate shell completion scripts for `miroclaw`.
 
 The script is printed to stdout so it can be sourced directly:
 
 Examples:
-  source <(zeroclaw completions bash)
-  zeroclaw completions zsh > ~/.zfunc/_zeroclaw
-  zeroclaw completions fish > ~/.config/fish/completions/zeroclaw.fish")]
+  source <(miroclaw completions bash)
+  miroclaw completions zsh > ~/.zfunc/_miroclaw
+  miroclaw completions fish > ~/.config/fish/completions/miroclaw.fish")]
     Completions {
         /// Target shell
         #[arg(value_enum)]
@@ -568,8 +568,8 @@ to the dashboard, status monitoring, and device pairing.
 Use --install to download the pre-built companion app for your platform.
 
 Examples:
-  zeroclaw desktop              # launch the companion app
-  zeroclaw desktop --install    # download and install it")]
+  miroclaw desktop              # launch the companion app
+  miroclaw desktop --install    # download and install it")]
     Desktop {
         /// Download and install the companion app
         #[arg(long)]
@@ -753,7 +753,7 @@ enum ModelCommands {
 
 #[derive(Subcommand, Debug)]
 enum DoctorCommands {
-    /// QueryEngine: recent state-transition trace (in-process; see `zeroclaw doctor query-engine`)
+    /// QueryEngine: recent state-transition trace (in-process; see `miroclaw doctor query-engine`)
     QueryEngine,
     /// Probe model catalogs across providers and report availability
     Models {
@@ -897,8 +897,8 @@ async fn main() -> Result<()> {
     // Onboard auto-detects the environment: if stdin/stdout are a TTY and no
     // provider flags were given, it runs the full interactive wizard; otherwise
     // it runs the quick (scriptable) setup.  This means `curl … | bash` and
-    // `zeroclaw onboard --api-key …` both take the fast path, while a bare
-    // `zeroclaw onboard` in a terminal launches the wizard.
+    // `miroclaw onboard --api-key …` both take the fast path, while a bare
+    // `miroclaw onboard` in a terminal launches the wizard.
     if let Commands::Onboard {
         force,
         reinit,
@@ -1135,7 +1135,7 @@ async fn main() -> Result<()> {
                             println!("   Error: {e}");
                             println!();
                             println!("   Is the gateway running? Start it with:");
-                            println!("     zeroclaw gateway start");
+                            println!("     miroclaw gateway start");
                         }
                     }
                     Ok(())
@@ -1409,8 +1409,8 @@ async fn main() -> Result<()> {
             let hands_dir = zdir.join("hands");
             match hands_command {
                 None => {
-                    println!("Usage: zeroclaw hands list");
-                    println!("       zeroclaw hands run <name>");
+                    println!("Usage: miroclaw hands list");
+                    println!("       miroclaw hands run <name>");
                     Ok(())
                 }
                 Some(zeroclaw::HandsCommands::List) => {
@@ -1461,13 +1461,12 @@ async fn main() -> Result<()> {
                 probe.profile = trimmed.clone();
                 probe.validate().context("Invalid shell.profile value")?;
                 config.shell.profile = trimmed;
-                config.validate().context("config validation failed after shell.profile update")?;
+                config
+                    .validate()
+                    .context("config validation failed after shell.profile update")?;
                 config.save().await.context("Failed to save config.toml")?;
-                println!(
-                    "Updated shell.profile in {}.",
-                    config.config_path.display()
-                );
-                println!("Restart the zeroclaw gateway or agent for this change to take effect.");
+                println!("Updated shell.profile in {}.", config.config_path.display());
+                println!("Restart the miroclaw gateway or agent for this change to take effect.");
                 Ok(())
             }
         },
@@ -1515,7 +1514,7 @@ async fn main() -> Result<()> {
                     println!("  macOS:  {download_url}");
                     println!();
                     println!("Or install via Homebrew (coming soon):");
-                    println!("  brew install --cask zeroclaw");
+                    println!("  brew install --cask miroclaw");
                 }
                 #[cfg(target_os = "linux")]
                 {
@@ -1566,19 +1565,19 @@ async fn main() -> Result<()> {
                 // 2. Same directory as the current executable
                 if found.is_none() {
                     if let Ok(exe) = std::env::current_exe() {
-                        let sibling = exe.with_file_name("zeroclaw-desktop");
+                        let sibling = exe.with_file_name("miroclaw-desktop");
                         if sibling.is_file() {
                             found = Some(sibling);
                         }
                     }
                 }
 
-                // 3. ~/.cargo/bin/zeroclaw-desktop or ~/.local/bin/zeroclaw-desktop
+                // 3. ~/.cargo/bin/miroclaw-desktop or ~/.local/bin/miroclaw-desktop
                 if found.is_none() {
                     if let Some(home) = std::env::var_os("HOME") {
                         let home = PathBuf::from(home);
                         for dir in &[".cargo/bin", ".local/bin"] {
-                            let candidate = home.join(dir).join("zeroclaw-desktop");
+                            let candidate = home.join(dir).join("miroclaw-desktop");
                             if candidate.is_file() {
                                 found = Some(candidate);
                                 break;
@@ -1589,7 +1588,7 @@ async fn main() -> Result<()> {
 
                 // 4. Fallback to PATH lookup
                 if found.is_none() {
-                    if let Ok(path) = which::which("zeroclaw-desktop") {
+                    if let Ok(path) = which::which("miroclaw-desktop") {
                         found = Some(path);
                     }
                 }
@@ -1609,7 +1608,7 @@ async fn main() -> Result<()> {
                     println!("ZeroClaw companion app is not installed.");
                     println!();
                     println!("  Download it at: {download_url}");
-                    println!("  Or run: zeroclaw desktop --install");
+                    println!("  Or run: miroclaw desktop --install");
                     println!();
                     println!("The companion app is a lightweight menu bar app that");
                     println!("connects to the same gateway as the CLI.");
@@ -2287,7 +2286,7 @@ async fn handle_auth_command(auth_command: AuthCommands, config: &Config) -> Res
                         Err(e) => {
                             println!("Callback capture failed: {e}");
                             println!(
-                                "Run `zeroclaw auth paste-redirect --provider gemini --profile {profile}`"
+                                "Run `miroclaw auth paste-redirect --provider gemini --profile {profile}`"
                             );
                             return Ok(());
                         }
@@ -2380,7 +2379,7 @@ async fn handle_auth_command(auth_command: AuthCommands, config: &Config) -> Res
                         Err(e) => {
                             println!("Callback capture failed: {e}");
                             println!(
-                                "Run `zeroclaw auth paste-redirect --provider openai-codex --profile {profile}`"
+                                "Run `miroclaw auth paste-redirect --provider openai-codex --profile {profile}`"
                             );
                             return Ok(());
                         }
@@ -2418,7 +2417,7 @@ async fn handle_auth_command(auth_command: AuthCommands, config: &Config) -> Res
                 "openai-codex" => {
                     let pending = load_pending_oauth_login(config, "openai")?.ok_or_else(|| {
                         anyhow::anyhow!(
-                            "No pending OpenAI login found. Run `zeroclaw auth login --provider openai-codex` first."
+                            "No pending OpenAI login found. Run `miroclaw auth login --provider openai-codex` first."
                         )
                     })?;
 
@@ -2462,7 +2461,7 @@ async fn handle_auth_command(auth_command: AuthCommands, config: &Config) -> Res
                 "gemini" => {
                     let pending = load_pending_oauth_login(config, "gemini")?.ok_or_else(|| {
                         anyhow::anyhow!(
-                            "No pending Gemini login found. Run `zeroclaw auth login --provider gemini` first."
+                            "No pending Gemini login found. Run `miroclaw auth login --provider gemini` first."
                         )
                     })?;
 
@@ -2580,7 +2579,7 @@ async fn handle_auth_command(auth_command: AuthCommands, config: &Config) -> Res
                         }
                         None => {
                             bail!(
-                                "No OpenAI Codex auth profile found. Run `zeroclaw auth login --provider openai-codex`."
+                                "No OpenAI Codex auth profile found. Run `miroclaw auth login --provider openai-codex`."
                             )
                         }
                     }
@@ -2598,7 +2597,7 @@ async fn handle_auth_command(auth_command: AuthCommands, config: &Config) -> Res
                         }
                         None => {
                             bail!(
-                                "No Gemini auth profile found. Run `zeroclaw auth login --provider gemini`."
+                                "No Gemini auth profile found. Run `miroclaw auth login --provider gemini`."
                             )
                         }
                     }
@@ -2709,7 +2708,7 @@ mod tests {
     #[test]
     fn onboard_cli_accepts_model_provider_and_api_key_in_quick_mode() {
         let cli = Cli::try_parse_from([
-            "zeroclaw",
+            "miroclaw",
             "onboard",
             "--provider",
             "openrouter",
@@ -2742,7 +2741,7 @@ mod tests {
     #[test]
     fn completions_cli_parses_supported_shells() {
         for shell in ["bash", "fish", "zsh", "powershell", "elvish"] {
-            let cli = Cli::try_parse_from(["zeroclaw", "completions", shell])
+            let cli = Cli::try_parse_from(["miroclaw", "completions", shell])
                 .expect("completions invocation should parse");
             match cli.command {
                 Commands::Completions { .. } => {}
@@ -2758,14 +2757,14 @@ mod tests {
             .expect("completion generation should succeed");
         let script = String::from_utf8(output).expect("completion output should be valid utf-8");
         assert!(
-            script.contains("zeroclaw"),
+            script.contains("miroclaw"),
             "completion script should reference binary name"
         );
     }
 
     #[test]
     fn onboard_cli_accepts_force_flag() {
-        let cli = Cli::try_parse_from(["zeroclaw", "onboard", "--force"])
+        let cli = Cli::try_parse_from(["miroclaw", "onboard", "--force"])
             .expect("onboard --force should parse");
 
         match cli.command {
@@ -2777,12 +2776,12 @@ mod tests {
     #[test]
     fn onboard_cli_rejects_removed_interactive_flag() {
         // --interactive was removed; onboard auto-detects TTY instead.
-        assert!(Cli::try_parse_from(["zeroclaw", "onboard", "--interactive"]).is_err());
+        assert!(Cli::try_parse_from(["miroclaw", "onboard", "--interactive"]).is_err());
     }
 
     #[test]
     fn onboard_cli_bare_parses() {
-        let cli = Cli::try_parse_from(["zeroclaw", "onboard"]).expect("bare onboard should parse");
+        let cli = Cli::try_parse_from(["miroclaw", "onboard"]).expect("bare onboard should parse");
 
         match cli.command {
             Commands::Onboard { .. } => {}
@@ -2792,7 +2791,7 @@ mod tests {
 
     #[test]
     fn cli_parses_estop_default_engage() {
-        let cli = Cli::try_parse_from(["zeroclaw", "estop"]).expect("estop command should parse");
+        let cli = Cli::try_parse_from(["miroclaw", "estop"]).expect("estop command should parse");
 
         match cli.command {
             Commands::Estop {
@@ -2812,7 +2811,7 @@ mod tests {
 
     #[test]
     fn cli_parses_estop_resume_domain() {
-        let cli = Cli::try_parse_from(["zeroclaw", "estop", "resume", "--domain", "*.chase.com"])
+        let cli = Cli::try_parse_from(["miroclaw", "estop", "resume", "--domain", "*.chase.com"])
             .expect("estop resume command should parse");
 
         match cli.command {
@@ -2826,7 +2825,7 @@ mod tests {
 
     #[test]
     fn agent_command_parses_with_temperature() {
-        let cli = Cli::try_parse_from(["zeroclaw", "agent", "--temperature", "0.5"])
+        let cli = Cli::try_parse_from(["miroclaw", "agent", "--temperature", "0.5"])
             .expect("agent command with temperature should parse");
 
         match cli.command {
@@ -2839,7 +2838,7 @@ mod tests {
 
     #[test]
     fn agent_command_parses_without_temperature() {
-        let cli = Cli::try_parse_from(["zeroclaw", "agent", "--message", "hello"])
+        let cli = Cli::try_parse_from(["miroclaw", "agent", "--message", "hello"])
             .expect("agent command without temperature should parse");
 
         match cli.command {
@@ -2853,7 +2852,7 @@ mod tests {
     #[test]
     fn agent_command_parses_session_state_file() {
         let cli =
-            Cli::try_parse_from(["zeroclaw", "agent", "--session-state-file", "session.json"])
+            Cli::try_parse_from(["miroclaw", "agent", "--session-state-file", "session.json"])
                 .expect("agent command with session state file should parse");
 
         match cli.command {
