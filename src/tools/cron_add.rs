@@ -111,7 +111,7 @@ impl Tool for CronAddTool {
                 "job_type": {
                     "type": "string",
                     "enum": ["shell", "agent", "hand"],
-                    "description": "Type of job: 'shell' runs a command, 'agent' runs the AI agent with a prompt, 'hand' runs a hand from ~/.zeroclaw/hands/{command}.toml"
+                    "description": "Type of job: 'shell' runs a command, 'agent' runs the AI agent with a prompt, 'hand' runs a hand from ~/.miroclaw/hands/{command}.toml"
                 },
                 "command": {
                     "type": "string",

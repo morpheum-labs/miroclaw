@@ -33,7 +33,7 @@ pub enum JobType {
     #[default]
     Shell,
     Agent,
-    /// Run a hand from `~/.zeroclaw/hands/{command}.toml` via [`crate::hands::run_coordinator_hand`].
+    /// Run a hand from `~/.miroclaw/hands/{command}.toml` via [`crate::hands::run_coordinator_hand`].
     /// `CronJob.command` must be the hand name (stem, without `.toml`).
     Hand,
 }

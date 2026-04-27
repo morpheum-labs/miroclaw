@@ -16,7 +16,7 @@ zeroclaw providers
 
 1. 配置/CLI 中的显式凭证
 2. 提供商特定的环境变量
-3. 通用回退环境变量：`ZEROCLAW_API_KEY` 然后是 `API_KEY`
+3. 通用回退环境变量：`MIROCLAW_API_KEY` 然后是 `API_KEY`
 
 对于弹性回退链（`reliability.fallback_providers`），每个回退提供商独立解析凭证。主提供商的显式凭证不会重用于回退提供商。
 

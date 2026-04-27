@@ -8,8 +8,7 @@ use uuid::Uuid;
 
 fn offload_dir() -> Option<PathBuf> {
     directories::BaseDirs::new().map(|b| {
-        b.home_dir()
-            .join(".zeroclaw")
+        crate::context::preferred_user_data_dir_in_home(b.home_dir())
             .join("temp")
             .join("tool-results")
     })
@@ -35,7 +34,7 @@ fn safe_tool_slug(name: &str) -> String {
 }
 
 /// When enabled and `output` exceeds `threshold_chars` (Unicode scalar count), writes the full
-/// output to `~/.zeroclaw/temp/tool-results/` and returns a short preview plus the file path.
+/// output to `~/.miroclaw/temp/tool-results/` and returns a short preview plus the file path.
 /// On I/O failure, falls back to an inline truncation so the agent always gets a response.
 #[must_use]
 pub fn maybe_offload_output(

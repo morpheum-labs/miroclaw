@@ -235,10 +235,10 @@ async fn run_hand_job(config: &Config, security: &SecurityPolicy, job: &CronJob)
         );
     }
 
-    let Some(zdir) = crate::context::default_user_zeroclaw_dir() else {
+    let Some(zdir) = crate::context::default_user_miroclaw_dir() else {
         return (
             false,
-            "HOME / ~/.zeroclaw not available for hands".to_string(),
+            "HOME / ~/.miroclaw not available for hands".to_string(),
         );
     };
     let hands_dir = zdir.join("hands");

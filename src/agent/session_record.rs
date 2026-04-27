@@ -1,7 +1,7 @@
 //! Versioned on-disk session state for Phase 5 (resume + compaction metadata).
 //!
 //! Interactive CLI persists to a JSON file; schema bumps allow migrations. Compaction archives
-//! live under `~/.zeroclaw/sessions/archives/` as JSONL lines of [`ChatMessage`].
+//! live under `~/.miroclaw/sessions/archives/` as JSONL lines of [`ChatMessage`].
 //!
 //! ## Session scope IDs (unified naming)
 //!
@@ -30,7 +30,7 @@ pub const SESSION_RECORD_VERSION: u32 = 2;
 /// Metadata for compaction: pointers to archived segments (full message JSONL) + latest summary hint.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionCompactionMeta {
-    /// Paths relative to `~/.zeroclaw/sessions/` (e.g. `archives/<uuid>.jsonl`).
+    /// Paths relative to `~/.miroclaw/sessions/` (e.g. `archives/<uuid>.jsonl`).
     #[serde(default)]
     pub archive_paths: Vec<String>,
     /// Short excerpt of the last compaction summary (for tooling; full text remains in `history`).
@@ -54,10 +54,10 @@ struct LegacySessionV1 {
     history: Vec<ChatMessage>,
 }
 
-/// `~/.zeroclaw/sessions` or None if home is unavailable.
+/// `~/.miroclaw/sessions` (or None if home is unavailable).
 #[must_use]
 pub fn sessions_root_dir() -> Option<PathBuf> {
-    directories::BaseDirs::new().map(|b| b.home_dir().join(".zeroclaw").join("sessions"))
+    crate::context::default_user_miroclaw_dir().map(|d| d.join("sessions"))
 }
 
 /// Prefix for gateway WebSocket session rows in the workspace session backend (`gw_<session_id>`).
@@ -160,7 +160,7 @@ pub fn gc_compaction_archives_under<S: BuildHasher>(
     Ok(removed)
 }
 
-/// Delete compaction archive files under `~/.zeroclaw/sessions/archives/` older than `retention`,
+/// Delete compaction archive files under `~/.miroclaw/sessions/archives/` older than `retention`,
 /// skipping paths still listed in `compaction.archive_paths` of any `*.json` session file in the
 /// home sessions directory.
 /// Returns the number of files removed. No-op if `sessions_root_dir()` is unavailable.

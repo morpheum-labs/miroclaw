@@ -236,7 +236,7 @@ React 19 + Vite 6 + Tailwind CSS 4 web dashboard served directly from the Gatewa
 - **Integrations** — integration status and setup
 - **Pairing** — device pairing management
 
-**External dashboard (optional):** set `[webui].external_path` in `config.toml` (or `ZEROCLAW_WEBUI_EXTERNAL_PATH`, or `zeroclaw gateway start --webui-external-path /path/to/web/dist`) to serve the built UI from disk. When the path is missing or invalid, the gateway falls back to embedded `web/dist/`. Use `POST /api/webui/reload` or `/webui reload` in gateway chat to re-scan the path without restarting. To build a slimmer binary without embedded assets, compile with default features minus `embedded-web-ui` and always supply a valid external `dist/` at runtime.
+**External dashboard (optional):** set `[webui].external_path` in `config.toml` (or `MIROCLAW_WEBUI_EXTERNAL_PATH`, or `zeroclaw gateway start --webui-external-path /path/to/web/dist`) to serve the built UI from disk. When the path is missing or invalid, the gateway falls back to embedded `web/dist/`. Use `POST /api/webui/reload` or `/webui reload` in gateway chat to re-scan the path without restarting. To build a slimmer binary without embedded assets, compile with default features minus `embedded-web-ui` and always supply a valid external `dist/` at runtime.
 
 ### Firmware targets
 

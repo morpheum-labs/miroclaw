@@ -25,8 +25,8 @@ impl RuntimeAdapter for NativeRuntime {
 
     fn storage_path(&self) -> PathBuf {
         directories::UserDirs::new().map_or_else(
-            || PathBuf::from(".zeroclaw"),
-            |u| u.home_dir().join(".zeroclaw"),
+            || PathBuf::from(crate::context::USER_DATA_DIR_NAME),
+            |u| crate::context::preferred_user_data_dir_in_home(u.home_dir()),
         )
     }
 
@@ -91,9 +91,10 @@ mod tests {
     }
 
     #[test]
-    fn native_storage_path_contains_zeroclaw() {
+    fn native_storage_path_uses_miroclaw_or_legacy() {
         let path = NativeRuntime::new().storage_path();
-        assert!(path.to_string_lossy().contains("zeroclaw"));
+        let s = path.to_string_lossy();
+        assert!(s.contains("miroclaw") || s.contains("zeroclaw"));
     }
 
     #[test]

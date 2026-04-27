@@ -145,7 +145,7 @@ impl Tool for PicoFlashTool {
                     error: Some(format!(
                         "UF2 copied to {} but serial port did not appear within {PORT_WAIT_SECS}s. \
                          Unplug and replug the Pico, then run:\n  \
-                         mpremote connect <port> cp ~/.zeroclaw/firmware/pico/main.py :main.py + reset",
+                         mpremote connect <port> cp ~/.miroclaw/firmware/pico/main.py :main.py + reset",
                         mount.display()
                     )),
                 });

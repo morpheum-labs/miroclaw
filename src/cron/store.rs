@@ -119,7 +119,7 @@ pub fn add_agent_job(
     get_job(config, &id)
 }
 
-/// Schedule a hand run (`command` = hand name, stem of `~/.zeroclaw/hands/{name}.toml`).
+/// Schedule a hand run (`command` = hand name, stem of `~/.miroclaw/hands/{name}.toml`).
 pub fn add_hand_job(
     config: &Config,
     name: Option<String>,

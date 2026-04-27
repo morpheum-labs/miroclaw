@@ -79,7 +79,7 @@ Set `[shell].profile` to `safe`, `balanced`, `autonomous`, or your custom id, sa
 
 ### Option C: Environment override
 
-`ZEROCLAW_SHELL_PROFILE` overrides the configured profile for that process (useful in tests or one-off launches). Restart still applies when you change env for a long-running service.
+`MIROCLAW_SHELL_PROFILE` overrides the configured profile for that process (useful in tests or one-off launches). Restart still applies when you change env for a long-running service.
 
 ## Migration from `[shell_tool]`
 

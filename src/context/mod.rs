@@ -60,10 +60,30 @@ pub struct DynamicContextPaths<'a> {
     pub session_dir: Option<&'a Path>,
 }
 
-/// Returns `~/.zeroclaw` when the home directory is available.
+/// Directory name for per-user data under the home directory (`~/.miroclaw`, leading dot included).
+pub const USER_DATA_DIR_NAME: &str = ".miroclaw";
+/// Pre-dot-prefix preview path (undotted `miroclaw` in home).
+const USER_DATA_DIR_PLAIN_NAME: &str = "miroclaw";
+
+/// Preferred per-user data directory: `~/.miroclaw` if it exists, else `~/miroclaw` when present,
+/// else `~/.miroclaw` for a fresh install.
 #[must_use]
-pub fn default_user_zeroclaw_dir() -> Option<PathBuf> {
-    directories::BaseDirs::new().map(|b| b.home_dir().join(".zeroclaw"))
+pub fn preferred_user_data_dir_in_home(home: &Path) -> PathBuf {
+    let m = home.join(USER_DATA_DIR_NAME);
+    let m_plain = home.join(USER_DATA_DIR_PLAIN_NAME);
+    if m.exists() {
+        m
+    } else if m_plain.exists() {
+        m_plain
+    } else {
+        m
+    }
+}
+
+/// Returns the preferred per-user data path when a home directory is available.
+#[must_use]
+pub fn default_user_miroclaw_dir() -> Option<PathBuf> {
+    directories::BaseDirs::new().map(|b| preferred_user_data_dir_in_home(b.home_dir()))
 }
 
 /// Builds the markdown block appended to the system prompt when `[agent.dynamic_context]` is enabled.

@@ -4,7 +4,7 @@
 //! 1. [`find_rpi_rp2_mount`] — check well-known mount points for the RPI-RP2 volume
 //!    that appears when a Pico is held in BOOTSEL mode.
 //! 2. [`ensure_firmware_dir`] — extract the bundled firmware files to
-//!    `~/.zeroclaw/firmware/pico/` if they aren't there yet.
+//!    `~/.miroclaw/firmware/pico/` if they aren't there yet.
 //! 3. [`flash_uf2`] — copy the UF2 to the mount point; the Pico reboots automatically.
 //!
 //! # Embedded assets
@@ -56,7 +56,7 @@ pub fn find_rpi_rp2_mount() -> Option<PathBuf> {
 
 // ── Firmware directory management ─────────────────────────────────────────────
 
-/// Ensure `~/.zeroclaw/firmware/pico/` exists and contains the bundled assets.
+/// Ensure `~/.miroclaw/firmware/pico/` exists and contains the bundled assets.
 ///
 /// Files are only written if they are absent — existing files are never overwritten
 /// so users can substitute their own firmware.
@@ -67,9 +67,7 @@ pub fn ensure_firmware_dir() -> Result<PathBuf> {
 
     let base = BaseDirs::new().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
 
-    let firmware_dir = base
-        .home_dir()
-        .join(".zeroclaw")
+    let firmware_dir = crate::context::preferred_user_data_dir_in_home(base.home_dir())
         .join("firmware")
         .join("pico");
     std::fs::create_dir_all(&firmware_dir)?;

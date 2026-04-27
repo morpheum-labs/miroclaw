@@ -101,7 +101,7 @@ Zeroclaw layers **`[shell].profile`** on top of autonomy (`ReadOnly` / `Supervis
 **How switching works:**
 1. **Config** — set `[shell].profile` to `safe`, `balanced`, `autonomous`, or a custom id from `[[shell.profiles]]` (each custom entry **`extends`** one of the three). See [`docs/reference/api/config-reference.md`](reference/api/config-reference.md#shell).
 2. **CLI** — `zeroclaw shell profile <name>` writes `shell.profile` and validates; **restart** the gateway, daemon, or agent afterward (no in-process hot swap).
-3. **Automation** — `ZEROCLAW_SHELL_PROFILE` overrides the profile after the file is loaded.
+3. **Automation** — `MIROCLAW_SHELL_PROFILE` overrides the profile after the file is loaded.
 
 Legacy **`[shell_tool]`** is migrated on first load to **`[shell]`** with `profile = "safe"` (and optional config backup). Remove any stale **`[shell_tool]`** block once you are satisfied.
 

@@ -128,7 +128,7 @@ pub async fn run_zeroclaw_cli(config: &Config, args: Vec<String>) -> Result<Stri
     tokio::task::spawn_blocking(move || {
         let mut cmd = Command::new(&exe);
         if let Some(dir) = config_path.parent() {
-            cmd.env("ZEROCLAW_CONFIG_DIR", dir);
+            cmd.env("MIROCLAW_CONFIG_DIR", dir);
         }
         cmd.args(&args);
         let out = cmd

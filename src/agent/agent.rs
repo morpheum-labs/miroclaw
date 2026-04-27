@@ -765,7 +765,7 @@ impl Agent {
             ..Default::default()
         };
         let instructions = self.tool_dispatcher.prompt_instructions(&self.tools);
-        let user_zeroclaw = crate::context::default_user_zeroclaw_dir();
+        let user_zeroclaw = crate::context::default_user_miroclaw_dir();
         let paths = crate::context::DynamicContextPaths {
             global_config_dir: None,
             user_config_dir: user_zeroclaw.as_deref(),

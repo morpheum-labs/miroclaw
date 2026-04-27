@@ -88,21 +88,21 @@ This builds a local ZeroClaw image and launches onboarding inside a container wh
 persisting config/workspace to `./.zeroclaw-docker`.
 
 Container CLI defaults to `docker`. If Docker CLI is unavailable and `podman` exists,
-the installer auto-falls back to `podman`. You can also set `ZEROCLAW_CONTAINER_CLI`
-explicitly (for example: `ZEROCLAW_CONTAINER_CLI=podman ./install.sh --docker`).
+the installer auto-falls back to `podman`. You can also set `MIROCLAW_CONTAINER_CLI`
+explicitly (for example: `MIROCLAW_CONTAINER_CLI=podman ./install.sh --docker`).
 
 For Podman, the installer runs with `--userns keep-id` and `:Z` volume labels so
 workspace/config mounts remain writable inside the container.
 
 If you add `--skip-build`, the installer skips local image build. It first tries the local
-Docker tag (`ZEROCLAW_DOCKER_IMAGE`, default: `zeroclaw-bootstrap:local`); if missing,
+Docker tag (`MIROCLAW_DOCKER_IMAGE`, default: `zeroclaw-bootstrap:local`); if missing,
 it pulls `ghcr.io/zeroclaw-labs/zeroclaw:latest` and tags it locally before running.
 
 ### Stopping and restarting a Docker/Podman container
 
 After `./install.sh --docker` finishes, the container exits. Your config and workspace
 are persisted in the data directory (default: `./.zeroclaw-docker`, or `~/.zeroclaw-docker`
-when bootstrapping via `curl | bash`). You can override this path with `ZEROCLAW_DOCKER_DATA_DIR`.
+when bootstrapping via `curl | bash`). You can override this path with `MIROCLAW_DOCKER_DATA_DIR`.
 
 **Do not re-run `install.sh`** to restart -- it will rebuild the image and re-run onboarding.
 Instead, start a new container from the existing image and mount the persisted data directory.
@@ -138,7 +138,7 @@ docker run -d --name zeroclaw \
   -v "$PWD/.zeroclaw-docker/.zeroclaw:/zeroclaw-data/.zeroclaw" \
   -v "$PWD/.zeroclaw-docker/workspace:/zeroclaw-data/workspace" \
   -e HOME=/zeroclaw-data \
-  -e ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace \
+  -e MIROCLAW_WORKSPACE=/zeroclaw-data/workspace \
   -p 42617:42617 \
   zeroclaw-bootstrap:local \
   gateway
@@ -151,7 +151,7 @@ podman run -d --name zeroclaw \
   -v "$PWD/.zeroclaw-docker/.zeroclaw:/zeroclaw-data/.zeroclaw:Z" \
   -v "$PWD/.zeroclaw-docker/workspace:/zeroclaw-data/workspace:Z" \
   -e HOME=/zeroclaw-data \
-  -e ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace \
+  -e MIROCLAW_WORKSPACE=/zeroclaw-data/workspace \
   -p 42617:42617 \
   zeroclaw-bootstrap:local \
   gateway
@@ -204,7 +204,7 @@ saved in `.zeroclaw-docker/.zeroclaw/config.toml` and do not need to be passed a
 Or with environment variables:
 
 ```bash
-ZEROCLAW_API_KEY="sk-..." ZEROCLAW_PROVIDER="openrouter" ./install.sh
+MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" ./install.sh
 ```
 
 ## Useful flags

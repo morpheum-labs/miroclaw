@@ -551,7 +551,7 @@ Examples:
         shell: CompletionShell,
     },
 
-    /// List or run autonomous hand packages (`~/.zeroclaw/hands/`)
+    /// List or run autonomous hand packages (`~/.miroclaw/hands/`)
     Hands {
         #[command(subcommand)]
         hands_command: Option<zeroclaw::HandsCommands>,
@@ -782,7 +782,7 @@ enum DoctorCommands {
     },
     /// Long-running hand health (scratchpad, layered memory index, static/dynamic prompt boundary)
     LongRun {
-        /// Hand id (TOML stem under ~/.zeroclaw/hands). Omit to scan every hand.
+        /// Hand id (TOML stem under ~/.miroclaw/hands). Omit to scan every hand.
         hand: Option<String>,
     },
 }
@@ -874,7 +874,7 @@ async fn main() -> Result<()> {
         if config_dir.trim().is_empty() {
             bail!("--config-dir cannot be empty");
         }
-        std::env::set_var("ZEROCLAW_CONFIG_DIR", config_dir);
+        std::env::set_var("MIROCLAW_CONFIG_DIR", config_dir);
     }
 
     // Completions must remain stdout-only and should not load config or initialize logging.
@@ -1000,7 +1000,7 @@ async fn main() -> Result<()> {
         }
 
         // Auto-start channels if user said yes during wizard
-        if std::env::var("ZEROCLAW_AUTOSTART_CHANNELS").as_deref() == Ok("1") {
+        if std::env::var("MIROCLAW_AUTOSTART_CHANNELS").as_deref() == Ok("1") {
             Box::pin(channels::start_channels(config)).await?;
         }
         return Ok(());
@@ -1404,8 +1404,8 @@ async fn main() -> Result<()> {
         Commands::Skills { skill_command } => skills::handle_command(skill_command, &config),
 
         Commands::Hands { hands_command } => {
-            let zdir = context::default_user_zeroclaw_dir()
-                .ok_or_else(|| anyhow::anyhow!("Could not resolve ~/.zeroclaw (HOME unset?)"))?;
+            let zdir = context::default_user_miroclaw_dir()
+                .ok_or_else(|| anyhow::anyhow!("Could not resolve ~/.miroclaw (HOME unset?)"))?;
             let hands_dir = zdir.join("hands");
             match hands_command {
                 None => {

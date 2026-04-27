@@ -513,7 +513,7 @@ user_agent = "ZeroClaw/1.0"
 [proxy]
 enabled = false
 no_proxy = []
-scope = "zeroclaw"
+scope = "miroclaw"
 services = []
 
 [identity]

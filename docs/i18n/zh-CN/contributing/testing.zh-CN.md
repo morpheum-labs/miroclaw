@@ -134,7 +134,7 @@ use crate::support::helpers::{build_agent, text_response, tool_response};
 ## 实时测试约定
 
 - 所有实时测试必须标记为 `#[ignore]`
-- 使用 `env::var("ZEROCLAW_TEST_*")` 获取凭证
+- 使用 `env::var("MIROCLAW_TEST_*")` 获取凭证
 - 运行命令：`cargo test --test live -- --ignored --nocapture`
 
 ## 手动测试（`tests/manual/`）

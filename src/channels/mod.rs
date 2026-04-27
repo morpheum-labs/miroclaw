@@ -1356,7 +1356,7 @@ async fn create_resilient_provider_nonblocking(
 /// Prefix used to signal that a runtime command response contains raw Block Kit
 /// JSON instead of plain text. [`SlackChannel::send`] detects this and posts
 /// the blocks directly via `chat.postMessage`.
-const BLOCK_KIT_PREFIX: &str = "__ZEROCLAW_BLOCK_KIT__";
+const BLOCK_KIT_PREFIX: &str = "__MIROCLAW_BLOCK_KIT__";
 
 /// Build a Slack Block Kit JSON payload for the `/config` interactive UI.
 fn build_config_block_kit(
@@ -1570,7 +1570,7 @@ async fn handle_runtime_command_if_needed(
                     &ctx.model_routes,
                 );
                 // Use a magic prefix so SlackChannel::send() can detect Block Kit JSON.
-                format!("__ZEROCLAW_BLOCK_KIT__{blocks_json}")
+                format!("__MIROCLAW_BLOCK_KIT__{blocks_json}")
             } else {
                 runtime_slash::build_config_text_response(
                     &current,
@@ -3461,7 +3461,7 @@ fn maybe_restart_managed_daemon_service() -> Result<bool> {
         let plist = home
             .join("Library")
             .join("LaunchAgents")
-            .join("com.zeroclaw.daemon.plist");
+            .join("com.miroclaw.daemon.plist");
         if !plist.exists() {
             return Ok(false);
         }
@@ -3471,15 +3471,15 @@ fn maybe_restart_managed_daemon_service() -> Result<bool> {
             .output()
             .context("Failed to query launchctl list")?;
         let listed = String::from_utf8_lossy(&list_output.stdout);
-        if !listed.contains("com.zeroclaw.daemon") {
+        if !listed.contains("com.miroclaw.daemon") {
             return Ok(false);
         }
 
         let _ = Command::new("launchctl")
-            .args(["stop", "com.zeroclaw.daemon"])
+            .args(["stop", "com.miroclaw.daemon"])
             .output();
         let start_output = Command::new("launchctl")
-            .args(["start", "com.zeroclaw.daemon"])
+            .args(["start", "com.miroclaw.daemon"])
             .output()
             .context("Failed to start launchd daemon service")?;
         if !start_output.status.success() {
@@ -3596,7 +3596,7 @@ pub(crate) async fn handle_command(command: crate::ChannelCommands, config: &Con
             );
         }
         crate::ChannelCommands::Remove { name } => {
-            anyhow::bail!("Remove channel '{name}' — edit ~/.zeroclaw/config.toml directly");
+            anyhow::bail!("Remove channel '{name}' — edit ~/.miroclaw/config.toml directly");
         }
         crate::ChannelCommands::BindTelegram { identity } => {
             Box::pin(bind_telegram_identity(config, &identity)).await
@@ -4515,7 +4515,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
         None
     };
     let native_tools = provider.supports_native_tools();
-    let user_zeroclaw = crate::context::default_user_zeroclaw_dir();
+    let user_zeroclaw = crate::context::default_user_miroclaw_dir();
     let dynamic_paths = crate::context::DynamicContextPaths {
         global_config_dir: None,
         user_config_dir: user_zeroclaw.as_deref(),

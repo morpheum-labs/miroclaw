@@ -95,7 +95,7 @@ Lệnh này build image ZeroClaw cục bộ và chạy thiết lập trong conta
 Hoặc dùng biến môi trường:
 
 ```bash
-ZEROCLAW_API_KEY="sk-..." ZEROCLAW_PROVIDER="openrouter" ./install.sh
+MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" ./install.sh
 ```
 
 ## Các cờ hữu ích

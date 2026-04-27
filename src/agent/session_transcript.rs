@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// One line in `~/.zeroclaw/sessions/transcripts/<stem>.jsonl`.
+/// One line in `~/.miroclaw/sessions/transcripts/<stem>.jsonl`.
 #[derive(Debug, Clone, Serialize)]
 pub struct TranscriptRecordV1 {
     pub v: u32,
@@ -31,12 +31,8 @@ tokio::task_local! {
 }
 
 pub(crate) fn default_transcript_dir() -> Option<PathBuf> {
-    directories::BaseDirs::new().map(|b| {
-        b.home_dir()
-            .join(".zeroclaw")
-            .join("sessions")
-            .join("transcripts")
-    })
+    crate::context::default_user_miroclaw_dir()
+        .map(|d| d.join("sessions").join("transcripts"))
 }
 
 fn transcript_file_stem(session_key: &str) -> String {

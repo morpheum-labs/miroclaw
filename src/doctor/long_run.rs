@@ -43,10 +43,10 @@ fn file_mtime(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path).ok()?.modified().ok()
 }
 
-/// `zeroclaw doctor long-run` — scratchpad + AutoMemory index + optional hand prompt boundary probe.
+/// `miroclaw doctor long-run` — scratchpad + AutoMemory index + optional hand prompt boundary probe.
 pub async fn run(config: &Config, hand_filter: Option<&str>) -> Result<()> {
-    let zdir = crate::context::default_user_zeroclaw_dir()
-        .context("Could not resolve ~/.zeroclaw (HOME unset?)")?;
+    let zdir = crate::context::default_user_miroclaw_dir()
+        .context("Could not resolve ~/.miroclaw (HOME unset?)")?;
     let hands_dir = zdir.join("hands");
     let hands = crate::hands::load_hands(&hands_dir)?;
 

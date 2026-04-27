@@ -54,7 +54,7 @@ docker run -d --name zeroclaw \
   -v "$PWD/.zeroclaw-docker/.zeroclaw:/zeroclaw-data/.zeroclaw" \
   -v "$PWD/.zeroclaw-docker/workspace:/zeroclaw-data/workspace" \
   -e HOME=/zeroclaw-data \
-  -e ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace \
+  -e MIROCLAW_WORKSPACE=/zeroclaw-data/workspace \
   -p 42617:42617 \
   zeroclaw-bootstrap:local \
   gateway

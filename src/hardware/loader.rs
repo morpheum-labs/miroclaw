@@ -1,8 +1,8 @@
-//! Plugin manifest loader — scans `~/.zeroclaw/tools/` at startup.
+//! Plugin manifest loader — scans `~/.miroclaw/tools/` at startup.
 //!
 //! Layout expected on disk:
 //! ```text
-//! ~/.zeroclaw/tools/
+//! ~/.miroclaw/tools/
 //! ├── i2c_scan/
 //! │   ├── tool.toml
 //! │   └── i2c_scan.py
@@ -35,7 +35,7 @@ pub struct LoadedPlugin {
     pub tool: Box<dyn Tool>,
 }
 
-/// Scan `~/.zeroclaw/tools/` and return all valid plugins.
+/// Scan `~/.miroclaw/tools/` and return all valid plugins.
 ///
 /// - Creates the directory if absent.
 /// - Skips broken manifests with a `tracing::warn!` — does not propagate errors.
@@ -70,11 +70,11 @@ pub fn scan_plugin_dir() -> Vec<LoadedPlugin> {
         match dirs_home().as_deref().filter(|s| !s.is_empty()) {
             Some(home) => tools_dir
                 .to_str()
-                .unwrap_or("~/.zeroclaw/tools")
+                .unwrap_or("~/.miroclaw/tools")
                 .replace(home, "~"),
             None => tools_dir
                 .to_str()
-                .unwrap_or("~/.zeroclaw/tools")
+                .unwrap_or("~/.miroclaw/tools")
                 .to_string(),
         }
     );
@@ -198,12 +198,14 @@ fn load_one_plugin(plugin_dir: &Path, manifest_path: &Path) -> Result<LoadedPlug
     })
 }
 
-/// Return the path `~/.zeroclaw/tools/` using the `directories` crate.
+/// Return the path `~/.miroclaw/tools/` using the `directories` crate.
 pub fn plugin_tools_dir() -> Result<PathBuf> {
     use directories::BaseDirs;
     let base = BaseDirs::new()
         .ok_or_else(|| anyhow::anyhow!("cannot determine the user home directory"))?;
-    Ok(base.home_dir().join(".zeroclaw").join("tools"))
+    Ok(
+        crate::context::preferred_user_data_dir_in_home(base.home_dir()).join("tools"),
+    )
 }
 
 /// Best-effort home dir string for display purposes only.
@@ -295,7 +297,7 @@ binary = "tool.sh"
     #[test]
     fn scan_plugin_dir_skips_broken_manifests_without_panicking() {
         // We can't redirect scan_plugin_dir to an arbitrary directory (it
-        // always uses ~/.zeroclaw/tools), but we can verify load_one_plugin
+        // always uses ~/.miroclaw/tools), but we can verify load_one_plugin
         // behaviour under broken input without affecting the real directory.
         let dir = tempfile::tempdir().unwrap();
 
@@ -318,10 +320,10 @@ binary = "tool.sh"
     }
 
     #[test]
-    fn plugin_tools_dir_returns_path_ending_in_zeroclaw_tools() {
+    fn plugin_tools_dir_resolves_miroclaw_tools_suffix() {
         let path = plugin_tools_dir().expect("should resolve");
         let display = path.to_string_lossy();
-        let expected = std::path::Path::new(".zeroclaw").join("tools");
+        let expected = std::path::Path::new(crate::context::USER_DATA_DIR_NAME).join("tools");
         assert!(path.ends_with(&expected), "unexpected path: {}", display);
     }
 }

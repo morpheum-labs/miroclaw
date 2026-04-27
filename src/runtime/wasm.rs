@@ -292,7 +292,10 @@ impl RuntimeAdapter for WasmRuntime {
     fn storage_path(&self) -> PathBuf {
         self.workspace_dir
             .as_ref()
-            .map_or_else(|| PathBuf::from(".zeroclaw"), |w| w.join(".zeroclaw"))
+            .map_or_else(
+                || PathBuf::from(crate::context::USER_DATA_DIR_NAME),
+                |w| w.join(crate::context::USER_DATA_DIR_NAME),
+            )
     }
 
     fn supports_long_running(&self) -> bool {
@@ -386,13 +389,17 @@ mod tests {
     #[test]
     fn wasm_storage_path_default() {
         let rt = WasmRuntime::new(default_config());
-        assert!(rt.storage_path().to_string_lossy().contains("zeroclaw"));
+        let s = rt.storage_path().to_string_lossy();
+        assert!(s.contains("miroclaw"));
     }
 
     #[test]
     fn wasm_storage_path_with_workspace() {
         let rt = WasmRuntime::with_workspace(default_config(), PathBuf::from("/home/user/project"));
-        assert_eq!(rt.storage_path(), PathBuf::from("/home/user/project/.zeroclaw"));
+        assert_eq!(
+            rt.storage_path(),
+            PathBuf::from("/home/user/project").join(crate::context::USER_DATA_DIR_NAME)
+        );
     }
 
     // ── Config validation ──────────────────────────────────────

@@ -583,8 +583,8 @@ impl TelegramChannel {
         let home = UserDirs::new()
             .map(|u| u.home_dir().to_path_buf())
             .context("Could not find home directory")?;
-        let zeroclaw_dir = home.join(".zeroclaw");
-        let config_path = zeroclaw_dir.join("config.toml");
+        let data_dir = crate::context::preferred_user_data_dir_in_home(&home);
+        let config_path = data_dir.join("config.toml");
 
         let contents = fs::read_to_string(&config_path)
             .await
@@ -593,7 +593,7 @@ impl TelegramChannel {
             "Failed to parse config.toml — check [channels.telegram] section for syntax errors",
         )?;
         config.config_path = config_path;
-        config.workspace_dir = zeroclaw_dir.join("workspace");
+        config.workspace_dir = data_dir.join("workspace");
         Ok(config)
     }
 

@@ -147,7 +147,7 @@ run_update_custom_model_flow() {
 
   mkdir -p "$root"
 
-  env ZEROCLAW_CONFIG_DIR="$config_dir" \
+  env MIROCLAW_CONFIG_DIR="$config_dir" \
     "$BIN_PATH" onboard --provider openrouter --api-key seed-key --model openai/gpt-5-mini --force >/dev/null
 
   start_onboard_session "$session" "$config_dir"

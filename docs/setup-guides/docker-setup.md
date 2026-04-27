@@ -19,12 +19,12 @@ The root [`Dockerfile`](../../Dockerfile) builds the `zeroclaw` binary and defin
 
 - **Entrypoint:** `zeroclaw` — **default CMD:** `daemon` (supervised runtime).
 - **Listen:** gateway **port `42617`** (`EXPOSE 42617`); healthcheck: `zeroclaw status --format=exit-code`.
-- **Paths:** `HOME=/zeroclaw-data`, workspace `ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace`, config under `/zeroclaw-data/.zeroclaw/`.
+- **Paths:** `HOME=/zeroclaw-data`, workspace `MIROCLAW_WORKSPACE=/zeroclaw-data/workspace`, config under `/zeroclaw-data/.zeroclaw/`.
 - **User:** non-root UID `65534`.
 
 The builder stage seeds a minimal `config.toml` under `/zeroclaw-data/.zeroclaw/` (overridden in `dev` by the template). It includes an **`[autonomy]`** block with `auto_approve` listing several built-in tool names (read the file for the exact set shipped with the image).
 
-**Container + config:** For provider overrides and custom endpoints, see the operational note in [`config-reference.md`](../reference/api/config-reference.md) (custom `api_url` vs `ZEROCLAW_PROVIDER`).
+**Container + config:** For provider overrides and custom endpoints, see the operational note in [`config-reference.md`](../reference/api/config-reference.md) (custom `api_url` vs `MIROCLAW_PROVIDER`).
 
 ---
 

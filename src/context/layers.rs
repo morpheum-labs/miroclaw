@@ -24,7 +24,7 @@ pub const INSTRUCTION_FILENAMES: &[&str] = &[
 pub enum ContextLayer {
     /// Reserved for future managed / system-wide defaults.
     Global,
-    /// User config directory (e.g. `~/.zeroclaw/`).
+    /// User config directory (e.g. `~/.miroclaw/`).
     User,
     /// Current workspace / repository root.
     Workspace,

@@ -584,10 +584,10 @@ Examples:
     FlashNucleo,
 }
 
-/// Autonomous hand packages (`~/.zeroclaw/hands/*.toml`)
+/// Autonomous hand packages (`~/.miroclaw/hands/*.toml`)
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum HandsCommands {
-    /// List hand definitions from `~/.zeroclaw/hands/`
+    /// List hand definitions from `~/.miroclaw/hands/`
     List,
     /// Run one hand (coordinator + workers when `coordinator_mode` is set)
     Run {

@@ -16,7 +16,7 @@ Thứ tự ưu tiên tại runtime:
 
 1. Thông tin xác thực tường minh từ config/CLI
 2. Biến môi trường dành riêng cho provider
-3. Biến môi trường dự phòng chung: `ZEROCLAW_API_KEY`, sau đó là `API_KEY`
+3. Biến môi trường dự phòng chung: `MIROCLAW_API_KEY`, sau đó là `API_KEY`
 
 Với chuỗi provider dự phòng (`reliability.fallback_providers`), mỗi provider dự phòng tự giải quyết thông tin xác thực của mình độc lập. Key xác thực của provider chính không tự động dùng cho provider dự phòng.
 

@@ -35,7 +35,7 @@ use std::path::PathBuf;
 async fn gemini_warmup_refreshes_expired_oauth_token() -> Result<()> {
     // Find ~/.zeroclaw/auth-profiles.json
     let home = env::var("HOME").expect("HOME env var not set");
-    let zeroclaw_dir = PathBuf::from(home).join(".zeroclaw");
+    let zeroclaw_dir = PathBuf::from(home).join(".miroclaw");
     let auth_profiles_path = zeroclaw_dir.join("auth-profiles.json");
 
     if !auth_profiles_path.exists() {

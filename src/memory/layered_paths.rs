@@ -1,4 +1,4 @@
-//! Disk paths for layered AutoMemory + SessionMemory (`~/.zeroclaw/...`).
+//! Disk paths for layered AutoMemory + SessionMemory (`~/.miroclaw/...`).
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -12,16 +12,18 @@ pub fn workspace_bucket_id(workspace_dir: &Path) -> String {
     format!("{:016x}", h.finish())
 }
 
-/// `~/.zeroclaw` when available; otherwise `workspace/.zeroclaw` as a portable fallback.
+/// `~/.miroclaw` when available; otherwise `workspace/.miroclaw/`
+/// as a portable fallback.
 #[must_use]
-pub fn resolved_zeroclaw_dir(workspace_dir: &Path) -> PathBuf {
-    crate::context::default_user_zeroclaw_dir().unwrap_or_else(|| workspace_dir.join(".zeroclaw"))
+pub fn resolved_miroclaw_dir(workspace_dir: &Path) -> PathBuf {
+    crate::context::default_user_miroclaw_dir()
+        .unwrap_or_else(|| workspace_dir.join(crate::context::USER_DATA_DIR_NAME))
 }
 
-/// AutoMemory root: `~/.zeroclaw/memory/<bucket>/`.
+/// AutoMemory root: `~/.miroclaw/memory/<bucket>/`.
 #[must_use]
 pub fn auto_memory_bucket_dir(workspace_dir: &Path) -> PathBuf {
-    let z = resolved_zeroclaw_dir(workspace_dir);
+    let z = resolved_miroclaw_dir(workspace_dir);
     z.join("memory").join(workspace_bucket_id(workspace_dir))
 }
 
@@ -59,10 +61,10 @@ pub fn session_storage_stem(session_key: &str) -> String {
     format!("{head}_{:x}", h.finish())
 }
 
-/// SessionMemory directory: `~/.zeroclaw/sessions/<stem>/session-memory/`.
+/// SessionMemory directory: `~/.miroclaw/sessions/<stem>/session-memory/`.
 #[must_use]
 pub fn session_memory_dir(workspace_dir: &Path, session_key: &str) -> PathBuf {
-    let z = resolved_zeroclaw_dir(workspace_dir);
+    let z = resolved_miroclaw_dir(workspace_dir);
     z.join("sessions")
         .join(session_storage_stem(session_key))
         .join("session-memory")

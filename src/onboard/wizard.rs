@@ -255,7 +255,7 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
             );
             println!();
             // Signal to main.rs to call start_channels after wizard returns
-            std::env::set_var("ZEROCLAW_AUTOSTART_CHANNELS", "1");
+            std::env::set_var("MIROCLAW_AUTOSTART_CHANNELS", "1");
         }
     }
 
@@ -307,7 +307,7 @@ pub async fn run_channels_repair_wizard() -> Result<Config> {
             );
             println!();
             // Signal to main.rs to call start_channels after wizard returns
-            std::env::set_var("ZEROCLAW_AUTOSTART_CHANNELS", "1");
+            std::env::set_var("MIROCLAW_AUTOSTART_CHANNELS", "1");
         }
     }
 
@@ -369,7 +369,7 @@ async fn run_provider_update_wizard(workspace_dir: &Path, config_path: &Path) ->
                 style("Starting channel server...").white().bold()
             );
             println!();
-            std::env::set_var("ZEROCLAW_AUTOSTART_CHANNELS", "1");
+            std::env::set_var("MIROCLAW_AUTOSTART_CHANNELS", "1");
         }
     }
 
@@ -471,7 +471,7 @@ pub async fn run_quick_setup(
 }
 
 fn resolve_quick_setup_dirs_with_home(home: &Path) -> (PathBuf, PathBuf) {
-    if let Ok(custom_config_dir) = std::env::var("ZEROCLAW_CONFIG_DIR") {
+    if let Ok(custom_config_dir) = std::env::var("MIROCLAW_CONFIG_DIR") {
         let trimmed = custom_config_dir.trim();
         if !trimmed.is_empty() {
             let config_dir = PathBuf::from(shellexpand::tilde(trimmed).as_ref());
@@ -479,7 +479,7 @@ fn resolve_quick_setup_dirs_with_home(home: &Path) -> (PathBuf, PathBuf) {
         }
     }
 
-    if let Ok(custom_workspace) = std::env::var("ZEROCLAW_WORKSPACE") {
+    if let Ok(custom_workspace) = std::env::var("MIROCLAW_WORKSPACE") {
         let trimmed = custom_workspace.trim();
         if !trimmed.is_empty() {
             let expanded = shellexpand::tilde(trimmed);
@@ -489,7 +489,7 @@ fn resolve_quick_setup_dirs_with_home(home: &Path) -> (PathBuf, PathBuf) {
         }
     }
 
-    let config_dir = home.join(".zeroclaw");
+    let config_dir = crate::context::preferred_user_data_dir_in_home(home);
     (config_dir.clone(), config_dir.join("workspace"))
 }
 
@@ -791,7 +791,7 @@ async fn run_quick_setup_with_home(
         } else {
             let env_var = provider_env_var(&provider_name);
             println!("    1. Set your API key:  export {env_var}=\"sk-...\"");
-            println!("    2. Or edit:           ~/.zeroclaw/config.toml");
+            println!("    2. Or edit:           ~/.miroclaw/config.toml");
             println!("    3. Chat:              zeroclaw agent -m \"Hello!\"");
             println!("    4. Gateway:           zeroclaw gateway");
         }
@@ -4380,7 +4380,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
 
                     let session_path: String = Input::new()
                         .with_prompt("  Session database path")
-                        .default("~/.zeroclaw/state/whatsapp-web/session.db")
+                        .default("~/.miroclaw/state/whatsapp-web/session.db")
                         .interact_text()?;
 
                     if session_path.trim().is_empty() {
@@ -4531,7 +4531,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     access_token: Some(access_token.trim().to_string()),
                     phone_number_id: Some(phone_number_id.trim().to_string()),
                     verify_token: Some(verify_token.trim().to_string()),
-                    app_secret: None, // Can be set via ZEROCLAW_WHATSAPP_APP_SECRET env var
+                    app_secret: None, // Can be set via MIROCLAW_WHATSAPP_APP_SECRET env var
                     session_path: None,
                     pair_phone: None,
                     pair_code: None,
@@ -6130,8 +6130,8 @@ mod tests {
     #[tokio::test]
     async fn quick_setup_model_override_persists_to_config_toml() {
         let _env_guard = env_lock().lock().await;
-        let _workspace_env = EnvVarGuard::unset("ZEROCLAW_WORKSPACE");
-        let _config_env = EnvVarGuard::unset("ZEROCLAW_CONFIG_DIR");
+        let _workspace_env = EnvVarGuard::unset("MIROCLAW_WORKSPACE");
+        let _config_env = EnvVarGuard::unset("MIROCLAW_CONFIG_DIR");
         let tmp = TempDir::new().unwrap();
 
         let config = Box::pin(run_quick_setup_with_home(
@@ -6157,8 +6157,8 @@ mod tests {
     #[tokio::test]
     async fn quick_setup_without_model_uses_provider_default_model() {
         let _env_guard = env_lock().lock().await;
-        let _workspace_env = EnvVarGuard::unset("ZEROCLAW_WORKSPACE");
-        let _config_env = EnvVarGuard::unset("ZEROCLAW_CONFIG_DIR");
+        let _workspace_env = EnvVarGuard::unset("MIROCLAW_WORKSPACE");
+        let _config_env = EnvVarGuard::unset("MIROCLAW_CONFIG_DIR");
         let tmp = TempDir::new().unwrap();
 
         let config = Box::pin(run_quick_setup_with_home(
@@ -6180,13 +6180,13 @@ mod tests {
     #[tokio::test]
     async fn quick_setup_existing_config_requires_force_when_non_interactive() {
         let _env_guard = env_lock().lock().await;
-        let _workspace_env = EnvVarGuard::unset("ZEROCLAW_WORKSPACE");
-        let _config_env = EnvVarGuard::unset("ZEROCLAW_CONFIG_DIR");
+        let _workspace_env = EnvVarGuard::unset("MIROCLAW_WORKSPACE");
+        let _config_env = EnvVarGuard::unset("MIROCLAW_CONFIG_DIR");
         let tmp = TempDir::new().unwrap();
-        let zeroclaw_dir = tmp.path().join(".zeroclaw");
-        let config_path = zeroclaw_dir.join("config.toml");
+        let data_dir = tmp.path().join(crate::context::USER_DATA_DIR_NAME);
+        let config_path = data_dir.join("config.toml");
 
-        tokio::fs::create_dir_all(&zeroclaw_dir).await.unwrap();
+        tokio::fs::create_dir_all(&data_dir).await.unwrap();
         tokio::fs::write(&config_path, "default_provider = \"openrouter\"\n")
             .await
             .unwrap();
@@ -6210,13 +6210,13 @@ mod tests {
     #[tokio::test]
     async fn quick_setup_existing_config_overwrites_with_force() {
         let _env_guard = env_lock().lock().await;
-        let _workspace_env = EnvVarGuard::unset("ZEROCLAW_WORKSPACE");
-        let _config_env = EnvVarGuard::unset("ZEROCLAW_CONFIG_DIR");
+        let _workspace_env = EnvVarGuard::unset("MIROCLAW_WORKSPACE");
+        let _config_env = EnvVarGuard::unset("MIROCLAW_CONFIG_DIR");
         let tmp = TempDir::new().unwrap();
-        let zeroclaw_dir = tmp.path().join(".zeroclaw");
-        let config_path = zeroclaw_dir.join("config.toml");
+        let data_dir = tmp.path().join(crate::context::USER_DATA_DIR_NAME);
+        let config_path = data_dir.join("config.toml");
 
-        tokio::fs::create_dir_all(&zeroclaw_dir).await.unwrap();
+        tokio::fs::create_dir_all(&data_dir).await.unwrap();
         tokio::fs::write(
             &config_path,
             "default_provider = \"anthropic\"\ndefault_model = \"stale-model\"\n",
@@ -6250,13 +6250,15 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let workspace_root = tmp.path().join("zeroclaw-data");
         let workspace_dir = workspace_root.join("workspace");
-        let expected_config_path = workspace_root.join(".zeroclaw").join("config.toml");
+        let expected_config_path = workspace_root
+            .join(crate::context::USER_DATA_DIR_NAME)
+            .join("config.toml");
 
         let _workspace_env = EnvVarGuard::set(
-            "ZEROCLAW_WORKSPACE",
+            "MIROCLAW_WORKSPACE",
             workspace_dir.to_string_lossy().as_ref(),
         );
-        let _config_env = EnvVarGuard::unset("ZEROCLAW_CONFIG_DIR");
+        let _config_env = EnvVarGuard::unset("MIROCLAW_CONFIG_DIR");
 
         let config = Box::pin(run_quick_setup_with_home(
             Some("sk-env"),
@@ -6267,7 +6269,7 @@ mod tests {
             tmp.path(),
         ))
         .await
-        .expect("quick setup should honor ZEROCLAW_WORKSPACE");
+        .expect("quick setup should honor MIROCLAW_WORKSPACE");
 
         assert_eq!(config.workspace_dir, workspace_dir);
         assert_eq!(config.config_path, expected_config_path);
@@ -6299,15 +6301,15 @@ mod tests {
     #[test]
     fn quick_setup_homebrew_service_note_mentions_service_workspace() {
         let note = quick_setup_homebrew_service_note(
-            Path::new("/Users/alix/.zeroclaw/config.toml"),
-            Path::new("/Users/alix/.zeroclaw/workspace"),
+            Path::new("/Users/alix/.miroclaw/config.toml"),
+            Path::new("/Users/alix/.miroclaw/workspace"),
             Path::new("/opt/homebrew/bin/miroclaw"),
         )
         .expect("homebrew installs should emit a service workspace note");
 
         assert!(note.contains("/opt/homebrew/var/miroclaw/workspace"));
         assert!(note.contains("/opt/homebrew/var/miroclaw/config.toml"));
-        assert!(note.contains("/Users/alix/.zeroclaw/config.toml"));
+        assert!(note.contains("/Users/alix/.miroclaw/config.toml"));
     }
 
     #[test]

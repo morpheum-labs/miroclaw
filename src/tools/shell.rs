@@ -487,7 +487,7 @@ mod tests {
         let sec = Arc::new(SecurityPolicy {
             autonomy: AutonomyLevel::Full,
             workspace_dir: std::env::temp_dir(),
-            shell_env_passthrough: vec!["ZEROCLAW_SHELL_TEST_VAR".to_string()],
+            shell_env_passthrough: vec!["MIROCLAW_SHELL_TEST_VAR".to_string()],
             ..SecurityPolicy::default()
         });
         let shell = ShellSection::default();
@@ -501,12 +501,12 @@ mod tests {
             .unwrap(),
         );
         let tool = ShellTool::from_engine(engine);
-        std::env::set_var("ZEROCLAW_SHELL_TEST_VAR", "shell-test-ok");
+        std::env::set_var("MIROCLAW_SHELL_TEST_VAR", "shell-test-ok");
         let result = tool
-            .execute(json!({"command": "python3 -c \"import os; print(os.environ.get('ZEROCLAW_SHELL_TEST_VAR',''))\""}))
+            .execute(json!({"command": "python3 -c \"import os; print(os.environ.get('MIROCLAW_SHELL_TEST_VAR',''))\""}))
             .await
             .expect("python should succeed");
-        std::env::remove_var("ZEROCLAW_SHELL_TEST_VAR");
+        std::env::remove_var("MIROCLAW_SHELL_TEST_VAR");
         assert!(result.success, "{:?}", result.error);
         assert!(result.output.contains("shell-test-ok"));
     }

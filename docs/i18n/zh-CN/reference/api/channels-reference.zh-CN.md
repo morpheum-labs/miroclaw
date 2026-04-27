@@ -401,7 +401,7 @@ allowed_users = [\"*\"]
 - 入站 webhook 端点：`POST /nextcloud-talk`。
 - 签名验证使用 `X-Nextcloud-Talk-Random` 和 `X-Nextcloud-Talk-Signature`。
 - 如果设置了 `webhook_secret`，无效签名会被拒绝并返回 `401`。
-- `ZEROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` 会覆盖配置中的密钥。
+- `MIROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` 会覆盖配置中的密钥。
 - 完整操作手册请参见 [nextcloud-talk-setup.md](../../setup-guides/nextcloud-talk-setup.zh-CN.md)。
 
 ### 4.16 Linq
@@ -420,7 +420,7 @@ allowed_senders = [\"*\"]
 - 入站 webhook 端点：`POST /linq`。
 - 签名验证使用 `X-Webhook-Signature`（HMAC-SHA256）和 `X-Webhook-Timestamp`。
 - 如果设置了 `signing_secret`，无效或过期（>300秒）的签名会被拒绝。
-- `ZEROCLAW_LINQ_SIGNING_SECRET` 会覆盖配置中的密钥。
+- `MIROCLAW_LINQ_SIGNING_SECRET` 会覆盖配置中的密钥。
 - `allowed_senders` 使用 E.164 电话号码格式（例如 `+1234567890`）。
 
 ### 4.17 iMessage

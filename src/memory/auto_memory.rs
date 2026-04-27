@@ -1,4 +1,4 @@
-//! Curated AutoMemory: topic files + capped `MEMORY.md` index under `~/.zeroclaw/memory/<bucket>/`.
+//! Curated AutoMemory: topic files + capped `MEMORY.md` index under `~/.miroclaw/memory/<bucket>/`.
 
 use super::layered_paths::{auto_memory_index_path, auto_memory_topics_dir};
 use std::path::Path;

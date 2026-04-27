@@ -617,7 +617,7 @@ flowchart TB
     Load --> Parse[TOML parse]
     Parse --> Defaults[Apply defaults<br/>Config::default]
 
-    Defaults --> EnvOverrides[apply_env_overrides<br/>ZEROCLAW_* env vars]
+    Defaults --> EnvOverrides[apply_env_overrides<br/>MIROCLAW_* env vars]
 
     EnvOverrides --> Validate[Schema validation]
 

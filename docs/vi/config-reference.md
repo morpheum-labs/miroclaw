@@ -6,7 +6,7 @@ Xác minh lần cuối: **2026-04-02**.
 
 Thứ tự tìm config khi khởi động:
 
-1. Biến `ZEROCLAW_WORKSPACE` (nếu được đặt)
+1. Biến `MIROCLAW_WORKSPACE` (nếu được đặt)
 2. Marker `~/.zeroclaw/active_workspace.toml` (nếu có)
 3. Mặc định `~/.zeroclaw/config.toml`
 
@@ -52,14 +52,14 @@ otel_service_name = "zeroclaw"
 
 Provider cũng có thể chọn qua biến môi trường. Thứ tự ưu tiên:
 
-1. `ZEROCLAW_PROVIDER` (ghi đè tường minh, luôn thắng khi có giá trị)
+1. `MIROCLAW_PROVIDER` (ghi đè tường minh, luôn thắng khi có giá trị)
 2. `PROVIDER` (dự phòng kiểu cũ, chỉ áp dụng khi provider trong config chưa đặt hoặc vẫn là `openrouter`)
 3. `default_provider` trong `config.toml`
 
 Lưu ý cho người dùng container:
 
 - Nếu `config.toml` đặt provider tùy chỉnh như `custom:https://.../v1`, biến `PROVIDER=openrouter` mặc định từ Docker/container sẽ không thay thế nó.
-- Dùng `ZEROCLAW_PROVIDER` khi cố ý muốn biến môi trường ghi đè provider đã cấu hình.
+- Dùng `MIROCLAW_PROVIDER` khi cố ý muốn biến môi trường ghi đè provider đã cấu hình.
 
 ## `[agent]`
 
@@ -181,9 +181,9 @@ Lưu ý:
 
 - Mặc định an toàn: ZeroClaw **không** clone hay đồng bộ `open-skills` trừ khi `open_skills_enabled = true`.
 - Ghi đè qua biến môi trường:
-  - `ZEROCLAW_OPEN_SKILLS_ENABLED` chấp nhận `1/0`, `true/false`, `yes/no`, `on/off`.
-  - `ZEROCLAW_OPEN_SKILLS_DIR` ghi đè đường dẫn kho khi có giá trị.
-- Thứ tự ưu tiên: `ZEROCLAW_OPEN_SKILLS_ENABLED` → `skills.open_skills_enabled` trong `config.toml` → mặc định `false`.
+  - `MIROCLAW_OPEN_SKILLS_ENABLED` chấp nhận `1/0`, `true/false`, `yes/no`, `on/off`.
+  - `MIROCLAW_OPEN_SKILLS_DIR` ghi đè đường dẫn kho khi có giá trị.
+- Thứ tự ưu tiên: `MIROCLAW_OPEN_SKILLS_ENABLED` → `skills.open_skills_enabled` trong `config.toml` → mặc định `false`.
 
 ## `[composio]`
 

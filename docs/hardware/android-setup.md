@@ -28,12 +28,12 @@ uname -m
 
 # Download the appropriate binary
 # For 64-bit (aarch64):
-curl -LO https://github.com/zeroclaw-labs/zeroclaw/releases/latest/download/zeroclaw-aarch64-linux-android.tar.gz
-tar xzf zeroclaw-aarch64-linux-android.tar.gz
+curl -LO https://github.com/zeroclaw-labs/zeroclaw/releases/latest/download/miroclaw-aarch64-linux-android.tar.gz
+tar xzf miroclaw-aarch64-linux-android.tar.gz
 
 # For 32-bit (armv7):
-curl -LO https://github.com/zeroclaw-labs/zeroclaw/releases/latest/download/zeroclaw-armv7-linux-androideabi.tar.gz
-tar xzf zeroclaw-armv7-linux-androideabi.tar.gz
+curl -LO https://github.com/zeroclaw-labs/zeroclaw/releases/latest/download/miroclaw-armv7-linux-androideabi.tar.gz
+tar xzf miroclaw-armv7-linux-androideabi.tar.gz
 ```
 
 ### 3. Install and Run

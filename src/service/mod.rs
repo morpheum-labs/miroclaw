@@ -492,13 +492,13 @@ fn install_macos(config: &Config) -> Result<()> {
     let stdout = logs_dir.join("daemon.stdout.log");
     let stderr = logs_dir.join("daemon.stderr.log");
 
-    // When running under Homebrew, inject ZEROCLAW_CONFIG_DIR and
+    // When running under Homebrew, inject MIROCLAW_CONFIG_DIR and
     // WorkingDirectory so the daemon finds its data in the Homebrew prefix.
     let env_section = if let Some(ref var_dir) = homebrew_var_dir {
         format!(
             r#"  <key>EnvironmentVariables</key>
   <dict>
-    <key>ZEROCLAW_CONFIG_DIR</key>
+    <key>MIROCLAW_CONFIG_DIR</key>
     <string>{config_dir}</string>
   </dict>
   <key>WorkingDirectory</key>
@@ -821,16 +821,17 @@ fn resolve_invoking_user_config_dir() -> Option<PathBuf> {
                 let entry = String::from_utf8_lossy(&output.stdout);
                 let fields: Vec<&str> = entry.trim().split(':').collect();
                 if fields.len() >= 6 {
-                    return Some(PathBuf::from(fields[5]).join(".zeroclaw"));
+                    return Some(crate::context::preferred_user_data_dir_in_home(
+                        &PathBuf::from(fields[5]),
+                    ));
                 }
             }
         }
     }
 
-    std::env::var("HOME")
-        .ok()
-        .map(PathBuf::from)
-        .map(|home| home.join(".zeroclaw"))
+    std::env::var("HOME").ok().map(PathBuf::from).map(|home| {
+        crate::context::preferred_user_data_dir_in_home(&home)
+    })
 }
 
 fn migrate_openrc_runtime_state_if_needed(config_dir: &Path) -> Result<()> {
@@ -1337,8 +1338,8 @@ mod tests {
         assert!(script.contains("description=\"Miroclaw daemon\""));
         assert!(script.contains("command=\"/usr/local/bin/miroclaw\""));
         assert!(script.contains("command_args=\"--config-dir /etc/zeroclaw daemon\""));
-        assert!(!script.contains("env ZEROCLAW_CONFIG_DIR"));
-        assert!(!script.contains("env ZEROCLAW_WORKSPACE"));
+        assert!(!script.contains("env MIROCLAW_CONFIG_DIR"));
+        assert!(!script.contains("env MIROCLAW_WORKSPACE"));
         assert!(script.contains("command_background=\"yes\""));
         assert!(script.contains("command_user=\"zeroclaw:zeroclaw\""));
         assert!(script.contains("pidfile=\"/run/${RC_SVCNAME}.pid\""));

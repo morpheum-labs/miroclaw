@@ -167,7 +167,7 @@ fn assemble_hand_system_prompt(
     let security = SecurityPolicy::from_config(&config.autonomy, &config.workspace_dir);
     let security_summary = security.prompt_summary();
     let skills = crate::skills::load_skills_with_config(&config.workspace_dir, config);
-    let user_zc = crate::context::default_user_zeroclaw_dir();
+    let user_zc = crate::context::default_user_miroclaw_dir();
     let dynamic_paths = DynamicContextPaths {
         global_config_dir: None,
         user_config_dir: user_zc.as_deref(),
@@ -222,7 +222,7 @@ fn assemble_hand_system_prompt(
     assemble_once(&ctx)
 }
 
-/// For `zeroclaw doctor long-run`: verify assembled hand system prompt contains the Phase 1 cache boundary marker.
+/// For `miroclaw doctor long-run`: verify assembled hand system prompt contains the Phase 1 cache boundary marker.
 pub async fn probe_hand_prompt_cache_boundary(
     config: &Config,
     hand: &Hand,
@@ -327,8 +327,8 @@ pub async fn run_coordinator_hand(
     hands_dir: &Path,
     hand: &Hand,
 ) -> Result<String> {
-    let zdir = crate::context::default_user_zeroclaw_dir()
-        .context("HOME / ~/.zeroclaw not available for scratchpad")?;
+    let zdir = crate::context::default_user_miroclaw_dir()
+        .context("HOME / ~/.miroclaw not available for scratchpad")?;
     let scratchpad = ensure_scratchpad_dir(&zdir, &hand.name)?;
     let hand_ctx = load_hand_context(hands_dir, &hand.name)?;
 

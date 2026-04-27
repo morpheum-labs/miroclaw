@@ -6,7 +6,7 @@ Last verified: **April 16, 2026**.
 
 Config path resolution at startup:
 
-1. `ZEROCLAW_WORKSPACE` override (if set)
+1. `MIROCLAW_WORKSPACE` override (if set)
 2. persisted `~/.zeroclaw/active_workspace.toml` marker (if present)
 3. default `~/.zeroclaw/config.toml`
 
@@ -64,19 +64,19 @@ runtime_trace_max_entries = 200
 
 Provider selection can also be controlled by environment variables. Precedence is:
 
-1. `ZEROCLAW_PROVIDER` (explicit override, always wins when non-empty)
-2. `ZEROCLAW_MODEL_PROVIDER` or `MODEL_PROVIDER` (Codex app-server style; used when `ZEROCLAW_PROVIDER` is unset)
+1. `MIROCLAW_PROVIDER` (explicit override, always wins when non-empty)
+2. `MIROCLAW_MODEL_PROVIDER` or `MODEL_PROVIDER` (Codex app-server style; used when `MIROCLAW_PROVIDER` is unset)
 3. `PROVIDER` (legacy fallback, only applied when config provider is unset or still `openrouter`)
 4. `default_provider` in `config.toml`
 
 Operational note for container users:
 
 - If your `config.toml` sets an explicit custom provider like `custom:https://.../v1`, a default `PROVIDER=openrouter` from Docker/container env will no longer replace it.
-- Use `ZEROCLAW_PROVIDER` when you intentionally want runtime env to override a non-default configured provider.
+- Use `MIROCLAW_PROVIDER` when you intentionally want runtime env to override a non-default configured provider.
 
 ## `[model_providers.<id>]` (named profiles)
 
-Codex-style named profiles under `[model_providers]` can set `base_url`, `api_path`, auth flags, and related fields. When `default_provider` matches a profile id (after env overrides such as `ZEROCLAW_MODEL_PROVIDER` / `MODEL_PROVIDER`), missing top-level fields are merged from that profile — including `api_path` and `native_tool_calling` when the top-level `native_tool_calling` key is unset.
+Codex-style named profiles under `[model_providers]` can set `base_url`, `api_path`, auth flags, and related fields. When `default_provider` matches a profile id (after env overrides such as `MIROCLAW_MODEL_PROVIDER` / `MODEL_PROVIDER`), missing top-level fields are merged from that profile — including `api_path` and `native_tool_calling` when the top-level `native_tool_calling` key is unset.
 
 | Key | Default | Purpose |
 |---|---|---|
@@ -330,10 +330,10 @@ Notes:
 
 - Security-first default: ZeroClaw does **not** clone or sync `open-skills` unless `open_skills_enabled = true`.
 - Environment overrides:
-  - `ZEROCLAW_OPEN_SKILLS_ENABLED` accepts `1/0`, `true/false`, `yes/no`, `on/off`.
-  - `ZEROCLAW_OPEN_SKILLS_DIR` overrides the repository path when non-empty.
-  - `ZEROCLAW_SKILLS_PROMPT_MODE` accepts `full` or `compact`.
-- Precedence for enable flag: `ZEROCLAW_OPEN_SKILLS_ENABLED` → `skills.open_skills_enabled` in `config.toml` → default `false`.
+  - `MIROCLAW_OPEN_SKILLS_ENABLED` accepts `1/0`, `true/false`, `yes/no`, `on/off`.
+  - `MIROCLAW_OPEN_SKILLS_DIR` overrides the repository path when non-empty.
+  - `MIROCLAW_SKILLS_PROMPT_MODE` accepts `full` or `compact`.
+- Precedence for enable flag: `MIROCLAW_OPEN_SKILLS_ENABLED` → `skills.open_skills_enabled` in `config.toml` → default `false`.
 - `prompt_injection_mode = "compact"` is recommended on low-context local models to reduce startup prompt size while keeping skill files available on demand.
 - Skill loading and `zeroclaw skills install` both apply a static security audit. Skills that contain symlinks, script-like files, high-risk shell payload snippets, or unsafe markdown link traversal are rejected.
 - Per-skill **`user_invocable`** is declared in `SKILL.md` / `SKILL.toml` (not in `[skills]`). When `true`, the skill name may appear as an extra Telegram bot menu command when the channel registers `setMyCommands`. See [telegram-slash-commands.md](../../setup-guides/telegram-slash-commands.md).
@@ -601,7 +601,7 @@ extends = "autonomous"
 
 **Migration:** legacy `[shell_tool]` in `config.toml` is migrated automatically on load to `[shell]` with `profile = "safe"` and the prior `timeout_secs` when present. A one-time backup `config.toml.bak.<unix_ts>` may be written. Remove any leftover `[shell_tool]` header manually.
 
-**Environment override:** `ZEROCLAW_SHELL_PROFILE` sets `shell.profile` after the file is loaded (same validation rules).
+**Environment override:** `MIROCLAW_SHELL_PROFILE` sets `shell.profile` after the file is loaded (same validation rules).
 
 **Subprocess environment:** the shell tool clears the environment and copies a small **safe allowlist** plus any names listed in `[autonomy].shell_env_passthrough` (see [`src/shell/env.rs`](../../../src/shell/env.rs) for the built-in set).
 
@@ -848,7 +848,7 @@ Linq Partner V3 API integration for iMessage, RCS, and SMS.
 Notes:
 
 - Webhook endpoint is `POST /linq`.
-- `ZEROCLAW_LINQ_SIGNING_SECRET` overrides `signing_secret` when set.
+- `MIROCLAW_LINQ_SIGNING_SECRET` overrides `signing_secret` when set.
 - Signatures use `X-Webhook-Signature` and `X-Webhook-Timestamp` headers; stale timestamps (>300s) are rejected.
 - See [channels-reference.md](channels-reference.md) for full config examples.
 
@@ -866,7 +866,7 @@ Native Nextcloud Talk bot integration (webhook receive + OCS send API).
 Notes:
 
 - Webhook endpoint is `POST /nextcloud-talk`.
-- `ZEROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` overrides `webhook_secret` when set.
+- `MIROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` overrides `webhook_secret` when set.
 - See [nextcloud-talk-setup.md](../../setup-guides/nextcloud-talk-setup.md) for setup and troubleshooting.
 
 ## `[hardware]`

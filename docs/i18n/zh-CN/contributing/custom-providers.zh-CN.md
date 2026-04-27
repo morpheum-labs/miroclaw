@@ -42,7 +42,7 @@ default_model = "claude-sonnet-4-6"
 
 ```bash
 export API_KEY="your-api-key"
-# 或：export ZEROCLAW_API_KEY="your-api-key"
+# 或：export MIROCLAW_API_KEY="your-api-key"
 zeroclaw agent
 ```
 
@@ -76,7 +76,7 @@ zeroclaw models refresh --provider llamacpp
 zeroclaw agent -m "hello"
 ```
 
-此流程不需要导出 `ZEROCLAW_API_KEY=dummy`。
+此流程不需要导出 `MIROCLAW_API_KEY=dummy`。
 
 ## SGLang 服务器
 
@@ -107,7 +107,7 @@ zeroclaw models refresh --provider sglang
 zeroclaw agent -m "hello"
 ```
 
-此流程不需要导出 `ZEROCLAW_API_KEY=dummy`。
+此流程不需要导出 `MIROCLAW_API_KEY=dummy`。
 
 ## vLLM 服务器
 
@@ -138,7 +138,7 @@ zeroclaw models refresh --provider vllm
 zeroclaw agent -m "hello"
 ```
 
-此流程不需要导出 `ZEROCLAW_API_KEY=dummy`。
+此流程不需要导出 `MIROCLAW_API_KEY=dummy`。
 
 ## 测试配置
 

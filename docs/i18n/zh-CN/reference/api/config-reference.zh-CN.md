@@ -6,7 +6,7 @@
 
 启动时的配置路径解析顺序：
 
-1. `ZEROCLAW_WORKSPACE` 覆盖（如果设置）
+1. `MIROCLAW_WORKSPACE` 覆盖（如果设置）
 2. 持久化的 `~/.zeroclaw/active_workspace.toml` 标记（如果存在）
 3. 默认 `~/.zeroclaw/config.toml`
 
@@ -63,14 +63,14 @@ runtime_trace_max_entries = 200
 
 提供商选择也可以通过环境变量控制。优先级为：
 
-1. `ZEROCLAW_PROVIDER`（显式覆盖，非空时始终优先）
+1. `MIROCLAW_PROVIDER`（显式覆盖，非空时始终优先）
 2. `PROVIDER`（旧版回退，仅当配置提供商未设置或仍为 `openrouter` 时应用）
 3. `config.toml` 中的 `default_provider`
 
 容器用户操作说明：
 
 - 如果你的 `config.toml` 设置了显式自定义提供商，如 `custom:https://.../v1`，则 Docker/容器环境中的默认 `PROVIDER=openrouter` 将不再替换它。
-- 当你有意让运行时环境覆盖非默认配置的提供商时，请使用 `ZEROCLAW_PROVIDER`。
+- 当你有意让运行时环境覆盖非默认配置的提供商时，请使用 `MIROCLAW_PROVIDER`。
 
 ## `[agent]`
 
@@ -239,10 +239,10 @@ temperature = 0.2
 
 - 安全优先默认：除非 `open_skills_enabled = true`，否则 ZeroClaw **不会**克隆或同步 `open-skills`。
 - 环境覆盖：
-  - `ZEROCLAW_OPEN_SKILLS_ENABLED` 接受 `1/0`、`true/false`、`yes/no`、`on/off`。
-  - `ZEROCLAW_OPEN_SKILLS_DIR` 非空时覆盖仓库路径。
-  - `ZEROCLAW_SKILLS_PROMPT_MODE` 接受 `full` 或 `compact`。
-- 启用标志的优先级：`ZEROCLAW_OPEN_SKILLS_ENABLED` → `config.toml` 中的 `skills.open_skills_enabled` → 默认 `false`。
+  - `MIROCLAW_OPEN_SKILLS_ENABLED` 接受 `1/0`、`true/false`、`yes/no`、`on/off`。
+  - `MIROCLAW_OPEN_SKILLS_DIR` 非空时覆盖仓库路径。
+  - `MIROCLAW_SKILLS_PROMPT_MODE` 接受 `full` 或 `compact`。
+- 启用标志的优先级：`MIROCLAW_OPEN_SKILLS_ENABLED` → `config.toml` 中的 `skills.open_skills_enabled` → 默认 `false`。
 - 建议在低上下文本地模型上使用 `prompt_injection_mode = \"compact\"`，以减少启动提示大小，同时按需保留技能文件可用。
 - 技能加载和 `zeroclaw skills install` 都会应用静态安全审计。包含符号链接、类脚本文件、高风险 shell  payload 片段或不安全 markdown 链接遍历的技能会被拒绝。
 
@@ -660,7 +660,7 @@ WhatsApp Web 模式（原生客户端）：
 注意事项：
 
 - Webhook 端点是 `POST /linq`。
-- 设置时 `ZEROCLAW_LINQ_SIGNING_SECRET` 覆盖 `signing_secret`。
+- 设置时 `MIROCLAW_LINQ_SIGNING_SECRET` 覆盖 `signing_secret`。
 - 签名使用 `X-Webhook-Signature` 和 `X-Webhook-Timestamp` 头；过期时间戳（>300秒）会被拒绝。
 - 完整配置示例请参见 [channels-reference.zh-CN.md](channels-reference.zh-CN.md)。
 
@@ -678,7 +678,7 @@ WhatsApp Web 模式（原生客户端）：
 注意事项：
 
 - Webhook 端点是 `POST /nextcloud-talk`。
-- 设置时 `ZEROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` 覆盖 `webhook_secret`。
+- 设置时 `MIROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` 覆盖 `webhook_secret`。
 - 安装和故障排除请参见 [nextcloud-talk-setup.zh-CN.md](../../setup-guides/nextcloud-talk-setup.zh-CN.md)。
 
 ## `[hardware]`

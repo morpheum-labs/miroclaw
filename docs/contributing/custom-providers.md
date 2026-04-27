@@ -42,7 +42,7 @@ For `custom:` and `anthropic-custom:` providers, use the generic key env vars:
 
 ```bash
 export API_KEY="your-api-key"
-# or: export ZEROCLAW_API_KEY="your-api-key"
+# or: export MIROCLAW_API_KEY="your-api-key"
 zeroclaw agent
 ```
 
@@ -76,7 +76,7 @@ zeroclaw models refresh --provider llamacpp
 zeroclaw agent -m "hello"
 ```
 
-You do not need to export `ZEROCLAW_API_KEY=dummy` for this flow.
+You do not need to export `MIROCLAW_API_KEY=dummy` for this flow.
 
 ## SGLang Server
 
@@ -107,7 +107,7 @@ zeroclaw models refresh --provider sglang
 zeroclaw agent -m "hello"
 ```
 
-You do not need to export `ZEROCLAW_API_KEY=dummy` for this flow.
+You do not need to export `MIROCLAW_API_KEY=dummy` for this flow.
 
 ## vLLM Server
 
@@ -138,7 +138,7 @@ zeroclaw models refresh --provider vllm
 zeroclaw agent -m "hello"
 ```
 
-You do not need to export `ZEROCLAW_API_KEY=dummy` for this flow.
+You do not need to export `MIROCLAW_API_KEY=dummy` for this flow.
 
 ## Testing Configuration
 

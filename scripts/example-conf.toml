@@ -551,7 +551,7 @@ http_proxy = ""
 https_proxy = ""
 all_proxy = ""
 no_proxy = []
-scope = "zeroclaw"
+scope = "miroclaw"
 services = []
 
 [identity]

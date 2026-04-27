@@ -15,7 +15,7 @@ Non-interactive bootstrap (API key + provider during install):
 Equivalent with environment variables (see also [one-click-bootstrap.md](one-click-bootstrap.md)):
 
 ```bash
-ZEROCLAW_API_KEY="sk-..." ZEROCLAW_PROVIDER="openrouter" ./install.sh
+MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" ./install.sh
 ```
 
 Pre-built binaries and resource-constrained hosts:

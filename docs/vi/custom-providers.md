@@ -42,7 +42,7 @@ Với provider `custom:` và `anthropic-custom:`, dùng biến môi trường ch
 
 ```bash
 export API_KEY="your-api-key"
-# hoặc: export ZEROCLAW_API_KEY="your-api-key"
+# hoặc: export MIROCLAW_API_KEY="your-api-key"
 zeroclaw agent
 ```
 

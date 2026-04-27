@@ -29,7 +29,7 @@ allowed_users = [\"*\"]
 
 环境变量覆盖：
 
-- 设置 `ZEROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` 时会覆盖 `webhook_secret`。
+- 设置 `MIROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` 时会覆盖 `webhook_secret`。
 
 ## 3. 网关端点
 

@@ -134,7 +134,7 @@ Trace fixtures are canned LLM response scripts stored as JSON files in `tests/fi
 ## Live Test Conventions
 
 - All live tests must be `#[ignore]`
-- Use `env::var("ZEROCLAW_TEST_*")` for credentials
+- Use `env::var("MIROCLAW_TEST_*")` for credentials
 - Run with `cargo test --test live -- --ignored --nocapture`
 
 ## Manual Tests (`tests/manual/`)

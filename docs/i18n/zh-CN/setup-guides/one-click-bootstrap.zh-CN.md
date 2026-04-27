@@ -86,11 +86,11 @@ curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/insta
 
 这会构建本地 ZeroClaw 镜像并在容器内启动引导流程，同时将配置/工作区持久化到 `./.zeroclaw-docker`。
 
-容器 CLI 默认为 `docker`。如果 Docker CLI 不可用且存在 `podman`，安装程序会自动回退到 `podman`。你也可以显式设置 `ZEROCLAW_CONTAINER_CLI`（例如：`ZEROCLAW_CONTAINER_CLI=podman ./install.sh --docker`）。
+容器 CLI 默认为 `docker`。如果 Docker CLI 不可用且存在 `podman`，安装程序会自动回退到 `podman`。你也可以显式设置 `MIROCLAW_CONTAINER_CLI`（例如：`MIROCLAW_CONTAINER_CLI=podman ./install.sh --docker`）。
 
 对于 Podman，安装程序会使用 `--userns keep-id` 和 `:Z` 卷标签，确保工作区/配置挂载在容器内保持可写。
 
-如果你添加 `--skip-build` 参数，安装程序会跳过本地镜像构建。它会首先尝试本地 Docker 标签（`ZEROCLAW_DOCKER_IMAGE`，默认：`zeroclaw-bootstrap:local`）；如果不存在，会拉取 `ghcr.io/zeroclaw-labs/zeroclaw:latest` 并在运行前打本地标签。
+如果你添加 `--skip-build` 参数，安装程序会跳过本地镜像构建。它会首先尝试本地 Docker 标签（`MIROCLAW_DOCKER_IMAGE`，默认：`zeroclaw-bootstrap:local`）；如果不存在，会拉取 `ghcr.io/zeroclaw-labs/zeroclaw:latest` 并在运行前打本地标签。
 
 ### 快速引导（非交互式）
 
@@ -101,7 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/insta
 或者使用环境变量：
 
 ```bash
-ZEROCLAW_API_KEY=\"sk-...\" ZEROCLAW_PROVIDER=\"openrouter\" ./install.sh
+MIROCLAW_API_KEY=\"sk-...\" MIROCLAW_PROVIDER=\"openrouter\" ./install.sh
 ```
 
 ## 有用的参数

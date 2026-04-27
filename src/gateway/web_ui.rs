@@ -293,7 +293,7 @@ fn apply_index_transform(html: &str, path_prefix: &str) -> String {
         return html.to_string();
     }
     let json_pfx = serde_json::to_string(path_prefix).unwrap_or_else(|_| "\"\"".to_string());
-    let script = format!("<script>window.__ZEROCLAW_BASE__={json_pfx};</script>");
+    let script = format!("<script>window.__MIROCLAW_BASE__={json_pfx};</script>");
     html.replace("/_app/", &format!("{path_prefix}/_app/"))
         .replacen("<head>", &format!("<head>{script}"), 1)
 }
@@ -488,7 +488,7 @@ mod tests {
     fn index_transform_inserts_base() {
         let h = "<head></head><script src=\"/_app/assets/a.js\">";
         let out = apply_index_transform(h, "/zc");
-        assert!(out.contains("window.__ZEROCLAW_BASE__=\"/zc\""));
+        assert!(out.contains("window.__MIROCLAW_BASE__=\"/zc\""));
         assert!(out.contains("/zc/_app/assets/a.js"));
     }
 }

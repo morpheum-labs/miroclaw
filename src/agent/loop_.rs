@@ -4178,7 +4178,7 @@ pub async fn run(
         None
     };
     let native_tools = provider.supports_native_tools();
-    let user_zeroclaw = crate::context::default_user_zeroclaw_dir();
+    let user_zeroclaw = crate::context::default_user_miroclaw_dir();
     let dynamic_paths = crate::context::DynamicContextPaths {
         global_config_dir: None,
         user_config_dir: user_zeroclaw.as_deref(),
@@ -4339,7 +4339,7 @@ pub async fn run(
         #[allow(unused_assignments)]
         let mut response = String::new();
         loop {
-            let user_zeroclaw_assembly = crate::context::default_user_zeroclaw_dir();
+            let user_zeroclaw_assembly = crate::context::default_user_miroclaw_dir();
             let assembly_dynamic_paths = crate::context::DynamicContextPaths {
                 global_config_dir: None,
                 user_config_dir: user_zeroclaw_assembly.as_deref(),
@@ -4691,7 +4691,7 @@ pub async fn run(
             );
 
             let response = loop {
-                let user_zeroclaw_assembly = crate::context::default_user_zeroclaw_dir();
+                let user_zeroclaw_assembly = crate::context::default_user_miroclaw_dir();
                 let assembly_dynamic_paths = crate::context::DynamicContextPaths {
                     global_config_dir: None,
                     user_config_dir: user_zeroclaw_assembly.as_deref(),
@@ -5139,7 +5139,7 @@ pub async fn process_message(
         None
     };
     let native_tools = provider.supports_native_tools();
-    let user_zeroclaw = crate::context::default_user_zeroclaw_dir();
+    let user_zeroclaw = crate::context::default_user_miroclaw_dir();
     let dynamic_paths = crate::context::DynamicContextPaths {
         global_config_dir: None,
         user_config_dir: user_zeroclaw.as_deref(),

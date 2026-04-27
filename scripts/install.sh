@@ -132,15 +132,15 @@ Examples:
   ./install.sh --skip-onboard
 
 Environment:
-  ZEROCLAW_CONTAINER_CLI     Container CLI command (default: docker; auto-fallback: podman)
-  ZEROCLAW_DOCKER_DATA_DIR   Host path for Docker config/workspace persistence
-  ZEROCLAW_DOCKER_IMAGE      Docker image tag to build/run (default: zeroclaw-bootstrap:local)
-  ZEROCLAW_API_KEY           Used when --api-key is not provided
-  ZEROCLAW_PROVIDER          Used when --provider is not provided (default: openrouter)
-  ZEROCLAW_MODEL             Used when --model is not provided
-  ZEROCLAW_BOOTSTRAP_MIN_RAM_MB   Minimum RAM threshold for source build preflight (default: 2048)
-  ZEROCLAW_BOOTSTRAP_MIN_DISK_MB  Minimum free disk threshold for source build preflight (default: 6144)
-  ZEROCLAW_DISABLE_ALPINE_AUTO_DEPS
+  MIROCLAW_CONTAINER_CLI     Container CLI command (default: docker; auto-fallback: podman)
+  MIROCLAW_DOCKER_DATA_DIR   Host path for Docker config/workspace persistence
+  MIROCLAW_DOCKER_IMAGE      Docker image tag to build/run (default: zeroclaw-bootstrap:local)
+  MIROCLAW_API_KEY           Used when --api-key is not provided
+  MIROCLAW_PROVIDER          Used when --provider is not provided (default: openrouter)
+  MIROCLAW_MODEL             Used when --model is not provided
+  MIROCLAW_BOOTSTRAP_MIN_RAM_MB   Minimum RAM threshold for source build preflight (default: 2048)
+  MIROCLAW_BOOTSTRAP_MIN_DISK_MB  Minimum free disk threshold for source build preflight (default: 6144)
+  MIROCLAW_DISABLE_ALPINE_AUTO_DEPS
                             Set to 1 to disable Alpine auto-install of missing prerequisites
 USAGE
 }
@@ -277,8 +277,8 @@ should_attempt_prebuilt_for_resources() {
   local workspace="${1:-.}"
   local min_ram_mb min_disk_mb total_ram_mb free_disk_mb low_resource
 
-  min_ram_mb="${ZEROCLAW_BOOTSTRAP_MIN_RAM_MB:-2048}"
-  min_disk_mb="${ZEROCLAW_BOOTSTRAP_MIN_DISK_MB:-6144}"
+  min_ram_mb="${MIROCLAW_BOOTSTRAP_MIN_RAM_MB:-2048}"
+  min_disk_mb="${MIROCLAW_BOOTSTRAP_MIN_DISK_MB:-6144}"
   total_ram_mb="$(get_total_memory_mb || true)"
   free_disk_mb="$(get_available_disk_mb "$workspace" || true)"
   low_resource=false
@@ -960,7 +960,7 @@ You are **${agent_name}**. Built in Rust. 3MB binary. Zero bloat.
 
 resolve_container_cli() {
   local requested_cli
-  requested_cli="${ZEROCLAW_CONTAINER_CLI:-docker}"
+  requested_cli="${MIROCLAW_CONTAINER_CLI:-docker}"
 
   if have_cmd "$requested_cli"; then
     CONTAINER_CLI="$requested_cli"
@@ -975,9 +975,9 @@ resolve_container_cli() {
 
   error "Container CLI '$requested_cli' is not installed."
   if [[ "$requested_cli" != "docker" ]]; then
-    error "Set ZEROCLAW_CONTAINER_CLI to an installed Docker-compatible CLI (e.g., docker or podman)."
+    error "Set MIROCLAW_CONTAINER_CLI to an installed Docker-compatible CLI (e.g., docker or podman)."
   else
-    error "Install Docker, install podman, or set ZEROCLAW_CONTAINER_CLI to an available Docker-compatible CLI."
+    error "Install Docker, install podman, or set MIROCLAW_CONTAINER_CLI to an available Docker-compatible CLI."
   fi
   exit 1
 }
@@ -996,14 +996,14 @@ run_docker_bootstrap() {
   local docker_image docker_data_dir default_data_dir fallback_image
   local config_mount workspace_mount
   local -a container_run_user_args container_run_namespace_args
-  docker_image="${ZEROCLAW_DOCKER_IMAGE:-zeroclaw-bootstrap:local}"
+  docker_image="${MIROCLAW_DOCKER_IMAGE:-zeroclaw-bootstrap:local}"
   fallback_image="ghcr.io/zeroclaw-labs/zeroclaw:latest"
   if [[ "$TEMP_CLONE" == true ]]; then
     default_data_dir="$HOME/.zeroclaw-docker"
   else
     default_data_dir="$WORK_DIR/.zeroclaw-docker"
   fi
-  docker_data_dir="${ZEROCLAW_DOCKER_DATA_DIR:-$default_data_dir}"
+  docker_data_dir="${MIROCLAW_DOCKER_DATA_DIR:-$default_data_dir}"
   DOCKER_DATA_DIR="$docker_data_dir"
 
   mkdir -p "$docker_data_dir/.zeroclaw" "$docker_data_dir/workspace"
@@ -1071,7 +1071,7 @@ run_docker_bootstrap() {
       "${container_run_namespace_args[@]+"${container_run_namespace_args[@]}"}" \
       "${container_run_user_args[@]}" \
       -e HOME=/zeroclaw-data \
-      -e ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace \
+      -e MIROCLAW_WORKSPACE=/zeroclaw-data/workspace \
       -v "$config_mount" \
       -v "$workspace_mount" \
       "$docker_image" \
@@ -1110,10 +1110,10 @@ SKIP_ONBOARD=false
 SKIP_BUILD=false
 SKIP_INSTALL=false
 PREBUILT_INSTALLED=false
-CONTAINER_CLI="${ZEROCLAW_CONTAINER_CLI:-docker}"
-API_KEY="${ZEROCLAW_API_KEY:-}"
-PROVIDER="${ZEROCLAW_PROVIDER:-openrouter}"
-MODEL="${ZEROCLAW_MODEL:-}"
+CONTAINER_CLI="${MIROCLAW_CONTAINER_CLI:-docker}"
+API_KEY="${MIROCLAW_API_KEY:-}"
+PROVIDER="${MIROCLAW_PROVIDER:-openrouter}"
+MODEL="${MIROCLAW_MODEL:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -1231,11 +1231,11 @@ if [[ "$DOCKER_MODE" == true ]]; then
       warn "--install-rust is ignored with --docker."
   fi
 else
-  if [[ "$OS_NAME" == "Linux" && -z "${ZEROCLAW_DISABLE_ALPINE_AUTO_DEPS:-}" ]] && have_cmd apk; then
+  if [[ "$OS_NAME" == "Linux" && -z "${MIROCLAW_DISABLE_ALPINE_AUTO_DEPS:-}" ]] && have_cmd apk; then
     find_missing_alpine_prereqs
     if [[ ${#ALPINE_MISSING_PKGS[@]} -gt 0 && "$INSTALL_SYSTEM_DEPS" == false ]]; then
       info "Detected Alpine with missing prerequisites: ${ALPINE_MISSING_PKGS[*]}"
-      info "Auto-enabling system dependency installation (set ZEROCLAW_DISABLE_ALPINE_AUTO_DEPS=1 to disable)."
+      info "Auto-enabling system dependency installation (set MIROCLAW_DISABLE_ALPINE_AUTO_DEPS=1 to disable)."
       INSTALL_SYSTEM_DEPS=true
     fi
   fi
@@ -1590,23 +1590,23 @@ elif [[ "$DEVICE_CLASS" != "desktop" ]]; then
   esac
 fi
 
-ZEROCLAW_BIN=""
+MIROCLAW_BIN=""
 if [[ -x "$HOME/.cargo/bin/miroclaw" ]]; then
-  ZEROCLAW_BIN="$HOME/.cargo/bin/miroclaw"
+  MIROCLAW_BIN="$HOME/.cargo/bin/miroclaw"
 elif [[ -x "$WORK_DIR/target/release/miroclaw" ]]; then
-  ZEROCLAW_BIN="$WORK_DIR/target/release/miroclaw"
+  MIROCLAW_BIN="$WORK_DIR/target/release/miroclaw"
 elif have_cmd miroclaw; then
-  ZEROCLAW_BIN="miroclaw"
+  MIROCLAW_BIN="miroclaw"
 fi
 
 echo
 echo -e "${BOLD_BLUE}[3/3]${RESET} ${BOLD}Finalizing setup${RESET}"
 
 # --- Inline onboarding (provider + API key configuration) ---
-if [[ "$SKIP_ONBOARD" == false && -n "$ZEROCLAW_BIN" ]]; then
+if [[ "$SKIP_ONBOARD" == false && -n "$MIROCLAW_BIN" ]]; then
   if [[ -n "$API_KEY" ]]; then
     step_dot "Configuring provider: ${PROVIDER}"
-    ONBOARD_CMD=("$ZEROCLAW_BIN" onboard --api-key "$API_KEY" --provider "$PROVIDER")
+    ONBOARD_CMD=("$MIROCLAW_BIN" onboard --api-key "$API_KEY" --provider "$PROVIDER")
     if [[ -n "$MODEL" ]]; then
       ONBOARD_CMD+=(--model "$MODEL")
     fi
@@ -1617,7 +1617,7 @@ if [[ "$SKIP_ONBOARD" == false && -n "$ZEROCLAW_BIN" ]]; then
     fi
   elif [[ "$PROVIDER" == "ollama" ]]; then
     step_dot "Configuring Ollama (no API key needed)"
-    if "$ZEROCLAW_BIN" onboard --provider ollama 2>/dev/null; then
+    if "$MIROCLAW_BIN" onboard --provider ollama 2>/dev/null; then
       step_ok "Ollama configured"
     else
       step_fail "Ollama configuration failed — run miroclaw onboard to retry"
@@ -1628,7 +1628,7 @@ if [[ "$SKIP_ONBOARD" == false && -n "$ZEROCLAW_BIN" ]]; then
       prompt_provider
       prompt_api_key
       if [[ -n "$API_KEY" ]]; then
-        ONBOARD_CMD=("$ZEROCLAW_BIN" onboard --api-key "$API_KEY" --provider "$PROVIDER")
+        ONBOARD_CMD=("$MIROCLAW_BIN" onboard --api-key "$API_KEY" --provider "$PROVIDER")
         if [[ -n "$MODEL" ]]; then
           ONBOARD_CMD+=(--model "$MODEL")
         fi
@@ -1644,24 +1644,24 @@ if [[ "$SKIP_ONBOARD" == false && -n "$ZEROCLAW_BIN" ]]; then
   fi
 elif [[ "$SKIP_ONBOARD" == true ]]; then
   step_dot "Skipping configuration (run miroclaw onboard later)"
-elif [[ -z "$ZEROCLAW_BIN" ]]; then
+elif [[ -z "$MIROCLAW_BIN" ]]; then
   warn "ZeroClaw binary not found — cannot configure provider"
 fi
 
 # Ensure config.toml and workspace scaffold exist even when onboard was
 # skipped, unavailable, or failed (e.g. --skip-build --prefer-prebuilt
 # without an API key, or when the binary could not run onboard).
-_native_config_dir="${ZEROCLAW_CONFIG_DIR:-$HOME/.zeroclaw}"
-_native_workspace_dir="${ZEROCLAW_WORKSPACE:-$_native_config_dir/workspace}"
+_native_config_dir="${MIROCLAW_CONFIG_DIR:-$HOME/.zeroclaw}"
+_native_workspace_dir="${MIROCLAW_WORKSPACE:-$_native_config_dir/workspace}"
 ensure_default_config_and_workspace "$_native_config_dir" "$_native_workspace_dir" "$PROVIDER"
 
 # --- Gateway service management ---
-if [[ -n "$ZEROCLAW_BIN" ]]; then
+if [[ -n "$MIROCLAW_BIN" ]]; then
   # Try to install and start the gateway service
   step_dot "Checking gateway service"
-  if "$ZEROCLAW_BIN" service install 2>/dev/null; then
+  if "$MIROCLAW_BIN" service install 2>/dev/null; then
     step_ok "Gateway service installed"
-    if "$ZEROCLAW_BIN" service restart 2>/dev/null; then
+    if "$MIROCLAW_BIN" service restart 2>/dev/null; then
       step_ok "Gateway service restarted"
 
     else
@@ -1673,7 +1673,7 @@ if [[ -n "$ZEROCLAW_BIN" ]]; then
 
   # --- Post-install doctor check ---
   step_dot "Running doctor to validate installation"
-  if "$ZEROCLAW_BIN" doctor 2>/dev/null; then
+  if "$MIROCLAW_BIN" doctor 2>/dev/null; then
     step_ok "Doctor complete"
   else
     warn "Doctor reported issues — run miroclaw doctor --fix to resolve"
@@ -1682,8 +1682,8 @@ fi
 
 # --- Determine installed version ---
 INSTALLED_VERSION=""
-if [[ -n "$ZEROCLAW_BIN" ]]; then
-  INSTALLED_VERSION="$("$ZEROCLAW_BIN" --version 2>/dev/null | awk '{print $NF}' || true)"
+if [[ -n "$MIROCLAW_BIN" ]]; then
+  INSTALLED_VERSION="$("$MIROCLAW_BIN" --version 2>/dev/null | awk '{print $NF}' || true)"
 fi
 
 # --- Success banner ---

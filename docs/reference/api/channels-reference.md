@@ -402,7 +402,7 @@ Notes:
 - Inbound webhook endpoint: `POST /nextcloud-talk`.
 - Signature verification uses `X-Nextcloud-Talk-Random` and `X-Nextcloud-Talk-Signature`.
 - If `webhook_secret` is set, invalid signatures are rejected with `401`.
-- `ZEROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` overrides config secret.
+- `MIROCLAW_NEXTCLOUD_TALK_WEBHOOK_SECRET` overrides config secret.
 - See [nextcloud-talk-setup.md](../../setup-guides/nextcloud-talk-setup.md) for a full runbook.
 
 ### 4.16 Linq
@@ -421,7 +421,7 @@ Notes:
 - Inbound webhook endpoint: `POST /linq`.
 - Signature verification uses `X-Webhook-Signature` (HMAC-SHA256) and `X-Webhook-Timestamp`.
 - If `signing_secret` is set, invalid or stale (>300s) signatures are rejected.
-- `ZEROCLAW_LINQ_SIGNING_SECRET` overrides config secret.
+- `MIROCLAW_LINQ_SIGNING_SECRET` overrides config secret.
 - `allowed_senders` uses E.164 phone number format (e.g. `+1234567890`).
 
 ### 4.17 iMessage

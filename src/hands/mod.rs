@@ -81,7 +81,7 @@ pub fn save_hand_context(hands_dir: &Path, context: &HandContext) -> Result<()> 
     Ok(())
 }
 
-/// `~/.zeroclaw/scratchpad/<hand_id>/` (caller supplies `zeroclaw_dir` from [`crate::context::default_user_zeroclaw_dir`]).
+/// `~/.miroclaw/scratchpad/<hand_id>/` (caller supplies `zeroclaw_dir` from [`crate::context::default_user_miroclaw_dir`]).
 #[must_use]
 pub fn scratchpad_dir_for_hand(zeroclaw_dir: &Path, hand_id: &str) -> PathBuf {
     zeroclaw_dir.join("scratchpad").join(hand_id)
