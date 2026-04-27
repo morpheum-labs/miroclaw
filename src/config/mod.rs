@@ -35,7 +35,7 @@ pub use schema::{
     TextBrowserConfig, ToolFilterGroup, ToolFilterGroupMode, ToolResultOffloadConfig,
     TranscriptionConfig, TtsConfig, TunnelConfig, VerifiableIntentConfig, WebFetchConfig,
     WebSearchConfig, WebUiConfig, WebhookConfig, WhatsAppChatPolicy, WhatsAppWebMode,
-    WorkspaceConfig, DEFAULT_GWS_SERVICES,
+    WorkspaceConfig, DEFAULT_GWS_SERVICES, parse_stored_config_contents,
 };
 
 pub fn name_and_presence<T: traits::ChannelConfig>(channel: Option<&T>) -> (&'static str, bool) {

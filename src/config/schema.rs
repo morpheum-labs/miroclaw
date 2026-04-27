@@ -59,9 +59,16 @@ static RUNTIME_PROXY_CLIENT_CACHE: OnceLock<RwLock<HashMap<String, reqwest::Clie
 
 // ── Top-level config ──────────────────────────────────────────────
 
-/// Top-level ZeroClaw configuration, loaded from `config.toml`.
+/// Top-level ZeroClaw configuration, loaded from a stored config file (TOML or YAML).
 ///
-/// Resolution order: `MIROCLAW_WORKSPACE` env → `active_workspace.toml` marker → `~/.miroclaw/config.toml` (with legacy `~/.miroclaw` support).
+/// File resolution: `MIROCLAW_CONFIG` (exact path) or, under the runtime config directory,
+/// the first of `config.toml`, `configuration.yaml`, and `config.yaml` that exists; otherwise
+/// a new `config.toml` is created. Delegate agents in `[agents]` can be supplemented or
+/// replaced by a JSON file (`agents_list_path`) and/or a JSON document from `agents_list_url`
+/// (merged after the main file; the URL runs last, so it wins on duplicate agent names).
+///
+/// Workspace and directory resolution: `MIROCLAW_WORKSPACE` env → `active_workspace.toml` marker →
+/// `~/.miroclaw/config.toml` (with legacy `~/.miroclaw` support) — see `resolve_config_dir_for_workspace` / `load_or_init`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Config {
     /// Workspace directory - computed from home, not serialized
@@ -321,6 +328,17 @@ pub struct Config {
     /// Delegate agent configurations for multi-agent workflows.
     #[serde(default)]
     pub agents: HashMap<String, DelegateAgentConfig>,
+
+    /// Optional local JSON file merged into `agents` after the main config is loaded (path relative
+    /// to [`Config::workspace_dir`], with `~` expansion, or absolute). Same-name entries in later
+    /// sources override earlier ones: main file, then this file, then `agents_list_url`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agents_list_path: Option<String>,
+
+    /// Optional HTTPS/HTTP URL returning a JSON body merged into `agents` (after
+    /// `agents_list_path`, if any). `MIROCLAW_AGENTS_LIST_URL` overrides this at runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agents_list_url: Option<String>,
 
     /// Swarm configurations for multi-agent orchestration.
     #[serde(default)]
@@ -8355,6 +8373,8 @@ impl Default for Config {
             peripherals: PeripheralsConfig::default(),
             delegate: DelegateToolConfig::default(),
             agents: HashMap::new(),
+            agents_list_path: None,
+            agents_list_url: None,
             swarms: HashMap::new(),
             hooks: HooksConfig::default(),
             hardware: HardwareConfig::default(),
@@ -8919,6 +8939,213 @@ pub(crate) fn migrate_shell_tool_table_in_root(root: &mut toml::Value) -> ShellT
     ShellTomlMigration::MigratedFromShellTool
 }
 
+/// TOML vs YAML on-disk format for the top-level miroclaw config file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StoredConfigFormat {
+    Toml,
+    Yaml,
+}
+
+fn stored_config_format_for_path(path: &Path) -> StoredConfigFormat {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+    {
+        Some(ref ext) if ext == "yaml" || ext == "yml" => StoredConfigFormat::Yaml,
+        _ => StoredConfigFormat::Toml,
+    }
+}
+
+/// Choose which on-disk file to use under `zeroclaw_dir` when the user has not set `MIROCLAW_CONFIG`.
+/// Preference: `config.toml`, then `configuration.yaml`, then `config.yaml` (first existing file).
+/// When none exist, returns `.../config.toml` (default for first-time init / `save()`).
+fn resolve_miroclaw_stored_config_path(zeroclaw_dir: &Path) -> PathBuf {
+    if let Ok(override_path) = std::env::var("MIROCLAW_CONFIG") {
+        let t = override_path.trim();
+        if !t.is_empty() {
+            return expand_tilde_path(t);
+        }
+    }
+    for name in &["config.toml", "configuration.yaml", "config.yaml"] {
+        let p = zeroclaw_dir.join(name);
+        if p.exists() {
+            return p;
+        }
+    }
+    zeroclaw_dir.join("config.toml")
+}
+
+/// Parse a config file the same way as startup (`load_or_init`) without anchoring
+/// `workspace_dir` or `config_path` (callers set those) and without secrets decryption.
+/// Used by tools that re-read the on-disk file for read-modify-write updates.
+pub fn parse_stored_config_contents(path: &Path, content: &str) -> Result<Config> {
+    let fmt = stored_config_format_for_path(path);
+    let config = match fmt {
+        StoredConfigFormat::Toml => parse_toml_config_with_shell_migration(content)
+            .with_context(|| format!("parse TOML config at {}", path.display()))?,
+        StoredConfigFormat::Yaml => {
+            let mut c: Config = serde_yaml::from_str(content).with_context(|| {
+                format!(
+                    "parse YAML config at {} (use the same top-level fields as the TOML config)",
+                    path.display()
+                )
+            })?;
+            c.autonomy.ensure_default_auto_approve();
+            c
+        }
+    };
+    Ok(config)
+}
+
+/// Merge JSON-defined delegate agents into the running config.
+///
+/// Supported JSON shapes: `{ "agents": { "name": { ... } } }`, `{ "agents": [ { "name", ...} ] }`,
+/// or a root array `[{ "name", ... }]`. Extra keys are ignored. Later merge steps override by name.
+fn parse_external_agents_json_view(text: &str) -> Result<HashMap<String, DelegateAgentConfig>> {
+    use serde_json::Value;
+    let v: Value = serde_json::from_str(text.trim())
+        .context("external agents: invalid JSON (expected { \"agents\": ... } or an array)")?;
+
+    if let Some(arr) = v.as_array() {
+        return agents_from_json_array(arr);
+    }
+
+    let o = v
+        .as_object()
+        .context("external agents: JSON must be an object with an `agents` key or a JSON array")?;
+    if o.is_empty() {
+        return Ok(HashMap::new());
+    }
+    if let Some(agents) = o.get("agents") {
+        if let Some(m) = agents.as_object() {
+            return parse_external_agents_object(m);
+        }
+        if let Some(a) = agents.as_array() {
+            return agents_from_json_array(a);
+        }
+    }
+    anyhow::bail!(
+        "external agents: expected `agents` to be a JSON object (string keys) or a JSON array"
+    )
+}
+
+fn parse_external_agents_object(
+    m: &serde_json::Map<String, serde_json::Value>,
+) -> Result<HashMap<String, DelegateAgentConfig>> {
+    let mut out = HashMap::new();
+    for (k, v) in m {
+        if k.trim().is_empty() {
+            continue;
+        }
+        let cfg: DelegateAgentConfig = serde_json::from_value(v.clone())
+            .with_context(|| format!("agent definition for {k}"))?;
+        out.insert(k.clone(), cfg);
+    }
+    Ok(out)
+}
+
+fn agents_from_json_array(arr: &[serde_json::Value]) -> Result<HashMap<String, DelegateAgentConfig>> {
+    let mut out = HashMap::new();
+    for (i, item) in arr.iter().enumerate() {
+        let o = item.as_object().with_context(|| {
+            format!("external agents: array item {i} must be a JSON object with a `name` field")
+        })?;
+        let name = o
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|n| !n.is_empty());
+        let Some(name) = name else {
+            anyhow::bail!("external agents: array item {i} is missing a non-empty `name`");
+        };
+        let mut o2 = o.clone();
+        o2.remove("name");
+        let cfg: DelegateAgentConfig = serde_json::from_value(serde_json::Value::Object(o2))
+            .map_err(|e: serde_json::Error| {
+                anyhow::anyhow!(format!("{name} (array item {i}): {e}"))
+            })?;
+        out.insert(name.to_string(), cfg);
+    }
+    Ok(out)
+}
+
+fn log_external_agent_merge(merged: &HashMap<String, DelegateAgentConfig>, source: &str) {
+    for name in merged.keys() {
+        tracing::info!(%name, %source, "merged external delegate agent");
+    }
+}
+
+/// Apply `agents_list_path` and `agents_list_url` after the main file is loaded. Later sources
+/// win on the same key.
+async fn merge_external_agent_sources(config: &mut Config) -> Result<()> {
+    if let Some(ref raw) = config.agents_list_path {
+        let t = raw.trim();
+        if !t.is_empty() {
+            let p = expand_tilde_path(t);
+            let p = if p.is_absolute() {
+                p
+            } else {
+                config.workspace_dir.join(p)
+            };
+            if p.exists() {
+                let body = tokio::fs::read_to_string(&p)
+                    .await
+                    .with_context(|| format!("read agents list file {}", p.display()))?;
+                let m = parse_external_agents_json_view(&body)
+                    .with_context(|| format!("parse agents JSON in {}", p.display()))?;
+                log_external_agent_merge(&m, "agents_list_path");
+                for (k, v) in m {
+                    config.agents.insert(k, v);
+                }
+            } else {
+                tracing::warn!(
+                    path = %p.display(),
+                    "agents_list_path: file not found, skipping"
+                );
+            }
+        }
+    }
+    if let Some(ref url) = config.agents_list_url {
+        let t = url.trim();
+        if !t.is_empty() {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .user_agent(concat!("miroclaw/", env!("CARGO_PKG_VERSION")))
+                .build()
+                .context("build HTTP client for agents_list_url")?;
+            let body = client
+                .get(t)
+                .send()
+                .await
+                .with_context(|| format!("request agents from {t}"))?
+                .error_for_status()
+                .with_context(|| format!("agents list HTTP error from {t}"))?
+                .text()
+                .await
+                .context("read agents list response body")?;
+            let m = parse_external_agents_json_view(&body)
+                .with_context(|| format!("parse JSON from agents list URL {t}"))?;
+            log_external_agent_merge(&m, "agents_list_url");
+            for (k, v) in m {
+                config.agents.insert(k, v);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn parse_toml_config_with_shell_migration(content: &str) -> Result<Config> {
+    let mut root: toml::Value =
+        toml::from_str(content).context("parse config file as TOML for migration + deserialize")?;
+    let _migration = migrate_shell_tool_table_in_root(&mut root);
+    let merged = toml::to_string(&root).context("serialize TOML config after shell migration")?;
+    let mut config: Config = toml::from_str(&merged).context("deserialize TOML config after migration")?;
+    // Same merge as `load_or_init` for toml: preserve default auto_approve.
+    config.autonomy.ensure_default_auto_approve();
+    Ok(config)
+}
+
 impl Config {
     pub async fn load_or_init() -> Result<Self> {
         let (default_zeroclaw_dir, default_workspace_dir) = default_config_and_workspace_dirs()?;
@@ -8926,7 +9153,7 @@ impl Config {
         let (zeroclaw_dir, workspace_dir, resolution_source) =
             resolve_runtime_config_dirs(&default_zeroclaw_dir, &default_workspace_dir).await?;
 
-        let config_path = zeroclaw_dir.join("config.toml");
+        let config_path = resolve_miroclaw_stored_config_path(&zeroclaw_dir);
 
         fs::create_dir_all(&zeroclaw_dir)
             .await
@@ -8959,106 +9186,120 @@ impl Config {
                 .await
                 .context("Failed to read config file")?;
 
-            let mut root: toml::Value =
-                toml::from_str(&contents).context("Failed to parse config file as TOML")?;
-            let migration = migrate_shell_tool_table_in_root(&mut root);
-            if migration == ShellTomlMigration::MigratedFromShellTool {
-                let ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                let bak_path = config_path.with_extension(format!("toml.bak.{ts}"));
-                if let Err(e) = fs::write(&bak_path, &contents).await {
-                    tracing::warn!(path = %bak_path.display(), error = %e, "Failed to write config backup after shell migration");
-                } else {
-                    tracing::info!(path = %bak_path.display(), "Wrote config backup before shell table migration");
+            let file_fmt = stored_config_format_for_path(&config_path);
+            let (mut config, toml_merged_diagnostics): (Config, Option<String>) = match file_fmt {
+                StoredConfigFormat::Yaml => {
+                    let mut c: Config = serde_yaml::from_str(&contents)
+                        .context("Failed to parse config file as YAML")?;
+                    c.autonomy.ensure_default_auto_approve();
+                    (c, None)
                 }
-            }
-            let merged = toml::to_string(&root)
-                .context("Failed to serialize config after shell migration")?;
-
-            // Deserialize the config with the standard TOML parser.
-            //
-            // Previously this used `serde_ignored::deserialize` for both
-            // deserialization and unknown-key detection.  However,
-            // `serde_ignored` silently drops field values inside nested
-            // structs that carry `#[serde(default)]` (e.g. the entire
-            // `[autonomy]` table), causing user-supplied values to be
-            // replaced by defaults.  See #4171.
-            //
-            // We now deserialize with `toml::from_str` (which is correct)
-            // and run `serde_ignored` separately just for diagnostics.
-            let mut config: Config =
-                toml::from_str(&merged).context("Failed to deserialize config file")?;
-
-            // Ensure the built-in default auto_approve entries are always
-            // present.  When a user specifies `auto_approve` in their TOML
-            // (e.g. to add a custom tool), serde replaces the default list
-            // instead of merging.  This caused default-safe tools like
-            // `weather` or `calculator` to lose their auto-approve status
-            // and get silently denied in non-interactive channel runs.
-            // See #4247.
-            //
-            // Users who want to require approval for a default tool can
-            // add it to `always_ask`, which takes precedence over
-            // `auto_approve` in the approval decision (see approval/mod.rs).
-            config.autonomy.ensure_default_auto_approve();
-
-            // Detect unknown/ignored config keys for diagnostic warnings.
-            // This second pass uses serde_ignored but discards the parsed
-            // result — only the ignored-path list is kept.
-            let mut ignored_paths: Vec<String> = Vec::new();
-            let _: Result<Config, _> = serde_ignored::deserialize(
-                toml::de::Deserializer::parse(&merged)
-                    .context("Failed to parse merged config for unknown-key diagnostics")?,
-                |path| {
-                    ignored_paths.push(path.to_string());
-                },
-            );
-
-            // Warn about each unknown config key.
-            // serde_ignored + #[serde(default)] on nested structs can produce
-            // false positives: parent-level fields get re-reported under the
-            // nested key (e.g. "memory.qdrant.auto_hydrate" even though
-            // auto_hydrate belongs to MemoryConfig, not QdrantConfig).  We
-            // suppress these by checking whether the leaf key is a known field
-            // on the parent struct.
-            let known_memory_fields: &[&str] = &[
-                "backend",
-                "auto_save",
-                "hygiene_enabled",
-                "archive_after_days",
-                "purge_after_days",
-                "conversation_retention_days",
-                "embedding_provider",
-                "embedding_model",
-                "embedding_dimensions",
-                "vector_weight",
-                "keyword_weight",
-                "min_relevance_score",
-                "embedding_cache_size",
-                "chunk_max_tokens",
-                "response_cache_enabled",
-                "response_cache_ttl_minutes",
-                "response_cache_max_entries",
-                "response_cache_hot_entries",
-                "snapshot_enabled",
-                "snapshot_on_hygiene",
-                "auto_hydrate",
-                "sqlite_open_timeout_secs",
-            ];
-            for path in ignored_paths {
-                // Skip false positives from nested memory sub-sections
-                if path.starts_with("memory.qdrant.") {
-                    let leaf = path.rsplit('.').next().unwrap_or("");
-                    if known_memory_fields.contains(&leaf) {
-                        continue;
+                StoredConfigFormat::Toml => {
+                    let mut root: toml::Value = toml::from_str(&contents)
+                        .context("Failed to parse config file as TOML")?;
+                    let migration = migrate_shell_tool_table_in_root(&mut root);
+                    if migration == ShellTomlMigration::MigratedFromShellTool {
+                        let ts = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        let bak_path = config_path.with_extension(format!("toml.bak.{ts}"));
+                        if let Err(e) = fs::write(&bak_path, &contents).await {
+                            tracing::warn!(path = %bak_path.display(), error = %e, "Failed to write config backup after shell migration");
+                        } else {
+                            tracing::info!(path = %bak_path.display(), "Wrote config backup before shell table migration");
+                        }
                     }
+                    let merged = toml::to_string(&root)
+                        .context("Failed to serialize config after shell migration")?;
+
+                    // Deserialize the config with the standard TOML parser.
+                    //
+                    // Previously this used `serde_ignored::deserialize` for both
+                    // deserialization and unknown-key detection.  However,
+                    // `serde_ignored` silently drops field values inside nested
+                    // structs that carry `#[serde(default)]` (e.g. the entire
+                    // `[autonomy]` table), causing user-supplied values to be
+                    // replaced by defaults.  See #4171.
+                    //
+                    // We now deserialize with `toml::from_str` (which is correct)
+                    // and run `serde_ignored` separately just for diagnostics.
+                    let mut c: Config = toml::from_str(&merged)
+                        .context("Failed to deserialize config file")?;
+
+                    // Ensure the built-in default auto_approve entries are always
+                    // present.  When a user specifies `auto_approve` in their TOML
+                    // (e.g. to add a custom tool), serde replaces the default list
+                    // instead of merging.  This caused default-safe tools like
+                    // `weather` or `calculator` to lose their auto-approve status
+                    // and get silently denied in non-interactive channel runs.
+                    // See #4247.
+                    //
+                    // Users who want to require approval for a default tool can
+                    // add it to `always_ask`, which takes precedence over
+                    // `auto_approve` in the approval decision (see approval/mod.rs).
+                    c.autonomy.ensure_default_auto_approve();
+                    (c, Some(merged))
                 }
-                tracing::warn!(
-                    "Unknown config key ignored: \"{}\". Check config.toml for typos or deprecated options.",
-                    path
+            };
+
+            if let Some(ref merged) = toml_merged_diagnostics {
+                // Detect unknown/ignored config keys for diagnostic warnings.
+                // This second pass uses serde_ignored but discards the parsed
+                // result — only the ignored-path list is kept.
+                let mut ignored_paths: Vec<String> = Vec::new();
+                let _: Result<Config, _> = serde_ignored::deserialize(
+                    toml::de::Deserializer::parse(merged)
+                        .context("Failed to parse merged config for unknown-key diagnostics")?,
+                    |path| {
+                        ignored_paths.push(path.to_string());
+                    },
                 );
+
+                // Warn about each unknown config key.
+                // serde_ignored + #[serde(default)] on nested structs can produce
+                // false positives: parent-level fields get re-reported under the
+                // nested key (e.g. "memory.qdrant.auto_hydrate" even though
+                // auto_hydrate belongs to MemoryConfig, not QdrantConfig).  We
+                // suppress these by checking whether the leaf key is a known field
+                // on the parent struct.
+                let known_memory_fields: &[&str] = &[
+                    "backend",
+                    "auto_save",
+                    "hygiene_enabled",
+                    "archive_after_days",
+                    "purge_after_days",
+                    "conversation_retention_days",
+                    "embedding_provider",
+                    "embedding_model",
+                    "embedding_dimensions",
+                    "vector_weight",
+                    "keyword_weight",
+                    "min_relevance_score",
+                    "embedding_cache_size",
+                    "chunk_max_tokens",
+                    "response_cache_enabled",
+                    "response_cache_ttl_minutes",
+                    "response_cache_max_entries",
+                    "response_cache_hot_entries",
+                    "snapshot_enabled",
+                    "snapshot_on_hygiene",
+                    "auto_hydrate",
+                    "sqlite_open_timeout_secs",
+                ];
+                for path in ignored_paths {
+                    // Skip false positives from nested memory sub-sections
+                    if path.starts_with("memory.qdrant.") {
+                        let leaf = path.rsplit('.').next().unwrap_or("");
+                        if known_memory_fields.contains(&leaf) {
+                            continue;
+                        }
+                    }
+                    tracing::warn!(
+                        "Unknown config key ignored: \"{}\". Check the config file for typos or deprecated options.",
+                        path
+                    );
+                }
             }
             // Set computed paths that are skipped during serialization
             config.config_path = config_path.clone();
@@ -9395,6 +9636,14 @@ impl Config {
             }
 
             config.apply_env_overrides();
+            merge_external_agent_sources(&mut config).await?;
+            for agent in config.agents.values_mut() {
+                decrypt_optional_secret(
+                    &store,
+                    &mut agent.api_key,
+                    "config.agents.*.api_key",
+                )?;
+            }
             config.validate()?;
             tracing::info!(
                 path = %config.config_path.display(),
@@ -9418,6 +9667,17 @@ impl Config {
             }
 
             config.apply_env_overrides();
+            {
+                let store = crate::security::SecretStore::new(&zeroclaw_dir, config.secrets.encrypt);
+                merge_external_agent_sources(&mut config).await?;
+                for agent in config.agents.values_mut() {
+                    decrypt_optional_secret(
+                        &store,
+                        &mut agent.api_key,
+                        "config.agents.*.api_key",
+                    )?;
+                }
+            }
             config.validate()?;
             tracing::info!(
                 path = %config.config_path.display(),
@@ -10273,6 +10533,19 @@ impl Config {
             }
         }
 
+        if let Ok(path) = std::env::var("MIROCLAW_AGENTS_LIST_PATH") {
+            let t = path.trim();
+            if !t.is_empty() {
+                self.agents_list_path = Some(t.to_string());
+            }
+        }
+        if let Ok(url) = std::env::var("MIROCLAW_AGENTS_LIST_URL") {
+            let t = url.trim();
+            if !t.is_empty() {
+                self.agents_list_url = Some(t.to_string());
+            }
+        }
+
         // Gateway host: MIROCLAW_GATEWAY_HOST or HOST
         if let Ok(host) = std::env::var("MIROCLAW_GATEWAY_HOST").or_else(|_| std::env::var("HOST"))
         {
@@ -10872,8 +11145,14 @@ impl Config {
             )?;
         }
 
-        let toml_str =
-            toml::to_string_pretty(&config_to_save).context("Failed to serialize config")?;
+        let stored_body = match stored_config_format_for_path(&config_path) {
+            StoredConfigFormat::Yaml => {
+                serde_yaml::to_string(&config_to_save).context("Failed to serialize config as YAML")?
+            }
+            StoredConfigFormat::Toml => {
+                toml::to_string_pretty(&config_to_save).context("Failed to serialize config as TOML")?
+            }
+        };
 
         let parent_dir = config_path
             .parent()
@@ -10905,7 +11184,7 @@ impl Config {
                 )
             })?;
         temp_file
-            .write_all(toml_str.as_bytes())
+            .write_all(stored_body.as_bytes())
             .await
             .context("Failed to write temporary config contents")?;
         temp_file
@@ -11056,6 +11335,29 @@ mod tests {
     use tokio::test;
     use tokio_stream::wrappers::ReadDirStream;
     use tokio_stream::StreamExt;
+
+    // ── External JSON agents list ─────────────────────────────
+
+    #[test]
+    async fn parse_external_agents_accepts_object_map_array_and_root_array() {
+        let m = super::parse_external_agents_json_view(
+            r#"{"agents":{"alpha":{"provider":"p1","model":"m1"}}}"#,
+        )
+        .expect("map form");
+        assert_eq!(m.get("alpha").map(|a| a.provider.as_str()), Some("p1"));
+
+        let m = super::parse_external_agents_json_view(
+            r#"{"agents":[{"name":"bravo","provider":"p2","model":"m2"}]}"#,
+        )
+        .expect("envelope array form");
+        assert_eq!(m.get("bravo").map(|a| a.model.as_str()), Some("m2"));
+
+        let m = super::parse_external_agents_json_view(
+            r#"[{"name":"charlie","provider":"p3","model":"m3"}]"#,
+        )
+        .expect("root array form");
+        assert_eq!(m.get("charlie").map(|a| a.model.as_str()), Some("m3"));
+    }
 
     // ── Tilde expansion ───────────────────────────────────────
 
@@ -11510,6 +11812,8 @@ default_temperature = 0.7
             peripherals: PeripheralsConfig::default(),
             delegate: DelegateToolConfig::default(),
             agents: HashMap::new(),
+            agents_list_path: None,
+            agents_list_url: None,
             swarms: HashMap::new(),
             hooks: HooksConfig::default(),
             hardware: HardwareConfig::default(),
@@ -12040,6 +12344,8 @@ default_temperature = 0.7
             peripherals: PeripheralsConfig::default(),
             delegate: DelegateToolConfig::default(),
             agents: HashMap::new(),
+            agents_list_path: None,
+            agents_list_url: None,
             swarms: HashMap::new(),
             hooks: HooksConfig::default(),
             hardware: HardwareConfig::default(),

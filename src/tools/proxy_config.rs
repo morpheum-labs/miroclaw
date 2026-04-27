@@ -27,7 +27,11 @@ impl ProxyConfigTool {
             )
         })?;
 
-        let mut parsed: Config = toml::from_str(&contents).map_err(|error| {
+        let mut parsed: Config = crate::config::parse_stored_config_contents(
+            &self.config.config_path,
+            &contents,
+        )
+        .map_err(|error| {
             anyhow::anyhow!(
                 "Failed to parse config file {}: {error}",
                 self.config.config_path.display()

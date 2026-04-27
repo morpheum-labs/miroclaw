@@ -96,12 +96,15 @@ impl WebSearchTool {
             )
         })?;
 
-        let config: crate::config::Config = toml::from_str(&contents).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to parse config file {} for Brave API key: {e}",
-                self.config_path.display()
-            )
-        })?;
+        let config: crate::config::Config =
+            crate::config::parse_stored_config_contents(&self.config_path, &contents).map_err(
+                |e| {
+                    anyhow::anyhow!(
+                        "Failed to parse config file {} for Brave API key: {e}",
+                        self.config_path.display()
+                    )
+                },
+            )?;
 
         let raw_key = config
             .web_search
