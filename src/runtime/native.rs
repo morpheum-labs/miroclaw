@@ -91,10 +91,10 @@ mod tests {
     }
 
     #[test]
-    fn native_storage_path_uses_miroclaw_or_legacy() {
+    fn native_storage_path_uses_miroclaw_dir() {
         let path = NativeRuntime::new().storage_path();
         let s = path.to_string_lossy();
-        assert!(s.contains("miroclaw") || s.contains("zeroclaw"));
+        assert!(s.contains("miroclaw"));
     }
 
     #[test]

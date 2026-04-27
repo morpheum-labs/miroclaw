@@ -382,7 +382,7 @@ read_only_namespaces = []
 
 [memory.qdrant]
 url = ""
-collection = "zeroclaw_memories"
+collection = "miroclaw_memories"
 api_key = ""
 
 [storage.provider.config]

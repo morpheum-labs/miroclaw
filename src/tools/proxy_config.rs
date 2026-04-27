@@ -61,7 +61,7 @@ impl ProxyConfigTool {
     fn parse_scope(raw: &str) -> Option<ProxyScope> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "environment" | "env" => Some(ProxyScope::Environment),
-            "miroclaw" | "zeroclaw" | "internal" | "core" => Some(ProxyScope::Miroclaw),
+            "miroclaw" | "internal" | "core" => Some(ProxyScope::Miroclaw),
             "services" | "service" => Some(ProxyScope::Services),
             _ => None,
         }

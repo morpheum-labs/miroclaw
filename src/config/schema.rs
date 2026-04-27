@@ -3929,7 +3929,6 @@ pub enum ProxyScope {
     Environment,
     /// Apply proxy to all Miroclaw-managed HTTP traffic (default).
     #[default]
-    #[serde(alias = "zeroclaw")]
     Miroclaw,
     /// Apply proxy only to explicitly listed service selectors.
     Services,
@@ -4851,7 +4850,7 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
 fn parse_proxy_scope(raw: &str) -> Option<ProxyScope> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "environment" | "env" => Some(ProxyScope::Environment),
-        "miroclaw" | "zeroclaw" | "internal" | "core" => Some(ProxyScope::Miroclaw),
+        "miroclaw" | "internal" | "core" => Some(ProxyScope::Miroclaw),
         "services" | "service" => Some(ProxyScope::Services),
         _ => None,
     }
@@ -4959,7 +4958,7 @@ pub struct QdrantConfig {
     #[serde(default)]
     pub url: Option<String>,
     /// Qdrant collection name for storing memories.
-    /// Falls back to `QDRANT_COLLECTION` env var, or default "zeroclaw_memories".
+    /// Falls back to `QDRANT_COLLECTION` env var, or default "miroclaw_memories".
     #[serde(default = "default_qdrant_collection")]
     pub collection: String,
     /// Optional API key for Qdrant Cloud or secured instances.
@@ -4969,7 +4968,7 @@ pub struct QdrantConfig {
 }
 
 fn default_qdrant_collection() -> String {
-    "zeroclaw_memories".into()
+    "miroclaw_memories".into()
 }
 
 impl Default for QdrantConfig {
@@ -5290,7 +5289,7 @@ pub struct ObservabilityConfig {
     #[serde(default)]
     pub otel_endpoint: Option<String>,
 
-    /// Service name reported to the OTel collector. Defaults to "zeroclaw".
+    /// Service name reported to the OTel collector. Defaults to "miroclaw".
     #[serde(default)]
     pub otel_service_name: Option<String>,
 
@@ -7501,7 +7500,7 @@ pub struct NevisRoleMappingConfig {
 
     /// Tool names this role can access. Use `"all"` for unrestricted tool access.
     #[serde(default)]
-    pub zeroclaw_permissions: Vec<String>,
+    pub miroclaw_permissions: Vec<String>,
 
     /// Workspace names this role can access. Use `"all"` for unrestricted.
     #[serde(default)]
@@ -7607,7 +7606,7 @@ pub struct AuditConfig {
     #[serde(default = "default_audit_enabled")]
     pub enabled: bool,
 
-    /// Path to audit log file (relative to zeroclaw dir)
+    /// Path to audit log file (relative to miroclaw config dir)
     #[serde(default = "default_audit_log_path")]
     pub log_path: String,
 
@@ -7812,7 +7811,7 @@ impl ChannelConfig for BlueskyConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct VoiceWakeConfig {
     /// Wake word phrase to listen for (case-insensitive substring match).
-    /// Default: `"hey zeroclaw"`.
+    /// Default: `"hey miroclaw"`.
     #[serde(default = "default_voice_wake_word")]
     pub wake_word: String,
     /// Silence timeout in milliseconds — how long to wait after the last
@@ -7831,7 +7830,7 @@ pub struct VoiceWakeConfig {
 
 #[cfg(feature = "voice-wake")]
 fn default_voice_wake_word() -> String {
-    "hey zeroclaw".into()
+    "hey miroclaw".into()
 }
 
 #[cfg(feature = "voice-wake")]
@@ -8726,9 +8725,9 @@ fn encrypt_secret(
 }
 
 fn config_dir_creation_error(path: &Path) -> String {
-    format!(
+        format!(
         "Failed to create config directory: {}. If running as an OpenRC service, \
-         ensure this path is writable by user 'zeroclaw'.",
+         ensure this path is writable by user 'miroclaw'.",
         path.display()
     )
 }
@@ -11159,10 +11158,10 @@ mod tests {
 
     #[test]
     async fn config_dir_creation_error_mentions_openrc_and_path() {
-        let msg = config_dir_creation_error(Path::new("/etc/zeroclaw"));
-        assert!(msg.contains("/etc/zeroclaw"));
+        let msg = config_dir_creation_error(Path::new("/etc/miroclaw"));
+        assert!(msg.contains("/etc/miroclaw"));
         assert!(msg.contains("OpenRC"));
-        assert!(msg.contains("zeroclaw"));
+        assert!(msg.contains("miroclaw"));
     }
 
     #[test]

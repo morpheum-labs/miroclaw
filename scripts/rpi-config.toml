@@ -417,7 +417,7 @@ sqlite_journal_mode = "wal"
 enabled = false
 
 [memory.qdrant]
-collection = "zeroclaw_memories"
+collection = "miroclaw_memories"
 
 [storage.provider.config]
 provider = ""

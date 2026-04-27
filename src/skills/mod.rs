@@ -17,7 +17,6 @@ pub mod testing;
 
 const OPEN_SKILLS_REPO_URL: &str = "https://github.com/besoeasy/open-skills";
 const OPEN_SKILLS_SYNC_MARKER: &str = ".miroclaw-open-skills-sync";
-const OPEN_SKILLS_SYNC_MARKER_LEGACY: &str = ".zeroclaw-open-skills-sync";
 const OPEN_SKILLS_SYNC_INTERVAL_SECS: u64 = 60 * 60 * 24 * 7;
 
 // ─── ClawhHub / OpenClaw registry installers ───────────────────────────────
@@ -117,7 +116,7 @@ fn warn_skipped_skill(path: &Path, summary: &str, allow_scripts: bool) {
         );
         eprintln!(
             "warning: skill '{}' was skipped because it contains script files. \
-             Set `skills.allow_scripts = true` in your zeroclaw config to enable it.",
+             Set `skills.allow_scripts = true` in your miroclaw config to enable it.",
             path.file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| path.display().to_string()),
@@ -520,11 +519,7 @@ fn pull_open_skills_repo(repo_dir: &Path) -> bool {
 }
 
 fn should_sync_open_skills(repo_dir: &Path) -> bool {
-    let marker = if repo_dir.join(OPEN_SKILLS_SYNC_MARKER).exists() {
-        repo_dir.join(OPEN_SKILLS_SYNC_MARKER)
-    } else {
-        repo_dir.join(OPEN_SKILLS_SYNC_MARKER_LEGACY)
-    };
+    let marker = repo_dir.join(OPEN_SKILLS_SYNC_MARKER);
     let Ok(metadata) = std::fs::metadata(marker) else {
         return true;
     };
@@ -539,9 +534,6 @@ fn should_sync_open_skills(repo_dir: &Path) -> bool {
 }
 
 fn mark_open_skills_synced(repo_dir: &Path) -> Result<()> {
-    if repo_dir.join(OPEN_SKILLS_SYNC_MARKER_LEGACY).exists() {
-        let _ = std::fs::remove_file(repo_dir.join(OPEN_SKILLS_SYNC_MARKER_LEGACY));
-    }
     std::fs::write(repo_dir.join(OPEN_SKILLS_SYNC_MARKER), b"synced")?;
     Ok(())
 }
@@ -908,8 +900,8 @@ pub fn init_skills_dir(workspace_dir: &Path) -> Result<()> {
              The agent will read it and follow the instructions.\n\n\
              ## Installing community skills\n\n\
              ```bash\n\
-             zeroclaw skills install <source>\n\
-             zeroclaw skills list\n\
+             miroclaw skills install <source>\n\
+             miroclaw skills list\n\
              ```\n",
         )?;
     }
