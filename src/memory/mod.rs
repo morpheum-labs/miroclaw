@@ -32,6 +32,7 @@ pub mod retrieval;
 pub mod session_memory;
 pub mod snapshot;
 pub mod sqlite;
+pub mod tool_context;
 pub mod traits;
 pub mod vector;
 
@@ -57,6 +58,10 @@ pub use response_cache::ResponseCache;
 #[allow(unused_imports)]
 pub use retrieval::{RetrievalConfig, RetrievalPipeline};
 pub use sqlite::SqliteMemory;
+pub use tool_context::effective_memory_tool_namespace;
+pub use tool_context::memory_storage_key;
+pub use tool_context::memory_tool_stack_guard;
+pub use tool_context::MEMORY_TOOL_NAMESPACE;
 pub use traits::Memory;
 #[allow(unused_imports)]
 pub use traits::{MemoryCategory, MemoryEntry, ProceduralMessage};
@@ -490,6 +495,19 @@ pub fn create_response_cache(config: &MemoryConfig, workspace_dir: &Path) -> Opt
         Err(e) => {
             tracing::warn!("Response cache disabled due to error: {e}");
             None
+        }
+    }
+}
+
+impl crate::config::MemoryConfig {
+    /// Normalized `[memory].default_namespace` for tool calls (empty → `"default"`).
+    #[must_use]
+    pub fn tool_call_memory_namespace(&self) -> String {
+        let s = self.default_namespace.trim();
+        if s.is_empty() {
+            "default".to_string()
+        } else {
+            s.to_string()
         }
     }
 }

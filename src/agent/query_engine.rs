@@ -284,36 +284,58 @@ pub(crate) async fn run_query_loop(
     turn_user_message: Option<&str>,
     system_prompt_refresh: Option<&super::system_prompt::SystemPromptAssemblyRefs<'_>>,
     post_turn_memory: super::loop_::PostTurnMemoryBinding,
+    memory_tool_namespace: String,
 ) -> Result<String> {
     state.last_transition = Some(TransitionReason::BeginTurn);
     record_transition(TransitionReason::BeginTurn, None);
-    let res = super::loop_::run_tool_call_loop_body(
-        provider,
-        history,
-        tools_registry,
-        observer,
-        provider_name,
-        model,
-        temperature,
-        silent,
-        approval,
-        channel_name,
-        channel_reply_target,
-        multimodal_config,
-        max_tool_iterations,
-        cancellation_token,
-        turn_event_sink,
-        hooks,
-        excluded_tools,
-        dedup_exempt_tools,
-        activated_tools,
-        model_switch_callback,
-        pacing,
-        tool_result_offload,
-        history_pruning,
-        system_prompt_refresh,
-    )
-    .await;
+    let res = crate::memory::MEMORY_TOOL_NAMESPACE
+        .scope(memory_tool_namespace, async {
+            let inner = super::loop_::run_tool_call_loop_body(
+                provider,
+                history,
+                tools_registry,
+                observer,
+                provider_name,
+                model,
+                temperature,
+                silent,
+                approval,
+                channel_name,
+                channel_reply_target,
+                multimodal_config,
+                max_tool_iterations,
+                cancellation_token,
+                turn_event_sink,
+                hooks,
+                excluded_tools,
+                dedup_exempt_tools,
+                activated_tools,
+                model_switch_callback,
+                pacing,
+                tool_result_offload,
+                history_pruning,
+                system_prompt_refresh,
+            )
+            .await;
+
+            if let Ok(text) = &inner {
+                if post_turn_memory.auto_save {
+                    if let Some(mem) = &post_turn_memory.memory {
+                        let user = turn_user_message.unwrap_or("");
+                        run_engine_post_turn_consolidation(
+                            provider,
+                            model,
+                            mem,
+                            user,
+                            text.as_str(),
+                        )
+                        .await;
+                    }
+                }
+            }
+            inner
+        })
+        .await;
     match &res {
         Ok(_) => {
             state.last_transition = Some(TransitionReason::TurnComplete);
@@ -322,14 +344,6 @@ pub(crate) async fn run_query_loop(
         Err(e) => {
             state.last_transition = Some(TransitionReason::TurnError);
             record_transition(TransitionReason::TurnError, Some(e.to_string()));
-        }
-    }
-    if let Ok(text) = &res {
-        if post_turn_memory.auto_save {
-            if let Some(mem) = &post_turn_memory.memory {
-                let user = turn_user_message.unwrap_or("");
-                run_engine_post_turn_consolidation(provider, model, mem, user, text.as_str()).await;
-            }
         }
     }
     if let (Ok(text), Some(hooks)) = (&res, hooks) {
@@ -487,6 +501,7 @@ pub async fn run_worker_fork(
         Some(worker_goal),
         None,
         post_turn,
+        cfg.memory.tool_call_memory_namespace(),
     )
     .await;
 

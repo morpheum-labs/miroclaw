@@ -434,7 +434,7 @@ pub fn all_tools_with_runtime(
         Arc::new(MemoryStoreTool::new(memory.clone(), security.clone())),
         Arc::new(MemoryRecallTool::new(memory.clone())),
         Arc::new(MemoryForgetTool::new(memory.clone(), security.clone())),
-        Arc::new(MemoryPurgeTool::new(memory, security.clone())),
+        Arc::new(MemoryPurgeTool::new(Arc::clone(&memory), security.clone())),
         Arc::new(ScheduleTool::new(security.clone(), root_config.clone())),
         Arc::new(ModelRoutingConfigTool::new(
             config.clone(),
@@ -907,6 +907,10 @@ pub fn all_tools_with_runtime(
             .map(|(name, cfg)| (name.clone(), cfg.clone()))
             .collect();
         let parent_tools = Arc::new(RwLock::new(tool_arcs.clone()));
+        let post_turn = crate::agent::loop_::PostTurnMemoryBinding {
+            memory: Some(Arc::clone(&memory)),
+            auto_save: root_config.memory.auto_save,
+        };
         let delegate_tool = DelegateTool::new_with_options(
             delegate_agents,
             delegate_fallback_credential.clone(),
@@ -916,7 +920,13 @@ pub fn all_tools_with_runtime(
         .with_parent_tools(Arc::clone(&parent_tools))
         .with_multimodal_config(root_config.multimodal.clone())
         .with_delegate_config(root_config.delegate.clone())
-        .with_workspace_dir(workspace_dir.to_path_buf());
+        .with_workspace_dir(workspace_dir.to_path_buf())
+        .with_delegation_memory(
+            post_turn,
+            root_config.memory.clone(),
+            root_config.api_key.clone(),
+            root_config.embedding_routes.clone(),
+        );
         tool_arcs.push(Arc::new(delegate_tool));
         Some(parent_tools)
     };
@@ -1257,6 +1267,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
 

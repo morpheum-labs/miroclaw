@@ -1,7 +1,7 @@
 use super::traits::{Tool, ToolResult};
 use crate::agent::loop_::run_tool_call_loop;
 use crate::agent::prompt::{PromptContext, SystemPromptBuilder};
-use crate::config::{DelegateAgentConfig, DelegateToolConfig};
+use crate::config::{DelegateAgentConfig, DelegateToolConfig, EmbeddingRouteConfig, MemoryConfig};
 use crate::observability::traits::{Observer, ObserverEvent, ObserverMetric};
 use crate::providers::{self, ChatMessage, Provider};
 use crate::security::policy::ToolOperation;
@@ -14,6 +14,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
+
+/// Clears the global pending layered turn after `run_tool_call_loop` (consolidation may read it).
+struct ClearLayeredPendingOnDrop;
+
+impl Drop for ClearLayeredPendingOnDrop {
+    fn drop(&mut self) {
+        crate::memory::layered_context::install_pending_layered_turn(None);
+    }
+}
 
 /// Serializable result of a background delegate task.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -70,6 +79,16 @@ pub struct DelegateTool {
     workspace_dir: PathBuf,
     /// Cancellation token for cascade control of background tasks.
     cancellation_token: CancellationToken,
+    /// When set, post-turn memory consolidation and layered **writes** for agentic delegate
+    /// mirror the main session (`memory.auto_save`).
+    post_turn_memory: crate::agent::loop_::PostTurnMemoryBinding,
+    /// Root `[memory]` config: layered **recall** into the sub-agent system prompt, and
+    /// coordinates `session_key` for per-agent workspace memory (`~/.miroclaw/.../session-memory/...`).
+    root_memory: Option<MemoryConfig>,
+    /// Global `api_key` (embedding fallback for [`crate::memory::layered_selector::select_relevant`]).
+    embedding_api_key: Option<String>,
+    /// From root config `[[embedding_routes]]`.
+    embedding_routes: Vec<EmbeddingRouteConfig>,
 }
 
 impl DelegateTool {
@@ -103,6 +122,10 @@ impl DelegateTool {
             delegate_config: DelegateToolConfig::default(),
             workspace_dir: PathBuf::new(),
             cancellation_token: CancellationToken::new(),
+            post_turn_memory: crate::agent::loop_::PostTurnMemoryBinding::default(),
+            root_memory: None,
+            embedding_api_key: None,
+            embedding_routes: Vec::new(),
         }
     }
 
@@ -142,7 +165,27 @@ impl DelegateTool {
             delegate_config: DelegateToolConfig::default(),
             workspace_dir: PathBuf::new(),
             cancellation_token: CancellationToken::new(),
+            post_turn_memory: crate::agent::loop_::PostTurnMemoryBinding::default(),
+            root_memory: None,
+            embedding_api_key: None,
+            embedding_routes: Vec::new(),
         }
+    }
+
+    /// When `memory.auto_save` is on, sub-agent runs persist post-turn consolidation; layered
+    /// read/write is keyed by each agent's `effective_memory_tool_namespace` (default `agent:<name>`).
+    pub(crate) fn with_delegation_memory(
+        mut self,
+        post_turn: crate::agent::loop_::PostTurnMemoryBinding,
+        root_memory: MemoryConfig,
+        embedding_api_key: Option<String>,
+        embedding_routes: Vec<EmbeddingRouteConfig>,
+    ) -> Self {
+        self.post_turn_memory = post_turn;
+        self.root_memory = Some(root_memory);
+        self.embedding_api_key = embedding_api_key;
+        self.embedding_routes = embedding_routes;
+        self
     }
 
     /// Attach parent tools used to build sub-agent allowlist registries.
@@ -454,9 +497,33 @@ impl DelegateTool {
                 .await;
         }
 
+        let session_key = agent_config.effective_memory_tool_namespace(agent_name);
+        let mut layered_block: Option<String> = None;
+        if let Some(ref mem) = self.root_memory {
+            if mem.layered.enabled {
+                let sel = crate::memory::layered_selector::select_relevant(
+                    &full_prompt,
+                    &self.workspace_dir,
+                    &session_key,
+                    &mem.layered,
+                    mem,
+                    self.embedding_api_key.as_deref(),
+                    &self.embedding_routes,
+                )
+                .await;
+                if !sel.text.trim().is_empty() {
+                    layered_block = Some(sel.text);
+                }
+            }
+        }
+
         // Build enriched system prompt for non-agentic sub-agent.
-        let enriched_system_prompt =
-            self.build_enriched_system_prompt(agent_config, &[], &self.workspace_dir);
+        let enriched_system_prompt = self.build_enriched_system_prompt(
+            agent_config,
+            &[],
+            &self.workspace_dir,
+            layered_block.as_deref(),
+        );
         let system_prompt_ref = enriched_system_prompt.as_deref();
 
         // Wrap the provider call in a timeout to prevent indefinite blocking
@@ -612,6 +679,10 @@ impl DelegateTool {
         let workspace_dir = self.workspace_dir.clone();
         let child_token = self.cancellation_token.child_token();
         let task_id_clone = task_id.clone();
+        let post_turn_memory = self.post_turn_memory.clone();
+        let root_memory = self.root_memory.clone();
+        let embedding_api_key = self.embedding_api_key.clone();
+        let embedding_routes = self.embedding_routes.clone();
 
         tokio::spawn(async move {
             // Build an inner DelegateTool for the spawned context
@@ -626,6 +697,10 @@ impl DelegateTool {
                 delegate_config,
                 workspace_dir: workspace_dir.clone(),
                 cancellation_token: child_token.clone(),
+                post_turn_memory,
+                root_memory,
+                embedding_api_key,
+                embedding_routes,
             };
 
             let args_inner = json!({
@@ -767,6 +842,10 @@ impl DelegateTool {
             let delegate_config = self.delegate_config.clone();
             let workspace_dir = self.workspace_dir.clone();
             let cancellation_token = self.cancellation_token.child_token();
+            let post_turn_memory = self.post_turn_memory.clone();
+            let root_memory = self.root_memory.clone();
+            let embedding_api_key = self.embedding_api_key.clone();
+            let embedding_routes = self.embedding_routes.clone();
             let agent_name = agent_name.clone();
             let prompt = prompt.to_string();
             let args_clone = args.clone();
@@ -783,6 +862,10 @@ impl DelegateTool {
                     delegate_config,
                     workspace_dir,
                     cancellation_token,
+                    post_turn_memory,
+                    root_memory,
+                    embedding_api_key,
+                    embedding_routes,
                 };
                 let result = Box::pin(inner.execute_sync(&agent_name, &prompt, &args_clone)).await;
                 (agent_name, result)
@@ -992,6 +1075,7 @@ impl DelegateTool {
         agent_config: &DelegateAgentConfig,
         sub_tools: &[Box<dyn Tool>],
         workspace_dir: &Path,
+        layered_memory_block: Option<&str>,
     ) -> Option<String> {
         // Resolve skills directory: scoped if configured, otherwise workspace default.
         let skills_dir = agent_config
@@ -1050,6 +1134,13 @@ impl DelegateTool {
             enriched.push('\n');
         }
 
+        if let Some(lm) = layered_memory_block.filter(|s| !s.trim().is_empty()) {
+            enriched.push_str(lm);
+            if !lm.ends_with('\n') {
+                enriched.push('\n');
+            }
+        }
+
         let trimmed = enriched.trim().to_string();
         if trimmed.is_empty() {
             None
@@ -1104,9 +1195,51 @@ impl DelegateTool {
             });
         }
 
+        let session_key = agent_config.effective_memory_tool_namespace(agent_name);
+
+        let mut layered_block: Option<String> = None;
+        if let Some(ref mem) = self.root_memory {
+            if mem.layered.enabled {
+                let sel = crate::memory::layered_selector::select_relevant(
+                    full_prompt,
+                    &self.workspace_dir,
+                    &session_key,
+                    &mem.layered,
+                    mem,
+                    self.embedding_api_key.as_deref(),
+                    &self.embedding_routes,
+                )
+                .await;
+                if !sel.text.trim().is_empty() {
+                    layered_block = Some(sel.text);
+                }
+            }
+        }
+
+        if let Some(ref mem) = self.root_memory {
+            if mem.layered.enabled && mem.auto_save {
+                crate::memory::layered_context::install_pending_layered_turn(Some(
+                    crate::memory::layered_context::LayeredTurnContext {
+                        workspace_dir: self.workspace_dir.clone(),
+                        session_key,
+                        layered: mem.layered.clone(),
+                    },
+                ));
+            } else {
+                crate::memory::layered_context::install_pending_layered_turn(None);
+            }
+        } else {
+            crate::memory::layered_context::install_pending_layered_turn(None);
+        }
+        let _clear_layered_pending = ClearLayeredPendingOnDrop;
+
         // Build enriched system prompt with tools, skills, workspace, datetime context.
-        let enriched_system_prompt =
-            self.build_enriched_system_prompt(agent_config, &sub_tools, &self.workspace_dir);
+        let enriched_system_prompt = self.build_enriched_system_prompt(
+            agent_config,
+            &sub_tools,
+            &self.workspace_dir,
+            layered_block.as_deref(),
+        );
 
         let mut history = Vec::new();
         if let Some(system_prompt) = enriched_system_prompt.as_ref() {
@@ -1147,7 +1280,8 @@ impl DelegateTool {
                 &crate::agent::history_pruner::HistoryPrunerConfig::default(),
                 Some(full_prompt),
                 None,
-                crate::agent::loop_::PostTurnMemoryBinding::default(),
+                self.post_turn_memory.clone(),
+                agent_config.effective_memory_tool_namespace(agent_name),
             ),
         )
         .await;
@@ -1262,6 +1396,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         agents.insert(
@@ -1279,6 +1414,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         agents
@@ -1435,6 +1571,7 @@ mod tests {
             timeout_secs: None,
             agentic_timeout_secs: None,
             skills_directory: None,
+            memory_namespace: None,
         }
     }
 
@@ -1550,6 +1687,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         let tool = DelegateTool::new(agents, None, test_security());
@@ -1659,6 +1797,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         let tool = DelegateTool::new(agents, None, test_security());
@@ -1697,6 +1836,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         let tool = DelegateTool::new(agents, None, test_security());
@@ -1973,6 +2113,7 @@ mod tests {
             timeout_secs: None,
             agentic_timeout_secs: None,
             skills_directory: None,
+            memory_namespace: None,
         };
 
         let tools: Vec<Box<dyn Tool>> = vec![Box::new(EchoTool)];
@@ -1986,7 +2127,7 @@ mod tests {
             .with_workspace_dir(workspace.clone());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None)
             .unwrap();
 
         assert!(prompt.contains("## Tools"), "should contain tools section");
@@ -2026,6 +2167,7 @@ mod tests {
             timeout_secs: None,
             agentic_timeout_secs: None,
             skills_directory: None,
+            memory_namespace: None,
         };
 
         struct MockShellTool;
@@ -2056,7 +2198,7 @@ mod tests {
             .with_workspace_dir(workspace.to_path_buf());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None)
             .unwrap();
 
         assert!(
@@ -2096,6 +2238,7 @@ mod tests {
             timeout_secs: None,
             agentic_timeout_secs: None,
             skills_directory: None,
+            memory_namespace: None,
         };
         assert_eq!(
             config.timeout_secs.unwrap_or(DEFAULT_DELEGATE_TIMEOUT_SECS),
@@ -2124,6 +2267,7 @@ mod tests {
             timeout_secs: None,
             agentic_timeout_secs: None,
             skills_directory: None,
+            memory_namespace: None,
         };
 
         let tools: Vec<Box<dyn Tool>> = vec![Box::new(EchoTool)];
@@ -2133,7 +2277,7 @@ mod tests {
             .with_workspace_dir(workspace.to_path_buf());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None)
             .unwrap();
 
         assert!(
@@ -2157,6 +2301,7 @@ mod tests {
             timeout_secs: Some(60),
             agentic_timeout_secs: Some(600),
             skills_directory: None,
+            memory_namespace: None,
         };
         assert_eq!(
             config.timeout_secs.unwrap_or(DEFAULT_DELEGATE_TIMEOUT_SECS),
@@ -2212,6 +2357,7 @@ mod tests {
                 timeout_secs: Some(0),
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         let err = config.validate().unwrap_err();
@@ -2239,6 +2385,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: Some(0),
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         let err = config.validate().unwrap_err();
@@ -2266,6 +2413,7 @@ mod tests {
                 timeout_secs: Some(7200),
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         let err = config.validate().unwrap_err();
@@ -2293,6 +2441,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: Some(5000),
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         let err = config.validate().unwrap_err();
@@ -2320,6 +2469,7 @@ mod tests {
                 timeout_secs: Some(3600),
                 agentic_timeout_secs: Some(3600),
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         assert!(config.validate().is_ok());
@@ -2343,6 +2493,7 @@ mod tests {
                 timeout_secs: None,
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
         assert!(config.validate().is_ok());
@@ -2375,6 +2526,7 @@ mod tests {
             timeout_secs: None,
             agentic_timeout_secs: None,
             skills_directory: Some("skills/code-review".to_string()),
+            memory_namespace: None,
         };
 
         let tools: Vec<Box<dyn Tool>> = vec![Box::new(EchoTool)];
@@ -2383,7 +2535,7 @@ mod tests {
             .with_workspace_dir(workspace.clone());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None)
             .unwrap();
 
         assert!(
@@ -2421,6 +2573,7 @@ mod tests {
             timeout_secs: None,
             agentic_timeout_secs: None,
             skills_directory: None,
+            memory_namespace: None,
         };
 
         let tools: Vec<Box<dyn Tool>> = vec![Box::new(EchoTool)];
@@ -2429,7 +2582,7 @@ mod tests {
             .with_workspace_dir(workspace.clone());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None)
             .unwrap();
 
         assert!(

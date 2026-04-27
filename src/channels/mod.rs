@@ -2701,6 +2701,7 @@ async fn process_channel_message(
                                 memory: Some(std::sync::Arc::clone(&ctx.memory)),
                                 auto_save: ctx.auto_save_memory,
                             },
+                            ctx.prompt_config.memory.tool_call_memory_namespace(),
                         ),
                     ),
                 ),

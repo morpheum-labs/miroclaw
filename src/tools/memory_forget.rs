@@ -1,5 +1,5 @@
 use super::traits::{Tool, ToolResult};
-use crate::memory::Memory;
+use crate::memory::{effective_memory_tool_namespace, memory_storage_key, Memory};
 use crate::security::policy::ToolOperation;
 use crate::security::SecurityPolicy;
 use async_trait::async_trait;
@@ -58,7 +58,9 @@ impl Tool for MemoryForgetTool {
             });
         }
 
-        match self.memory.forget(key).await {
+        let ns = effective_memory_tool_namespace();
+        let store_key = memory_storage_key(&ns, key);
+        match self.memory.forget(&store_key).await {
             Ok(true) => Ok(ToolResult {
                 success: true,
                 output: format!("Forgot memory: {key}"),

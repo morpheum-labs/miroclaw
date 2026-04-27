@@ -579,6 +579,27 @@ pub struct DelegateAgentConfig {
     /// When unset or empty, the sub-agent falls back to the default workspace `skills/` directory.
     #[serde(default)]
     pub skills_directory: Option<String>,
+    /// Isolates `memory_store` / `memory_recall` / `memory_forget` for this delegate sub-agent.
+    /// When unset, defaults to `agent:<name>`; see `DelegateAgentConfig::effective_memory_tool_namespace`.
+    /// Also used as the layered **session key** for per-agent workspace memory (consolidation
+    /// distills + session-memory under `~/.miroclaw/.../session-memory/`) when `memory.layered` and
+    /// `memory.auto_save` are enabled.
+    #[serde(default)]
+    pub memory_namespace: Option<String>,
+}
+
+impl DelegateAgentConfig {
+    /// Namespace for memory tools while this sub-agent runs (function-calling loop).
+    #[must_use]
+    pub fn effective_memory_tool_namespace(&self, agent_name: &str) -> String {
+        if let Some(ref s) = self.memory_namespace {
+            let t = s.trim();
+            if !t.is_empty() {
+                return t.to_string();
+            }
+        }
+        format!("agent:{}", agent_name.trim())
+    }
 }
 
 fn default_delegate_timeout_secs() -> u64 {
@@ -5115,7 +5136,8 @@ pub struct MemoryConfig {
     pub fts_early_return_score: f64,
 
     // ── Namespace Isolation ─────────────────────────────────────
-    /// Default namespace for memory entries.
+    /// Default namespace for memory entries and for `memory_store` / `memory_recall` / `memory_forget`
+    /// in the current agent turn (see `MemoryConfig::tool_call_memory_namespace` in the library).
     #[serde(default = "default_namespace")]
     pub default_namespace: String,
 
@@ -8378,9 +8400,9 @@ struct ActiveWorkspaceState {
 fn default_config_dir() -> Result<PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
         if !home.is_empty() {
-            return Ok(crate::context::preferred_user_data_dir_in_home(&PathBuf::from(
-                home,
-            )));
+            return Ok(crate::context::preferred_user_data_dir_in_home(
+                &PathBuf::from(home),
+            ));
         }
     }
 
@@ -8725,7 +8747,7 @@ fn encrypt_secret(
 }
 
 fn config_dir_creation_error(path: &Path) -> String {
-        format!(
+    format!(
         "Failed to create config directory: {}. If running as an OpenRC service, \
          ensure this path is writable by user 'miroclaw'.",
         path.display()
@@ -12105,6 +12127,7 @@ default_temperature = 0.7
                 timeout_secs: None,
                 agentic_timeout_secs: None,
                 skills_directory: None,
+                memory_namespace: None,
             },
         );
 

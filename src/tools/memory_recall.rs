@@ -1,5 +1,5 @@
 use super::traits::{Tool, ToolResult};
-use crate::memory::Memory;
+use crate::memory::{effective_memory_tool_namespace, Memory};
 use async_trait::async_trait;
 use serde_json::json;
 use std::fmt::Write;
@@ -109,7 +109,16 @@ impl Tool for MemoryRecallTool {
             .and_then(serde_json::Value::as_u64)
             .map_or(5, |v| v as usize);
 
-        match self.memory.recall(query, limit, None, since, until).await {
+        let ns = effective_memory_tool_namespace();
+        let recall = if ns == "default" {
+            self.memory.recall(query, limit, None, since, until).await
+        } else {
+            self.memory
+                .recall_namespaced(&ns, query, limit, None, since, until)
+                .await
+        };
+
+        match recall {
             Ok(entries) if entries.is_empty() => Ok(ToolResult {
                 success: true,
                 output: "No memories found.".into(),

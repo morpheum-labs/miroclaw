@@ -31,8 +31,7 @@ tokio::task_local! {
 }
 
 pub(crate) fn default_transcript_dir() -> Option<PathBuf> {
-    crate::context::default_user_miroclaw_dir()
-        .map(|d| d.join("sessions").join("transcripts"))
+    crate::context::default_user_miroclaw_dir().map(|d| d.join("sessions").join("transcripts"))
 }
 
 fn transcript_file_stem(session_key: &str) -> String {

@@ -203,9 +203,7 @@ pub fn plugin_tools_dir() -> Result<PathBuf> {
     use directories::BaseDirs;
     let base = BaseDirs::new()
         .ok_or_else(|| anyhow::anyhow!("cannot determine the user home directory"))?;
-    Ok(
-        crate::context::preferred_user_data_dir_in_home(base.home_dir()).join("tools"),
-    )
+    Ok(crate::context::preferred_user_data_dir_in_home(base.home_dir()).join("tools"))
 }
 
 /// Best-effort home dir string for display purposes only.

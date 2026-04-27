@@ -2397,6 +2397,7 @@ pub(crate) async fn agent_turn(
         None,
         None,
         PostTurnMemoryBinding::default(),
+        crate::config::MemoryConfig::default().tool_call_memory_namespace(),
     )
     .await
 }
@@ -2718,6 +2719,7 @@ pub(crate) async fn run_tool_call_loop(
     turn_user_message: Option<&str>,
     system_prompt_refresh: Option<&crate::agent::system_prompt::SystemPromptAssemblyRefs<'_>>,
     post_turn_memory: PostTurnMemoryBinding,
+    memory_tool_namespace: String,
 ) -> Result<String> {
     let mut engine_state = crate::agent::state::EngineState::default();
     crate::agent::query_engine::run_query_loop(
@@ -2748,6 +2750,7 @@ pub(crate) async fn run_tool_call_loop(
         turn_user_message,
         system_prompt_refresh,
         post_turn_memory,
+        memory_tool_namespace,
     )
     .await
 }
@@ -4423,6 +4426,7 @@ pub async fn run(
                             memory: Some(std::sync::Arc::clone(&mem)),
                             auto_save: config.memory.auto_save,
                         },
+                        config.memory.tool_call_memory_namespace(),
                     ),
                 )
                 .await
@@ -4775,6 +4779,7 @@ pub async fn run(
                                 memory: Some(std::sync::Arc::clone(&mem)),
                                 auto_save: config.memory.auto_save,
                             },
+                            config.memory.tool_call_memory_namespace(),
                         ),
                     )
                     .await
@@ -5788,6 +5793,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect_err("provider without vision support should fail");
@@ -5845,6 +5851,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect_err("oversized payload must fail");
@@ -5895,6 +5902,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("valid multimodal payload should pass");
@@ -5945,6 +5953,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect_err("should fail without vision_provider config");
@@ -6002,6 +6011,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect_err("should fail when vision provider cannot be created");
@@ -6059,6 +6069,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("text-only messages should succeed with default provider");
@@ -6117,6 +6128,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect_err("should fail due to nonexistent vision provider");
@@ -6173,6 +6185,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("empty image markers should not trigger vision routing");
@@ -6229,6 +6242,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect_err("should attempt vision provider creation for multiple images");
@@ -6368,6 +6382,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("parallel execution should complete");
@@ -6444,6 +6459,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("cron_add delivery defaults should be injected");
@@ -6512,6 +6528,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("explicit delivery mode should be preserved");
@@ -6575,6 +6592,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("loop should finish after deduplicating repeated calls");
@@ -6650,6 +6668,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("non-interactive shell should succeed for low-risk command");
@@ -6716,6 +6735,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("loop should finish with exempt tool executing twice");
@@ -6802,6 +6822,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("loop should complete");
@@ -6865,6 +6886,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("native fallback id flow should complete");
@@ -6952,6 +6974,7 @@ mod tests {
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("native tool-call text should be relayed through turn_event_sink");
@@ -8949,6 +8972,7 @@ Let me check the result."#;
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("tool loop should complete");
@@ -9104,6 +9128,7 @@ Let me check the result."#;
                     None,
                     None,
                     PostTurnMemoryBinding::default(),
+                    crate::config::MemoryConfig::default().tool_call_memory_namespace(),
                 ),
             )
             .await
@@ -9188,6 +9213,7 @@ Let me check the result."#;
                     None,
                     None,
                     PostTurnMemoryBinding::default(),
+                    crate::config::MemoryConfig::default().tool_call_memory_namespace(),
                 ),
             )
             .await
@@ -9248,6 +9274,7 @@ Let me check the result."#;
             None,
             None,
             PostTurnMemoryBinding::default(),
+            crate::config::MemoryConfig::default().tool_call_memory_namespace(),
         )
         .await
         .expect("should succeed without cost scope");

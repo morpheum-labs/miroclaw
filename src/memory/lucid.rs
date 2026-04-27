@@ -323,6 +323,29 @@ impl Memory for LucidMemory {
         Ok(())
     }
 
+    async fn store_with_metadata(
+        &self,
+        key: &str,
+        content: &str,
+        category: MemoryCategory,
+        session_id: Option<&str>,
+        namespace: Option<&str>,
+        importance: Option<f64>,
+    ) -> anyhow::Result<()> {
+        self.local
+            .store_with_metadata(
+                key,
+                content,
+                category.clone(),
+                session_id,
+                namespace,
+                importance,
+            )
+            .await?;
+        self.sync_to_lucid_async(key, content, &category).await;
+        Ok(())
+    }
+
     async fn recall(
         &self,
         query: &str,

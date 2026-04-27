@@ -119,9 +119,7 @@ impl OpenAiCodexProvider {
 fn default_zeroclaw_dir() -> PathBuf {
     directories::UserDirs::new().map_or_else(
         || PathBuf::from(".miroclaw"),
-        |dirs| {
-            crate::context::preferred_user_data_dir_in_home(dirs.home_dir())
-        },
+        |dirs| crate::context::preferred_user_data_dir_in_home(dirs.home_dir()),
     )
 }
 

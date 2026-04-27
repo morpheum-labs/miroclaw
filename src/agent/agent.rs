@@ -898,6 +898,8 @@ impl Agent {
     }
 
     pub async fn turn(&mut self, user_message: &str) -> Result<String> {
+        let _mem_tool_ns =
+            memory::memory_tool_stack_guard(self.memory_cfg.tool_call_memory_namespace());
         let layered_owned = if self.memory_cfg.layered.enabled {
             let sk = self
                 .memory_session_id
@@ -1211,6 +1213,8 @@ impl Agent {
         user_message: &str,
         event_tx: tokio::sync::mpsc::Sender<TurnEventSink>,
     ) -> Result<String> {
+        let _mem_tool_ns =
+            memory::memory_tool_stack_guard(self.memory_cfg.tool_call_memory_namespace());
         // ── Preamble (aligned with [`turn`](Self::turn): transcript-first) ──
         let layered_owned = if self.memory_cfg.layered.enabled {
             let sk = self

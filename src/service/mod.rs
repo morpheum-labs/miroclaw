@@ -829,9 +829,10 @@ fn resolve_invoking_user_config_dir() -> Option<PathBuf> {
         }
     }
 
-    std::env::var("HOME").ok().map(PathBuf::from).map(|home| {
-        crate::context::preferred_user_data_dir_in_home(&home)
-    })
+    std::env::var("HOME")
+        .ok()
+        .map(PathBuf::from)
+        .map(|home| crate::context::preferred_user_data_dir_in_home(&home))
 }
 
 fn migrate_openrc_runtime_state_if_needed(config_dir: &Path) -> Result<()> {
