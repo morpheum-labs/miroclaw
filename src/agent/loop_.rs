@@ -368,14 +368,14 @@ pub(crate) const PROGRESS_MIN_INTERVAL_MS: u64 = 500;
 /// Used before streaming the final answer so progress lines are replaced by the clean response.
 pub(crate) const DRAFT_CLEAR_SENTINEL: &str = "\x00CLEAR\x00";
 
-async fn send_turn_sink_str(sink: &Option<tokio::sync::mpsc::Sender<TurnEventSink>>, text: String) {
+async fn send_turn_sink_str(sink: Option<&tokio::sync::mpsc::Sender<TurnEventSink>>, text: String) {
     if let Some(tx) = sink {
         let _ = tx.send(TurnEventSink::DeltaText(text)).await;
     }
 }
 
 async fn send_turn_sink_emit(
-    sink: &Option<tokio::sync::mpsc::Sender<TurnEventSink>>,
+    sink: Option<&tokio::sync::mpsc::Sender<TurnEventSink>>,
     event: TurnEvent,
 ) {
     if let Some(tx) = sink {
@@ -2996,7 +2996,7 @@ pub(crate) async fn run_tool_call_loop_body(
         } else {
             format!("\u{1f914} Thinking (round {})...\n", iteration + 1)
         };
-        send_turn_sink_str(&turn_event_sink, phase).await;
+        send_turn_sink_str(turn_event_sink.as_ref(), phase).await;
 
         observer.record_event(&ObserverEvent::LlmRequest {
             provider: active_provider_name.to_string(),
@@ -3243,7 +3243,7 @@ pub(crate) async fn run_tool_call_loop_body(
         let llm_secs = llm_started_at.elapsed().as_secs();
         if !tool_calls.is_empty() {
             send_turn_sink_str(
-                &turn_event_sink,
+                turn_event_sink.as_ref(),
                 format!(
                     "\u{1f4ac} Got {} tool call(s) ({llm_secs}s)\n",
                     tool_calls.len()
@@ -3316,7 +3316,7 @@ pub(crate) async fn run_tool_call_loop_body(
                 if !narration.ends_with('\n') {
                     narration.push('\n');
                 }
-                send_turn_sink_str(&turn_event_sink, narration).await;
+                send_turn_sink_str(turn_event_sink.as_ref(), narration).await;
             }
             if !silent {
                 print!("{display_text}");
@@ -3364,7 +3364,7 @@ pub(crate) async fn run_tool_call_loop_body(
                             }),
                         );
                         send_turn_sink_str(
-                            &turn_event_sink,
+                            turn_event_sink.as_ref(),
                             format!(
                                 "\u{274c} {}: {}\n",
                                 call.name,
@@ -3434,7 +3434,7 @@ pub(crate) async fn run_tool_call_loop_body(
                             }),
                         );
                         send_turn_sink_str(
-                            &turn_event_sink,
+                            turn_event_sink.as_ref(),
                             format!("\u{274c} {}: {}\n", tool_name, denied),
                         )
                         .await;
@@ -3475,7 +3475,7 @@ pub(crate) async fn run_tool_call_loop_body(
                     }),
                 );
                 send_turn_sink_str(
-                    &turn_event_sink,
+                    turn_event_sink.as_ref(),
                     format!("\u{274c} {}: {}\n", tool_name, duplicate),
                 )
                 .await;
@@ -3508,7 +3508,7 @@ pub(crate) async fn run_tool_call_loop_body(
             );
 
             send_turn_sink_emit(
-                &turn_event_sink,
+                turn_event_sink.as_ref(),
                 TurnEvent::ToolCall {
                     name: tool_name.clone(),
                     args: tool_args.clone(),
@@ -3524,7 +3524,7 @@ pub(crate) async fn run_tool_call_loop_body(
                 format!("\u{23f3} {}: {hint}\n", tool_name)
             };
             tracing::debug!(tool = %tool_name, "Sending progress start to draft");
-            send_turn_sink_str(&turn_event_sink, progress).await;
+            send_turn_sink_str(turn_event_sink.as_ref(), progress).await;
 
             executable_indices.push(idx);
             executable_calls.push(ParsedToolCall {
@@ -3593,7 +3593,7 @@ pub(crate) async fn run_tool_call_loop_body(
             }
 
             send_turn_sink_emit(
-                &turn_event_sink,
+                turn_event_sink.as_ref(),
                 TurnEvent::ToolResult {
                     name: call.name.clone(),
                     output: outcome.output.clone(),
@@ -3615,7 +3615,7 @@ pub(crate) async fn run_tool_call_loop_body(
                 format!("\u{274c} {} ({secs}s)\n", call.name)
             };
             tracing::debug!(tool = %call.name, secs, "Sending progress complete to draft");
-            send_turn_sink_str(&turn_event_sink, progress_msg).await;
+            send_turn_sink_str(turn_event_sink.as_ref(), progress_msg).await;
 
             ordered_results[*idx] = Some((call.name.clone(), call.tool_call_id.clone(), outcome));
         }
@@ -4496,7 +4496,7 @@ pub async fn run(
         println!("{response}");
         observer.record_event(&ObserverEvent::TurnComplete);
     } else {
-        println!("🦀 ZeroClaw Interactive Mode");
+        println!("🦀 MiroClaw Interactive Mode");
         println!("Type /help for commands.\n");
         let cli = crate::channels::CliChannel::new();
 

@@ -1578,6 +1578,8 @@ mod tests {
                 parking_lot::Mutex::new(std::collections::HashMap::new()),
             ),
             web_ui,
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         }
     }
 

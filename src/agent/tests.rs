@@ -647,11 +647,12 @@ async fn auto_save_stores_only_user_messages_in_memory() {
 
     let _ = agent.turn("Remember this fact").await.unwrap();
 
-    // Auto-save only persists user-stated input, never assistant-generated summaries.
+    // Auto-save persists user-stated input under `user_msg`; post-turn consolidation may add
+    // additional rows (e.g. Daily history). Assistant output is not stored under `assistant_resp`.
     let count = mem.count().await.unwrap();
-    assert_eq!(
-        count, 1,
-        "Expected exactly 1 user memory entry, got {count}"
+    assert!(
+        count >= 1,
+        "Expected at least one memory row (user auto-save), got {count}"
     );
 
     let stored = mem.get("user_msg").await.unwrap();

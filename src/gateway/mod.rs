@@ -36,6 +36,8 @@ use crate::tools::canvas::CanvasStore;
 use crate::tools::traits::ToolSpec;
 use crate::util::truncate_with_ellipsis;
 use anyhow::{Context, Result};
+use clawgotcha::ChangeEvent;
+
 use axum::{
     body::Bytes,
     extract::{ConnectInfo, Query, State},
@@ -118,6 +120,81 @@ fn hash_webhook_secret(value: &str) -> String {
 
     let digest = Sha256::digest(value.as_bytes());
     hex::encode(digest)
+}
+
+fn verify_clawgotcha_signature(secret_hex: &str, body: &[u8], headers: &HeaderMap) -> bool {
+    fn bytes_equal_ct(a: &[u8], b: &[u8]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut v = 0u8;
+        for (x, y) in a.iter().zip(b.iter()) {
+            v |= x ^ y;
+        }
+        v == 0
+    }
+
+    let header_raw = match headers
+        .get("X-Clawgotcha-Signature")
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(h) => h.trim(),
+        None => return false,
+    };
+    let Ok(secret_bytes) = hex::decode(secret_hex.trim()) else {
+        return false;
+    };
+    let sig_hex = header_raw.strip_prefix("sha256=").unwrap_or(header_raw);
+    let Ok(sig) = hex::decode(sig_hex.trim()) else {
+        return false;
+    };
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    type HmacSha256 = Hmac<Sha256>;
+    let Ok(mut mac) = HmacSha256::new_from_slice(&secret_bytes) else {
+        return false;
+    };
+    mac.update(body);
+    let expected = mac.finalize().into_bytes();
+    bytes_equal_ct(expected.as_slice(), sig.as_slice())
+}
+
+/// POST `/webhook/clawgotcha` — pushes typed [`ChangeEvent`] JSON into the sync task queue.
+async fn handle_clawgotcha_webhook(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> impl IntoResponse {
+    let Some(tx) = state.clawgotcha_webhook_tx.clone() else {
+        let err = serde_json::json!({"error":"Clawgotcha webhook ingress disabled"});
+        return (StatusCode::NOT_FOUND, Json(err));
+    };
+    if let Some(ref secret) = state.clawgotcha_webhook_secret {
+        if !verify_clawgotcha_signature(secret.as_ref(), body.as_ref(), &headers) {
+            tracing::warn!("Clawgotcha webhook rejected (signature)");
+            let err = serde_json::json!({"error":"Unauthorized"});
+            return (StatusCode::UNAUTHORIZED, Json(err));
+        }
+    }
+    let event: ChangeEvent = match serde_json::from_slice(body.as_ref()) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("Clawgotcha webhook JSON error: {e}");
+            let err = serde_json::json!({"error":"invalid JSON body"});
+            return (StatusCode::BAD_REQUEST, Json(err));
+        }
+    };
+    match tx.try_send(event) {
+        Ok(()) => {
+            let ok = serde_json::json!({"status":"accepted"});
+            (StatusCode::ACCEPTED, Json(ok))
+        }
+        Err(_) => {
+            tracing::warn!("Clawgotcha webhook queue saturated or closed");
+            let err = serde_json::json!({"error":"service unavailable"});
+            (StatusCode::SERVICE_UNAVAILABLE, Json(err))
+        }
+    }
 }
 
 /// How often the rate limiter sweeps stale IP entries from its map.
@@ -375,11 +452,20 @@ pub struct AppState {
     >,
     /// Embedded or external `web/dist/` static dashboard.
     pub web_ui: web_ui::WebUiServeState,
+    /// Optional fan-in for Clawgotcha webhook pushes (same queue as polling).
+    pub clawgotcha_webhook_tx: Option<tokio::sync::mpsc::Sender<ChangeEvent>>,
+    /// Hex-encoded secret bytes for `X-Clawgotcha-Signature` (HMAC-SHA256 over raw body).
+    pub clawgotcha_webhook_secret: Option<Arc<str>>,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
 #[allow(clippy::too_many_lines)]
-pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
+pub async fn run_gateway(
+    host: &str,
+    port: u16,
+    config: Config,
+    clawgotcha_webhook_tx: Option<tokio::sync::mpsc::Sender<ChangeEvent>>,
+) -> Result<()> {
     // ── Security: refuse public bind without tunnel or explicit opt-in ──
     if is_public_bind(host) && config.tunnel.provider == "none" && !config.gateway.allow_public_bind
     {
@@ -830,6 +916,14 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         None
     };
 
+    let clawgotcha_webhook_secret = config
+        .clawgotcha
+        .webhook_hmac_secret
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| Arc::from(s.to_string()) as Arc<str>);
+
     let state = AppState {
         config: config_state,
         provider,
@@ -864,6 +958,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         canvas_store,
         gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
         web_ui,
+        clawgotcha_webhook_tx,
+        clawgotcha_webhook_secret,
     };
 
     // Config PUT needs larger body limit (1MB)
@@ -889,6 +985,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/wati", post(handle_wati_webhook))
         .route("/nextcloud-talk", post(handle_nextcloud_talk_webhook))
         .route("/webhook/gmail", post(handle_gmail_push_webhook))
+        .route("/webhook/clawgotcha", post(handle_clawgotcha_webhook))
         // ── Claude Code runner hooks ──
         .route("/hooks/claude-code", post(api::handle_claude_code_hook))
         // ── Web Dashboard API routes ──
@@ -2170,6 +2267,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2231,6 +2330,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2622,6 +2723,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -2697,6 +2800,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let headers = HeaderMap::new();
@@ -2784,6 +2889,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let response = handle_webhook(
@@ -2843,6 +2950,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -2907,6 +3016,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -2976,6 +3087,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let response = Box::pin(handle_nextcloud_talk_webhook(
@@ -3041,6 +3154,8 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            clawgotcha_webhook_tx: None,
+            clawgotcha_webhook_secret: None,
         };
 
         let mut headers = HeaderMap::new();

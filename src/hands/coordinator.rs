@@ -128,12 +128,11 @@ fn pick_worker_tool_names(
         names.retain(|n| allow.contains(n.as_str()));
     }
 
-    if names.is_empty() {
-        if reg.contains("file_read") {
-            if tool_ok_for_hand(hand.allowed_tools.as_deref(), "file_read") {
-                names.push("file_read".into());
-            }
-        }
+    if names.is_empty()
+        && reg.contains("file_read")
+        && tool_ok_for_hand(hand.allowed_tools.as_deref(), "file_read")
+    {
+        names.push("file_read".into());
     }
     names
 }
@@ -146,7 +145,7 @@ fn tool_ok_for_hand(allowed: Option<&[String]>, tool_name: &str) -> bool {
 }
 
 fn hand_allow_slice(hand: &Hand) -> Option<&[String]> {
-    hand.allowed_tools.as_ref().map(Vec::as_slice)
+    hand.allowed_tools.as_deref()
 }
 
 fn all_hand_tool_names(hand: &Hand, registry: &[Box<dyn crate::tools::Tool>]) -> Vec<String> {
@@ -414,8 +413,8 @@ pub async fn run_coordinator_hand(
     let mut completed_rels: Vec<&'static str> = Vec::new();
     let mut last_out = String::new();
 
-    for (phase, rel) in &phases {
-        let tool_names = pick_worker_tool_names(*phase, hand, agent.tools_registry());
+    for &(phase, rel) in &phases {
+        let tool_names = pick_worker_tool_names(phase, hand, agent.tools_registry());
         if tool_names.is_empty() {
             bail!(
                 "no tools available for phase {} (check hand allowed_tools)",
@@ -425,7 +424,7 @@ pub async fn run_coordinator_hand(
         let worker_sp = assemble_hand_system_prompt(config, &agent, hand, Some(&tool_names))?;
         let parent_summary =
             scratchpad_parent_summary(hand, &scratchpad, &hand_ctx, &completed_rels);
-        let goal = worker_goal_for_phase(*phase, rel, hand, &scratchpad, &hand_ctx);
+        let goal = worker_goal_for_phase(phase, rel, hand, &scratchpad, &hand_ctx);
         let max_it = (24usize).min(config.agent.max_tool_iterations.max(1));
 
         let spec_line = format!("phase={} tools={}", phase, tool_names.join(","));
@@ -445,7 +444,7 @@ pub async fn run_coordinator_hand(
             agent.tools_registry(),
             obs.as_ref(),
             &hand.name,
-            *phase,
+            phase,
             max_it,
             agent.memory_handle(),
         )
@@ -481,12 +480,12 @@ pub async fn run_coordinator_hand(
             }
         }
 
-        if *phase == "research" && out.final_text.trim().is_empty() {
+        if phase == "research" && out.final_text.trim().is_empty() {
             append_decision(&scratchpad, "gate research_empty pipeline_halt")?;
             bail!("research phase produced empty output; see scratchpad/decisions.md");
         }
 
-        if *phase == "verification" {
+        if phase == "verification" {
             match scan_verification_status(&out.final_text) {
                 Some(false) => {
                     append_decision(&scratchpad, "gate verification STATUS:FAIL pipeline_halt")?;

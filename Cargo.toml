@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/aardvark-sys"]
+members = [".", "crates/aardvark-sys", "crates/clawgotcha"]
 resolver = "2"
 
 [package]
@@ -96,6 +96,7 @@ thiserror = "2.0"
 
 # Aardvark I2C/SPI/GPIO USB adapter (Total Phase) — stub when SDK absent
 aardvark-sys = { path = "crates/aardvark-sys", version = "0.1.0" }
+clawgotcha = { path = "crates/clawgotcha" }
 
 # UUID generation
 uuid = { version = "1.22", default-features = false, features = ["v4", "std"] }

@@ -95,10 +95,9 @@ pub fn record_system_prompt_assembly(
 
 #[must_use]
 pub fn last_system_prompt_assembly() -> Option<SystemPromptAssemblyDiag> {
-    LAST_SYSTEM_PROMPT_ASSEMBLY
+    *LAST_SYSTEM_PROMPT_ASSEMBLY
         .lock()
         .unwrap_or_else(|p| p.into_inner())
-        .clone()
 }
 
 /// Last layered memory selector stats (in-process), for `zeroclaw doctor query-engine`.
@@ -129,10 +128,9 @@ pub fn record_layered_memory_selection(
 
 #[must_use]
 pub fn last_layered_memory_selection() -> Option<LayeredMemoryDiag> {
-    LAST_LAYERED_MEMORY
+    *LAST_LAYERED_MEMORY
         .lock()
         .unwrap_or_else(|p| p.into_inner())
-        .clone()
 }
 
 /// Latest session-memory digest for compaction injection and diagnostics (~300 token budget).
@@ -210,10 +208,9 @@ pub fn record_last_memory_injection_now() {
 
 #[must_use]
 pub fn last_memory_injection() -> Option<std::time::Instant> {
-    LAST_MEMORY_INJECTION
+    *LAST_MEMORY_INJECTION
         .lock()
         .unwrap_or_else(|p| p.into_inner())
-        .clone()
 }
 
 async fn run_engine_post_turn_consolidation(

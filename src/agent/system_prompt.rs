@@ -316,7 +316,6 @@ pub fn assemble_with_memo(
 }
 
 /// One-shot assembly without cross-turn memoization.
-#[must_use]
 pub fn assemble_once(ctx: &PromptAssemblyContext<'_>) -> Result<SystemPrompt> {
     let mut m = AssemblyMemo::default();
     assemble_with_memo(&mut m, ctx).map(|(s, _)| s)
@@ -324,6 +323,7 @@ pub fn assemble_once(ctx: &PromptAssemblyContext<'_>) -> Result<SystemPrompt> {
 
 /// Full pipeline matching `channels::build_system_prompt_with_mode_and_autonomy` output shape.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn build_system_prompt_with_mode_and_autonomy(
     workspace_dir: &Path,
     model_name: &str,
@@ -407,7 +407,7 @@ pub struct SystemPromptAssemblyRefs<'a> {
     pub layered: Option<LayeredMemoryAssembly<'a>>,
 }
 
-impl<'a> SystemPromptAssemblyRefs<'a> {
+impl SystemPromptAssemblyRefs<'_> {
     pub fn prompt_context<'b>(
         &'b self,
         native_tools: bool,
@@ -444,7 +444,7 @@ pub fn patch_history_system_prompt(
     native_tools: bool,
     static_suffix: &str,
     layered_memory_markdown: Option<&str>,
-    history: &mut Vec<ChatMessage>,
+    history: &mut [ChatMessage],
 ) -> Result<()> {
     let ctx = refs.prompt_context(native_tools, static_suffix, layered_memory_markdown);
     let (sp, static_reused) = assemble_with_memo(memo, &ctx)?;
@@ -460,7 +460,9 @@ pub fn patch_history_system_prompt(
     }
     let st = sp.static_prefix.chars().count() / 4;
     let dt = sp.dynamic_tail.chars().count() / 4;
-    crate::agent::query_engine::record_system_prompt_assembly(st as u32, dt as u32, static_reused);
+    let st_u32 = u32::try_from(st).unwrap_or(u32::MAX);
+    let dt_u32 = u32::try_from(dt).unwrap_or(u32::MAX);
+    crate::agent::query_engine::record_system_prompt_assembly(st_u32, dt_u32, static_reused);
     Ok(())
 }
 
@@ -593,7 +595,7 @@ fn render_static_body(ctx: &PromptAssemblyContext<'_>) -> Result<String> {
     });
     prompt.push('\n');
 
-    if let Some(ref s) = ctx.security_summary {
+    if let Some(s) = ctx.security_summary {
         if !s.trim().is_empty() {
             prompt.push_str("\n\n### Active Security Policy\n\n");
             prompt.push_str(s);

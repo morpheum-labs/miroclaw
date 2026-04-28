@@ -453,8 +453,8 @@ async fn handle_socket(
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(text) {
             if parsed["type"].as_str() == Some("message") {
                 let content = parsed["content"].as_str().unwrap_or("").to_string();
-                if !content.is_empty() {
-                    if !maybe_handle_gateway_chat_slash(
+                if !content.is_empty()
+                    && !maybe_handle_gateway_chat_slash(
                         &state,
                         &session_key,
                         &content,
@@ -462,20 +462,13 @@ async fn handle_socket(
                         &mut sender,
                     )
                     .await
-                    {
-                        if let Some(ref backend) = state.session_backend {
-                            let user_msg = crate::providers::ChatMessage::user(&content);
-                            let _ = backend.append(&session_key, &user_msg);
-                        }
-                        process_chat_message(
-                            &state,
-                            &mut agent,
-                            &mut sender,
-                            &content,
-                            &session_key,
-                        )
-                        .await;
+                {
+                    if let Some(ref backend) = state.session_backend {
+                        let user_msg = crate::providers::ChatMessage::user(&content);
+                        let _ = backend.append(&session_key, &user_msg);
                     }
+                    process_chat_message(&state, &mut agent, &mut sender, &content, &session_key)
+                        .await;
                 }
             } else {
                 let unknown_type = parsed["type"].as_str().unwrap_or("unknown");
@@ -596,10 +589,8 @@ async fn process_chat_message(
     let forward_fut = async {
         while let Some(item) = event_rx.recv().await {
             let ws_msg = match item {
-                TurnEventSink::DeltaText(delta) => {
-                    serde_json::json!({ "type": "chunk", "content": delta })
-                }
-                TurnEventSink::Emit(TurnEvent::Chunk { delta }) => {
+                TurnEventSink::DeltaText(delta)
+                | TurnEventSink::Emit(TurnEvent::Chunk { delta }) => {
                     serde_json::json!({ "type": "chunk", "content": delta })
                 }
                 TurnEventSink::Emit(TurnEvent::ToolCall { name, args }) => {

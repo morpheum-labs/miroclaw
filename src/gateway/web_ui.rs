@@ -4,6 +4,7 @@
 //! are read from disk; otherwise the gateway uses compile-time embedded assets (when the
 //! `embedded-web-ui` feature is enabled).
 
+use std::fmt::Write as _;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -63,8 +64,28 @@ impl WebUiServeState {
     }
 
     /// Test helper: embedded-only (or external if `config.webui` is set and valid).
+    ///
+    /// When the binary is built without `embedded-web-ui` and no valid `[webui].external_path`
+    /// is present, creates a minimal temp directory with `index.html` so gateway tests can
+    /// construct [`AppState`] without bundling the full dashboard.
     pub fn for_tests(config: &Config) -> Self {
-        Self::bootstrap(config).expect("web UI bootstrap in tests")
+        match Self::bootstrap(config) {
+            Ok(s) => s,
+            Err(_) => {
+                let dir = tempfile::tempdir().expect("tempdir for web UI test dist");
+                std::fs::write(
+                    dir.path().join("index.html"),
+                    "<!doctype html><title>t</title>",
+                )
+                .expect("write minimal index.html for tests");
+                let mut cfg = config.clone();
+                cfg.webui.external_path = dir.path().display().to_string();
+                let s = Self::bootstrap(&cfg)
+                    .unwrap_or_else(|e| panic!("web UI bootstrap in tests (temp dist): {e}"));
+                std::mem::forget(dir);
+                s
+            }
+        }
     }
 
     pub fn status_json(&self, path_prefix: &str) -> WebUiStatus {
@@ -118,15 +139,20 @@ impl WebUiServeState {
 
 pub fn format_slash_status(state: &AppState) -> String {
     let s = state.web_ui.status_json(state.path_prefix.as_str());
-    let mut out = format!(
+    let mut out = String::new();
+    let _ = writeln!(
+        &mut out,
         "WebUI source: {} (path-prefix rewrite: {})\n",
         s.source,
         if s.path_prefix_rewrite { "on" } else { "off" }
     );
     if let Some(p) = &s.external_path {
-        out.push_str(&format!("External root: {p}\n"));
+        let _ = writeln!(&mut out, "External root: {p}");
     }
-    out.push_str("Reload: POST /api/webui/reload (or change config and save).");
+    let _ = writeln!(
+        &mut out,
+        "Reload: POST /api/webui/reload (or change config and save)."
+    );
     out
 }
 
@@ -234,22 +260,25 @@ fn resolve_external_path(raw: &str, workspace_dir: &Path) -> PathBuf {
 }
 
 fn validate_external_root(path: &Path) -> Result<(PathBuf, PathBuf), String> {
-    let meta = std::fs::metadata(path).map_err(|e| format!("{path:?}: {e}"))?;
+    let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if !meta.is_dir() {
-        return Err(format!("{path:?} is not a directory"));
+        return Err(format!("{} is not a directory", path.display()));
     }
     let index = path.join("index.html");
     if !index.is_file() {
-        return Err(format!("{path:?} has no index.html"));
+        return Err(format!("{} has no index.html", path.display()));
     }
-    let canonical = path.canonicalize().map_err(|e| format!("{path:?}: {e}"))?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     let display = path.to_path_buf();
 
     let manifest = canonical.join(WEBUI_MANIFEST);
     if manifest.is_file() {
-        let txt = std::fs::read_to_string(&manifest).map_err(|e| format!("{manifest:?}: {e}"))?;
-        let v: serde_json::Value =
-            serde_json::from_str(&txt).map_err(|e| format!("{manifest:?}: invalid JSON ({e})"))?;
+        let txt = std::fs::read_to_string(&manifest)
+            .map_err(|e| format!("{}: {e}", manifest.display()))?;
+        let v: serde_json::Value = serde_json::from_str(&txt)
+            .map_err(|e| format!("{}: invalid JSON ({e})", manifest.display()))?;
         let schema = v
             .get("schema")
             .and_then(serde_json::Value::as_u64)

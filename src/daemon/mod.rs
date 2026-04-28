@@ -62,9 +62,17 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
 
     let mut handles: Vec<JoinHandle<()>> = vec![spawn_state_writer(config.clone())];
 
+    let (clawgotcha_tx, clawgotcha_rx) = if config.clawgotcha.enabled {
+        let (tx, rx) = tokio::sync::mpsc::channel::<clawgotcha::ChangeEvent>(256);
+        (Some(tx), Some(rx))
+    } else {
+        (None, None)
+    };
+
     {
         let gateway_cfg = config.clone();
         let gateway_host = host.clone();
+        let cg_tx = clawgotcha_tx.clone();
         handles.push(spawn_component_supervisor(
             "gateway",
             initial_backoff,
@@ -72,7 +80,8 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
             move || {
                 let cfg = gateway_cfg.clone();
                 let host = gateway_host.clone();
-                async move { Box::pin(crate::gateway::run_gateway(&host, port, cfg)).await }
+                let cg_tx = cg_tx.clone();
+                async move { Box::pin(crate::gateway::run_gateway(&host, port, cfg, cg_tx)).await }
             },
         ));
     }
@@ -122,6 +131,30 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
     } else {
         crate::health::mark_component_ok("scheduler");
         tracing::info!("Cron disabled; scheduler supervisor not started");
+    }
+
+    if let Some(rx) = clawgotcha_rx {
+        let sync_cfg = config.clone();
+        let cg_rx_cell = std::sync::Arc::new(std::sync::Mutex::new(Some(rx)));
+        handles.push(spawn_component_supervisor(
+            "clawgotcha",
+            initial_backoff,
+            max_backoff,
+            move || {
+                let cfg = sync_cfg.clone();
+                let rx_slot = std::sync::Arc::clone(&cg_rx_cell);
+                async move {
+                    let rx = rx_slot
+                        .lock()
+                        .expect("clawgotcha rx mutex poisoned")
+                        .take()
+                        .expect("clawgotcha receiver already taken");
+                    Box::pin(crate::clawgotcha_host::run_sync_supervised(cfg, rx)).await
+                }
+            },
+        ));
+    } else {
+        crate::health::mark_component_ok("clawgotcha");
     }
 
     println!("🧠 ZeroClaw daemon started");

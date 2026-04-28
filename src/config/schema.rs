@@ -65,7 +65,8 @@ static RUNTIME_PROXY_CLIENT_CACHE: OnceLock<RwLock<HashMap<String, reqwest::Clie
 /// the first of `config.toml`, `configuration.yaml`, and `config.yaml` that exists; otherwise
 /// a new `config.toml` is created. Delegate agents in `[agents]` can be supplemented or
 /// replaced by a JSON file (`agents_list_path`) and/or a JSON document from `agents_list_url`
-/// (merged after the main file; the URL runs last, so it wins on duplicate agent names).
+/// (merged after the main file; the URL runs last, so it wins on duplicate agent names), unless
+/// `[clawgotcha].authoritative_over_external_lists` disables that merge when Clawgotcha is enabled.
 ///
 /// Workspace and directory resolution: `MIROCLAW_WORKSPACE` env → `active_workspace.toml` marker →
 /// `~/.miroclaw/config.toml` (with legacy `~/.miroclaw` support) — see `resolve_config_dir_for_workspace` / `load_or_init`.
@@ -204,6 +205,10 @@ pub struct Config {
     /// Cron job configuration (`[cron]`).
     #[serde(default)]
     pub cron: CronConfig,
+
+    /// Clawgotcha control-plane integration (`[clawgotcha]`).
+    #[serde(default)]
+    pub clawgotcha: ClawgotchaConfig,
 
     /// Channel configurations: Telegram, Discord, Slack, etc. (`[channels_config]`).
     #[serde(default)]
@@ -2259,19 +2264,11 @@ impl Default for GatewayConfig {
 ///
 /// When `external_path` is set to a directory containing `index.html` (a Vite `web/dist`
 /// build), the gateway serves the UI from disk instead of embedded assets.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct WebUiConfig {
     /// Directory with built dashboard (`index.html`, `assets/`, …). Empty uses embedded `web/dist/`.
     #[serde(default)]
     pub external_path: String,
-}
-
-impl Default for WebUiConfig {
-    fn default() -> Self {
-        Self {
-            external_path: String::new(),
-        }
-    }
 }
 
 /// Pairing dashboard configuration (`[gateway.pairing_dashboard]`).
@@ -6146,6 +6143,68 @@ impl Default for CronConfig {
     }
 }
 
+// ── Clawgotcha ────────────────────────────────────────────────────
+
+/// Clawgotcha control-plane integration (`[clawgotcha]` section).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ClawgotchaConfig {
+    /// Enable sync with Clawgotcha (registration, heartbeat, deltas).
+    #[serde(default)]
+    pub enabled: bool,
+    /// Base URL of the Clawgotcha API (required when `enabled = true`).
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Logical instance name registered with Clawgotcha.
+    #[serde(default)]
+    pub instance_name: Option<String>,
+    /// Public base URL for webhooks (e.g. `https://tunnel.example.com`), used when registering
+    /// `POST …/webhook/clawgotcha` with the control plane. Should match how clients reach the gateway.
+    #[serde(default)]
+    pub callback_public_base_url: Option<String>,
+    /// `poll`, `webhook`, or `hybrid` (case-insensitive).
+    #[serde(default = "default_clawgotcha_sync_mode")]
+    pub sync_mode: String,
+    #[serde(default = "default_clawgotcha_heartbeat_secs")]
+    pub heartbeat_interval_seconds: u64,
+    #[serde(default = "default_clawgotcha_poll_secs")]
+    pub poll_interval_seconds: u64,
+    /// Hex-encoded shared secret for verifying inbound webhook HMAC (optional).
+    #[serde(default)]
+    pub webhook_hmac_secret: Option<String>,
+    /// When `true` and Clawgotcha is enabled, skip merging `agents_list_path` / `agents_list_url`
+    /// so remote definitions remain authoritative.
+    #[serde(default)]
+    pub authoritative_over_external_lists: bool,
+}
+
+fn default_clawgotcha_sync_mode() -> String {
+    "poll".to_string()
+}
+
+fn default_clawgotcha_heartbeat_secs() -> u64 {
+    30
+}
+
+fn default_clawgotcha_poll_secs() -> u64 {
+    60
+}
+
+impl Default for ClawgotchaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: None,
+            instance_name: None,
+            callback_public_base_url: None,
+            sync_mode: default_clawgotcha_sync_mode(),
+            heartbeat_interval_seconds: default_clawgotcha_heartbeat_secs(),
+            poll_interval_seconds: default_clawgotcha_poll_secs(),
+            webhook_hmac_secret: None,
+            authoritative_over_external_lists: false,
+        }
+    }
+}
+
 // ── Tunnel ──────────────────────────────────────────────────────
 
 /// Tunnel configuration for exposing the gateway publicly (`[tunnel]` section).
@@ -8347,6 +8406,7 @@ impl Default for Config {
             embedding_routes: Vec::new(),
             heartbeat: HeartbeatConfig::default(),
             cron: CronConfig::default(),
+            clawgotcha: ClawgotchaConfig::default(),
             channels_config: ChannelsConfig::default(),
             memory: MemoryConfig::default(),
             storage: StorageConfig::default(),
@@ -9045,7 +9105,9 @@ fn parse_external_agents_object(
     Ok(out)
 }
 
-fn agents_from_json_array(arr: &[serde_json::Value]) -> Result<HashMap<String, DelegateAgentConfig>> {
+fn agents_from_json_array(
+    arr: &[serde_json::Value],
+) -> Result<HashMap<String, DelegateAgentConfig>> {
     let mut out = HashMap::new();
     for (i, item) in arr.iter().enumerate() {
         let o = item.as_object().with_context(|| {
@@ -9079,6 +9141,12 @@ fn log_external_agent_merge(merged: &HashMap<String, DelegateAgentConfig>, sourc
 /// Apply `agents_list_path` and `agents_list_url` after the main file is loaded. Later sources
 /// win on the same key.
 async fn merge_external_agent_sources(config: &mut Config) -> Result<()> {
+    if config.clawgotcha.enabled && config.clawgotcha.authoritative_over_external_lists {
+        tracing::info!(
+            "clawgotcha authoritative_over_external_lists: skipping agents_list_path and agents_list_url merge"
+        );
+        return Ok(());
+    }
     if let Some(ref raw) = config.agents_list_path {
         let t = raw.trim();
         if !t.is_empty() {
@@ -9140,7 +9208,8 @@ fn parse_toml_config_with_shell_migration(content: &str) -> Result<Config> {
         toml::from_str(content).context("parse config file as TOML for migration + deserialize")?;
     let _migration = migrate_shell_tool_table_in_root(&mut root);
     let merged = toml::to_string(&root).context("serialize TOML config after shell migration")?;
-    let mut config: Config = toml::from_str(&merged).context("deserialize TOML config after migration")?;
+    let mut config: Config =
+        toml::from_str(&merged).context("deserialize TOML config after migration")?;
     // Same merge as `load_or_init` for toml: preserve default auto_approve.
     config.autonomy.ensure_default_auto_approve();
     Ok(config)
@@ -9195,8 +9264,8 @@ impl Config {
                     (c, None)
                 }
                 StoredConfigFormat::Toml => {
-                    let mut root: toml::Value = toml::from_str(&contents)
-                        .context("Failed to parse config file as TOML")?;
+                    let mut root: toml::Value =
+                        toml::from_str(&contents).context("Failed to parse config file as TOML")?;
                     let migration = migrate_shell_tool_table_in_root(&mut root);
                     if migration == ShellTomlMigration::MigratedFromShellTool {
                         let ts = std::time::SystemTime::now()
@@ -9224,8 +9293,8 @@ impl Config {
                     //
                     // We now deserialize with `toml::from_str` (which is correct)
                     // and run `serde_ignored` separately just for diagnostics.
-                    let mut c: Config = toml::from_str(&merged)
-                        .context("Failed to deserialize config file")?;
+                    let mut c: Config =
+                        toml::from_str(&merged).context("Failed to deserialize config file")?;
 
                     // Ensure the built-in default auto_approve entries are always
                     // present.  When a user specifies `auto_approve` in their TOML
@@ -9638,11 +9707,7 @@ impl Config {
             config.apply_env_overrides();
             merge_external_agent_sources(&mut config).await?;
             for agent in config.agents.values_mut() {
-                decrypt_optional_secret(
-                    &store,
-                    &mut agent.api_key,
-                    "config.agents.*.api_key",
-                )?;
+                decrypt_optional_secret(&store, &mut agent.api_key, "config.agents.*.api_key")?;
             }
             config.validate()?;
             tracing::info!(
@@ -9668,14 +9733,11 @@ impl Config {
 
             config.apply_env_overrides();
             {
-                let store = crate::security::SecretStore::new(&zeroclaw_dir, config.secrets.encrypt);
+                let store =
+                    crate::security::SecretStore::new(&zeroclaw_dir, config.secrets.encrypt);
                 merge_external_agent_sources(&mut config).await?;
                 for agent in config.agents.values_mut() {
-                    decrypt_optional_secret(
-                        &store,
-                        &mut agent.api_key,
-                        "config.agents.*.api_key",
-                    )?;
+                    decrypt_optional_secret(&store, &mut agent.api_key, "config.agents.*.api_key")?;
                 }
             }
             config.validate()?;
@@ -10379,6 +10441,38 @@ impl Config {
             }
         }
 
+        // Clawgotcha
+        if self.clawgotcha.enabled {
+            let url = self.clawgotcha.url.as_deref().unwrap_or("").trim();
+            if url.is_empty() {
+                anyhow::bail!("clawgotcha.url must not be empty when clawgotcha.enabled is true");
+            }
+            let name = self
+                .clawgotcha
+                .instance_name
+                .as_deref()
+                .unwrap_or("")
+                .trim();
+            if name.is_empty() {
+                anyhow::bail!(
+                    "clawgotcha.instance_name must not be empty when clawgotcha.enabled is true"
+                );
+            }
+            let mode = self.clawgotcha.sync_mode.trim().to_ascii_lowercase();
+            if mode != "poll" && mode != "webhook" && mode != "hybrid" {
+                anyhow::bail!(
+                    "clawgotcha.sync_mode must be poll, webhook, or hybrid (got {:?})",
+                    self.clawgotcha.sync_mode
+                );
+            }
+            if self.clawgotcha.heartbeat_interval_seconds == 0 {
+                anyhow::bail!("clawgotcha.heartbeat_interval_seconds must be greater than 0");
+            }
+            if self.clawgotcha.poll_interval_seconds == 0 {
+                anyhow::bail!("clawgotcha.poll_interval_seconds must be greater than 0");
+            }
+        }
+
         Ok(())
     }
 
@@ -10544,6 +10638,18 @@ impl Config {
             if !t.is_empty() {
                 self.agents_list_url = Some(t.to_string());
             }
+        }
+
+        // Clawgotcha: MIROCLAW_CLAWGOTCHA_URL, MIROCLAW_CLAWGOTCHA_ENABLED
+        if let Ok(url) = std::env::var("MIROCLAW_CLAWGOTCHA_URL") {
+            let t = url.trim();
+            if !t.is_empty() {
+                self.clawgotcha.url = Some(t.to_string());
+            }
+        }
+        if let Ok(v) = std::env::var("MIROCLAW_CLAWGOTCHA_ENABLED") {
+            let n = v.trim().to_ascii_lowercase();
+            self.clawgotcha.enabled = matches!(n.as_str(), "1" | "true" | "yes" | "on");
         }
 
         // Gateway host: MIROCLAW_GATEWAY_HOST or HOST
@@ -11146,12 +11252,10 @@ impl Config {
         }
 
         let stored_body = match stored_config_format_for_path(&config_path) {
-            StoredConfigFormat::Yaml => {
-                serde_yaml::to_string(&config_to_save).context("Failed to serialize config as YAML")?
-            }
-            StoredConfigFormat::Toml => {
-                toml::to_string_pretty(&config_to_save).context("Failed to serialize config as TOML")?
-            }
+            StoredConfigFormat::Yaml => serde_yaml::to_string(&config_to_save)
+                .context("Failed to serialize config as YAML")?,
+            StoredConfigFormat::Toml => toml::to_string_pretty(&config_to_save)
+                .context("Failed to serialize config as TOML")?,
         };
 
         let parent_dir = config_path
@@ -11735,6 +11839,7 @@ default_temperature = 0.7
                 ..HeartbeatConfig::default()
             },
             cron: CronConfig::default(),
+            clawgotcha: ClawgotchaConfig::default(),
             channels_config: ChannelsConfig {
                 cli: true,
                 telegram: Some(TelegramConfig {
@@ -12316,6 +12421,7 @@ default_temperature = 0.7
             query_classification: QueryClassificationConfig::default(),
             heartbeat: HeartbeatConfig::default(),
             cron: CronConfig::default(),
+            clawgotcha: ClawgotchaConfig::default(),
             channels_config: ChannelsConfig::default(),
             memory: MemoryConfig::default(),
             storage: StorageConfig::default(),

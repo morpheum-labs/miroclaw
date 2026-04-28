@@ -29,16 +29,14 @@ impl ModelRoutingConfigTool {
             )
         })?;
 
-        let mut parsed: Config = crate::config::parse_stored_config_contents(
-            &self.config.config_path,
-            &contents,
-        )
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "Failed to parse config file {}: {error}",
-                self.config.config_path.display()
-            )
-        })?;
+        let mut parsed: Config =
+            crate::config::parse_stored_config_contents(&self.config.config_path, &contents)
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "Failed to parse config file {}: {error}",
+                        self.config.config_path.display()
+                    )
+                })?;
         parsed.config_path = self.config.config_path.clone();
         parsed.workspace_dir = self.config.workspace_dir.clone();
         Ok(parsed)

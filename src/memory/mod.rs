@@ -16,9 +16,11 @@ pub mod layered_context;
 pub mod layered_paths;
 pub mod layered_selector;
 
+#[allow(unused_imports)]
 pub use layered_context::{
     install_pending_layered_turn, peek_pending_layered_turn, LayeredTurnContext,
 };
+#[allow(unused_imports)]
 pub use layered_selector::{LayeredMemorySelectionResult, MemoryLayer};
 pub mod lucid;
 pub mod markdown;

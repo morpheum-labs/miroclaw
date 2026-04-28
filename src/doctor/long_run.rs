@@ -98,13 +98,10 @@ pub async fn run(config: &Config, hand_filter: Option<&str>) -> Result<()> {
             if !matches!(
                 hand.coordinator_mode,
                 crate::hands::CoordinatorMode::Disabled
-            ) {
-                if a.map(|s| s > 86_400).unwrap_or(false) {
-                    score = bump_score(score, Score::Yellow);
-                    rec.push(
-                        "Scratchpad decisions look stale for an active coordinator hand.".into(),
-                    );
-                }
+            ) && a.map(|s| s > 86_400).unwrap_or(false)
+            {
+                score = bump_score(score, Score::Yellow);
+                rec.push("Scratchpad decisions look stale for an active coordinator hand.".into());
             }
         } else if matches!(
             hand.coordinator_mode,

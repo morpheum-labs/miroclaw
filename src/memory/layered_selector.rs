@@ -195,7 +195,9 @@ pub async fn select_relevant(
             if let Ok(tv) = embedder.embed_one(&c.title).await {
                 if tv.len() == qv.len() && !tv.is_empty() {
                     let sim = cosine_sim(qv, &tv).max(0.0) as f32;
+                    #[allow(clippy::cast_possible_truncation)]
                     let vw = memory.vector_weight as f32;
+                    #[allow(clippy::cast_possible_truncation)]
                     let kw = memory.keyword_weight as f32;
                     sc = norm_kw * kw + sim * vw;
                 } else {
@@ -214,7 +216,7 @@ pub async fn select_relevant(
     }
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-    let max_t = layered.max_topics_in_prompt.max(1).min(12);
+    let max_t = layered.max_topics_in_prompt.clamp(1, 12);
     let staleness_days = layered.staleness_warn_days.max(1);
     let mut picked = 0usize;
     let mut warn = 0usize;
@@ -260,7 +262,7 @@ pub async fn select_relevant(
         }
     }
 
-    let max_chars = layered.max_chars_total.max(500).min(50_000);
+    let max_chars = layered.max_chars_total.clamp(500, 50_000);
     if block.chars().count() > max_chars {
         let t: String = block.chars().take(max_chars).collect();
         block = format!("{t}\n\n_… [layered memory truncated]_\n");
