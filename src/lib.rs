@@ -81,6 +81,9 @@ pub(crate) mod tunnel;
 pub(crate) mod util;
 pub mod verifiable_intent;
 
+#[cfg(test)]
+pub(crate) mod test_env_lock;
+
 #[cfg(feature = "plugins-wasm")]
 pub mod plugins;
 

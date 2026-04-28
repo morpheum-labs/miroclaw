@@ -1383,6 +1383,7 @@ mod tests {
 
     #[test]
     fn bearer_token_from_env() {
+        let _env = crate::test_env_lock::lock();
         let _guard = EnvGuard::set("BEDROCK_API_KEY", Some("env-bearer-token"));
         // Clear SigV4 vars to ensure Bearer is chosen.
         let _ak_guard = EnvGuard::set("AWS_ACCESS_KEY_ID", None);
@@ -1397,6 +1398,7 @@ mod tests {
 
     #[test]
     fn bearer_token_precedence() {
+        let _env = crate::test_env_lock::lock();
         let _bearer_guard = EnvGuard::set("BEDROCK_API_KEY", Some("bearer-key"));
         let _ak_guard = EnvGuard::set("AWS_ACCESS_KEY_ID", Some("AKIAEXAMPLE"));
         let _sk_guard = EnvGuard::set("AWS_SECRET_ACCESS_KEY", Some("secret"));

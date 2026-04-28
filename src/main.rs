@@ -117,6 +117,9 @@ mod tunnel;
 mod util;
 mod verifiable_intent;
 
+#[cfg(test)]
+mod test_env_lock;
+
 use config::Config;
 
 // Re-export so binary modules can use crate::<CommandEnum> while keeping a single source of truth.

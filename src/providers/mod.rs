@@ -2360,6 +2360,7 @@ mod tests {
 
     #[test]
     fn resolve_provider_credential_bedrock_uses_internal_credential_path() {
+        let _env = crate::test_env_lock::lock();
         let _generic_guard = EnvGuard::set("API_KEY", Some("generic-key"));
         let _override_guard = EnvGuard::set("OPENROUTER_API_KEY", Some("openrouter-key"));
         let _bedrock_guard = EnvGuard::set("BEDROCK_API_KEY", None);
@@ -2374,6 +2375,7 @@ mod tests {
 
     #[test]
     fn resolve_provider_credential_bedrock_returns_bearer_token_from_env() {
+        let _env = crate::test_env_lock::lock();
         let _bedrock_guard = EnvGuard::set("BEDROCK_API_KEY", Some("bedrock-bearer-token"));
 
         assert_eq!(
