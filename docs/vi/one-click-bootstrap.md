@@ -1,21 +1,21 @@
 # Cài đặt một lệnh
 
-Cách cài đặt và khởi tạo ZeroClaw nhanh nhất.
+Cách cài đặt và khởi tạo Miroclaw được hỗ trợ nhanh nhất.
 
 Xác minh lần cuối: **2026-02-20**.
 
 ## Cách 0: Homebrew (macOS/Linuxbrew)
 
 ```bash
-brew install zeroclaw
+brew install miroclaw
 ```
 
-## Cách A (Khuyến nghị): Clone + chạy script cục bộ
+## Cách A (Khuyến nghị): Clone + script cục bộ
 
 ```bash
-git clone https://github.com/zeroclaw-labs/zeroclaw.git
-cd zeroclaw
-./install.sh
+git clone https://github.com/morpheum-labs/miroclaw.git
+cd miroclaw
+bash scripts/install.sh
 ```
 
 Mặc định script sẽ:
@@ -30,86 +30,161 @@ Build từ mã nguồn thường yêu cầu tối thiểu:
 - **2 GB RAM + swap**
 - **6 GB dung lượng trống**
 
-Khi tài nguyên hạn chế, bootstrap sẽ thử tải binary dựng sẵn trước.
+Khi tài nguyên hạn chế, bootstrap sẽ thử binary dựng sẵn trước.
 
 ```bash
-./install.sh --prefer-prebuilt
+bash scripts/install.sh --prefer-prebuilt
 ```
 
-Chỉ dùng binary dựng sẵn, báo lỗi nếu không tìm thấy bản phù hợp:
+Chỉ dùng binary dựng sẵn, báo lỗi nếu không có asset phù hợp:
 
 ```bash
-./install.sh --prebuilt-only
+bash scripts/install.sh --prebuilt-only
 ```
 
-Bỏ qua binary dựng sẵn, buộc build từ mã nguồn:
+Bỏ qua binary dựng sẵn, buộc biên dịch từ mã nguồn:
 
 ```bash
-./install.sh --force-source-build
+bash scripts/install.sh --force-source-build
 ```
 
 ## Bootstrap kép
 
-Mặc định là **chỉ ứng dụng** (build/cài ZeroClaw), yêu cầu Rust toolchain sẵn có.
+Mặc định là **chỉ ứng dụng** (build/cài Miroclaw), yêu cầu Rust toolchain sẵn có.
 
-Với máy mới, bật bootstrap môi trường:
+Trên máy mới, bật bootstrap môi trường:
 
 ```bash
-./install.sh --install-system-deps --install-rust
+bash scripts/install.sh --install-system-deps --install-rust
 ```
 
 Lưu ý:
 
-- `--install-system-deps` cài các thành phần biên dịch/build cần thiết (có thể cần `sudo`).
-- `--install-rust` cài Rust qua `rustup` nếu chưa có.
-- `--prefer-prebuilt` thử tải binary dựng sẵn trước, nếu không có thì build từ nguồn.
-- `--prebuilt-only` tắt phương án build từ nguồn.
-- `--force-source-build` tắt hoàn toàn phương án binary dựng sẵn.
+- `--install-system-deps` cài phụ thuộc biên dịch/build (có thể cần `sudo`).
+- `--install-rust` cài Rust qua `rustup` nếu thiếu.
+- `--prefer-prebuilt` thử tải binary phát hành trước, sau đó build từ nguồn.
+- `--prebuilt-only` tắt fallback build từ nguồn.
+- `--force-source-build` tắt hoàn toàn luồng binary dựng sẵn.
 
-## Cách B: Lệnh từ xa một dòng
+## Cách B: Một dòng từ xa
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/morpheum-labs/miroclaw/master/scripts/install.sh | bash
 ```
 
-Với môi trường yêu cầu bảo mật cao, nên dùng Cách A để kiểm tra script trước khi chạy.
+Môi trường yêu cầu bảo mật cao nên dùng Cách A để đọc script trước.
 
-Nếu chạy Cách B ngoài thư mục repo, bootstrap script sẽ tự clone workspace tạm, build, cài đặt rồi dọn dẹp.
+Nếu chạy Cách B ngoài checkout repo, script sẽ clone workspace tạm, build, cài và dọn dẹp.
 
-## Chế độ thiết lập tùy chọn
+## Chế độ onboarding tùy chọn
 
-### Thiết lập trong container (Docker)
+### Trong container (Docker)
 
 ```bash
-./install.sh --docker
+bash scripts/install.sh --docker
 ```
 
-Lệnh này build image ZeroClaw cục bộ và chạy thiết lập trong container, lưu config/workspace vào `./.zeroclaw-docker`.
+Build image Miroclaw cục bộ và chạy onboarding trong container, lưu config/workspace vào `./.zeroclaw-docker`.
 
-### Thiết lập nhanh (không tương tác)
+CLI container mặc định là `docker`; nếu không có Docker nhưng có `podman`, installer tự chuyển. Có thể đặt `MIROCLAW_CONTAINER_CLI` (ví dụ: `MIROCLAW_CONTAINER_CLI=podman bash scripts/install.sh --docker`).
+
+Với Podman, installer dùng `--userns keep-id` và nhãn `:Z` cho volume.
+
+Nếu thêm `--skip-build`, installer bỏ bước build image cục bộ. Trước tiên thử tag Docker cục bộ (`MIROCLAW_DOCKER_IMAGE`, mặc định: `miroclaw-bootstrap:local`); nếu không có, kéo `ghcr.io/morpheum-labs/miroclaw:latest` và tag cục bộ trước khi chạy.
+
+### Dừng và khởi động lại container Docker/Podman
+
+Sau khi `bash scripts/install.sh --docker` kết thúc, container thoát. Config và workspace được lưu trong thư mục dữ liệu (mặc định: `./.zeroclaw-docker`, hoặc `~/.zeroclaw-docker` khi bootstrap qua `curl | bash`). Ghi đè bằng `MIROCLAW_DOCKER_DATA_DIR`.
+
+**Không chạy lại `install.sh`** chỉ để restart — sẽ rebuild image và chạy lại onboarding. Thay vào đó, khởi động container mới từ image hiện có và mount lại thư mục dữ liệu.
+
+#### `docker-compose.yml` trong repo (Clawgotcha)
+
+`docker-compose.yml` ở gốc repo chạy máy chủ tham chiếu **Clawgotcha** (mặc định cổng **9847**). Nó **không** khởi động gateway Miroclaw (**42617**).
 
 ```bash
-./install.sh --api-key "sk-..." --provider openrouter
+docker compose up -d
 ```
 
-Hoặc dùng biến môi trường:
+Để chạy gateway trong Docker lâu dài, dùng `./scripts/install.sh --docker` hoặc ví dụ `docker run` thủ công bên dưới (image `miroclaw-bootstrap:local`).
+
+#### Chạy container thủ công (thư mục dữ liệu từ install.sh)
+
+Nếu đã cài qua `bash scripts/install.sh --docker` và muốn tái sử dụng `.zeroclaw-docker` không dùng compose:
 
 ```bash
-MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" ./install.sh
+# Docker
+docker run -d --name miroclaw \
+  --restart unless-stopped \
+  -v "$PWD/.zeroclaw-docker/.zeroclaw:/zeroclaw-data/.zeroclaw" \
+  -v "$PWD/.zeroclaw-docker/workspace:/zeroclaw-data/workspace" \
+  -e HOME=/zeroclaw-data \
+  -e MIROCLAW_WORKSPACE=/zeroclaw-data/workspace \
+  -p 42617:42617 \
+  miroclaw-bootstrap:local \
+  gateway
+
+# Podman (thêm --userns keep-id và :Z cho volume)
+podman run -d --name miroclaw \
+  --restart unless-stopped \
+  --userns keep-id \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/.zeroclaw-docker/.zeroclaw:/zeroclaw-data/.zeroclaw:Z" \
+  -v "$PWD/.zeroclaw-docker/workspace:/zeroclaw-data/workspace:Z" \
+  -e HOME=/zeroclaw-data \
+  -e MIROCLAW_WORKSPACE=/zeroclaw-data/workspace \
+  -p 42617:42617 \
+  miroclaw-bootstrap:local \
+  gateway
+```
+
+#### Lệnh vòng đời thường dùng
+
+```bash
+docker stop miroclaw
+docker start miroclaw
+docker logs -f miroclaw
+docker rm miroclaw
+docker exec miroclaw miroclaw status
+```
+
+#### Biến môi trường
+
+Khi chạy thủ công, truyền cấu hình provider qua biến môi trường hoặc đảm bảo đã lưu trong `config.toml` được persist:
+
+```bash
+docker run -d --name miroclaw \
+  -e API_KEY="sk-..." \
+  -e PROVIDER="openrouter" \
+  -v "$PWD/.zeroclaw-docker/.zeroclaw:/zeroclaw-data/.zeroclaw" \
+  -v "$PWD/.zeroclaw-docker/workspace:/zeroclaw-data/workspace" \
+  -p 42617:42617 \
+  miroclaw-bootstrap:local \
+  gateway
+```
+
+### Onboarding nhanh (không tương tác)
+
+```bash
+bash scripts/install.sh --api-key "sk-..." --provider openrouter
+```
+
+Hoặc:
+
+```bash
+MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" bash scripts/install.sh
 ```
 
 ## Các cờ hữu ích
 
 - `--install-system-deps`
 - `--install-rust`
-- `--skip-build`
+- `--skip-build` (trong `--docker`: dùng image cục bộ nếu có, nếu không kéo `ghcr.io/morpheum-labs/miroclaw:latest`)
 - `--skip-install`
 - `--provider <id>`
 
-Xem tất cả tùy chọn:
-
 ```bash
-./install.sh --help
+bash scripts/install.sh --help
 ```
 
 ## Tài liệu liên quan

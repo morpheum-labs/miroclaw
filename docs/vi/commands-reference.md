@@ -1,6 +1,6 @@
-# Tham khảo lệnh ZeroClaw
+# Tham khảo lệnh Miroclaw
 
-Dựa trên CLI hiện tại (`zeroclaw --help`).
+Dựa trên CLI hiện tại (`miroclaw --help`).
 
 Xác minh lần cuối: **2026-04-15**.
 
@@ -31,67 +31,67 @@ Xác minh lần cuối: **2026-04-15**.
 
 ### `onboard`
 
-- `zeroclaw onboard`
-- `zeroclaw onboard --channels-only`
-- `zeroclaw onboard --api-key <KEY> --provider <ID> --memory <sqlite|lucid|markdown|none>`
-- `zeroclaw onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none>`
+- `miroclaw onboard`
+- `miroclaw onboard --channels-only`
+- `miroclaw onboard --api-key <KEY> --provider <ID> --memory <sqlite|lucid|markdown|none>`
+- `miroclaw onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none>`
 
 ### `agent`
 
-- `zeroclaw agent`
-- `zeroclaw agent -m "Hello"`
-- `zeroclaw agent --provider <ID> --model <MODEL> --temperature <0.0-2.0>`
-- `zeroclaw agent --peripheral <board:path>`
+- `miroclaw agent`
+- `miroclaw agent -m "Hello"`
+- `miroclaw agent --provider <ID> --model <MODEL> --temperature <0.0-2.0>`
+- `miroclaw agent --peripheral <board:path>`
 
 ### `gateway` / `daemon`
 
-- `zeroclaw gateway [--host <HOST>] [--port <PORT>]`
-- `zeroclaw daemon [--host <HOST>] [--port <PORT>]`
+- `miroclaw gateway [--host <HOST>] [--port <PORT>]`
+- `miroclaw daemon [--host <HOST>] [--port <PORT>]`
 
 ### `service`
 
-- `zeroclaw service install`
-- `zeroclaw service start`
-- `zeroclaw service stop`
-- `zeroclaw service restart`
-- `zeroclaw service status`
-- `zeroclaw service uninstall`
+- `miroclaw service install`
+- `miroclaw service start`
+- `miroclaw service stop`
+- `miroclaw service restart`
+- `miroclaw service status`
+- `miroclaw service uninstall`
 
 ### `cron`
 
-- `zeroclaw cron list`
-- `zeroclaw cron add <expr> [--tz <IANA_TZ>] <command>`
-- `zeroclaw cron add-at <rfc3339_timestamp> <command>`
-- `zeroclaw cron add-every <every_ms> <command>`
-- `zeroclaw cron once <delay> <command>`
-- `zeroclaw cron remove <id>`
-- `zeroclaw cron pause <id>`
-- `zeroclaw cron resume <id>`
+- `miroclaw cron list`
+- `miroclaw cron add <expr> [--tz <IANA_TZ>] <command>`
+- `miroclaw cron add-at <rfc3339_timestamp> <command>`
+- `miroclaw cron add-every <every_ms> <command>`
+- `miroclaw cron once <delay> <command>`
+- `miroclaw cron remove <id>`
+- `miroclaw cron pause <id>`
+- `miroclaw cron resume <id>`
 
 ### `models`
 
-- `zeroclaw models refresh`
-- `zeroclaw models refresh --provider <ID>`
-- `zeroclaw models refresh --force`
+- `miroclaw models refresh`
+- `miroclaw models refresh --provider <ID>`
+- `miroclaw models refresh --force`
 
 `models refresh` hiện hỗ trợ làm mới danh mục trực tiếp cho các provider: `openrouter`, `openai`, `anthropic`, `groq`, `mistral`, `deepseek`, `xai`, `together-ai`, `gemini`, `ollama`, `astrai`, `venice`, `fireworks`, `cohere`, `moonshot`, `glm`, `zai`, `qwen` và `nvidia`.
 
 ### `doctor`
 
-- `zeroclaw doctor`
-- `zeroclaw doctor query-engine` — trace QueryEngine, system prompt, layered memory, memory injection, tóm tắt session-memory (trong tiến trình).
-- `zeroclaw doctor models [--provider <ID>] [--use-cache]`
-- `zeroclaw doctor traces [--limit <N>] [--event <TYPE>] [--contains <TEXT>]` / `zeroclaw doctor traces --id <TRACE_ID>`
-- `zeroclaw doctor long-run [HAND]` — kiểm tra hand điều phối (scratchpad, index AutoMemory, ranh giới `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__`); `HAND` là tên file TOML trong `~/.zeroclaw/hands` (bỏ qua để quét tất cả).
+- `miroclaw doctor`
+- `miroclaw doctor query-engine` — trace QueryEngine, system prompt, layered memory, memory injection, tóm tắt session-memory (trong tiến trình).
+- `miroclaw doctor models [--provider <ID>] [--use-cache]`
+- `miroclaw doctor traces [--limit <N>] [--event <TYPE>] [--contains <TEXT>]` / `miroclaw doctor traces --id <TRACE_ID>`
+- `miroclaw doctor long-run [HAND]` — kiểm tra hand điều phối (scratchpad, index AutoMemory, ranh giới `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__`); `HAND` là tên file TOML trong `~/.zeroclaw/hands` (bỏ qua để quét tất cả).
 
 ### `channel`
 
-- `zeroclaw channel list`
-- `zeroclaw channel start`
-- `zeroclaw channel doctor`
-- `zeroclaw channel bind-telegram <IDENTITY>`
-- `zeroclaw channel add <type> <json>`
-- `zeroclaw channel remove <name>`
+- `miroclaw channel list`
+- `miroclaw channel start`
+- `miroclaw channel doctor`
+- `miroclaw channel bind-telegram <IDENTITY>`
+- `miroclaw channel add <type> <json>`
+- `miroclaw channel remove <name>`
 
 Lệnh trong chat khi runtime đang chạy (Telegram/Discord):
 
@@ -111,13 +111,13 @@ Channel runtime cũng theo dõi `config.toml` và tự động áp dụng thay �
 
 ### `integrations`
 
-- `zeroclaw integrations info <name>`
+- `miroclaw integrations info <name>`
 
 ### `skills`
 
-- `zeroclaw skills list`
-- `zeroclaw skills install <source>`
-- `zeroclaw skills remove <name>`
+- `miroclaw skills list`
+- `miroclaw skills install <source>`
+- `miroclaw skills remove <name>`
 
 `<source>` chấp nhận git remote (`https://...`, `http://...`, `ssh://...` và `git@host:owner/repo.git`) hoặc đường dẫn cục bộ.
 
@@ -125,43 +125,43 @@ Skill manifest (`SKILL.toml`) hỗ trợ `prompts` và `[[tools]]`; cả hai đ�
 
 ### `migrate`
 
-- `zeroclaw migrate openclaw [--source <path>] [--dry-run]`
+- `miroclaw migrate openclaw [--source <path>] [--dry-run]`
 
 ### `config`
 
-- `zeroclaw config schema`
+- `miroclaw config schema`
 
 `config schema` xuất JSON Schema (draft 2020-12) cho toàn bộ hợp đồng `config.toml` ra stdout.
 
 ### `completions`
 
-- `zeroclaw completions bash`
-- `zeroclaw completions fish`
-- `zeroclaw completions zsh`
-- `zeroclaw completions powershell`
-- `zeroclaw completions elvish`
+- `miroclaw completions bash`
+- `miroclaw completions fish`
+- `miroclaw completions zsh`
+- `miroclaw completions powershell`
+- `miroclaw completions elvish`
 
 `completions` chỉ xuất ra stdout để script có thể được source trực tiếp mà không bị lẫn log/cảnh báo.
 
 ### `hardware`
 
-- `zeroclaw hardware discover`
-- `zeroclaw hardware introspect <path>`
-- `zeroclaw hardware info [--chip <chip_name>]`
+- `miroclaw hardware discover`
+- `miroclaw hardware introspect <path>`
+- `miroclaw hardware info [--chip <chip_name>]`
 
 ### `peripheral`
 
-- `zeroclaw peripheral list`
-- `zeroclaw peripheral add <board> <path>`
-- `zeroclaw peripheral flash [--port <serial_port>]`
-- `zeroclaw peripheral setup-uno-q [--host <ip_or_host>]`
-- `zeroclaw peripheral flash-nucleo`
+- `miroclaw peripheral list`
+- `miroclaw peripheral add <board> <path>`
+- `miroclaw peripheral flash [--port <serial_port>]`
+- `miroclaw peripheral setup-uno-q [--host <ip_or_host>]`
+- `miroclaw peripheral flash-nucleo`
 
 ## Kiểm tra nhanh
 
 Để xác minh nhanh tài liệu với binary hiện tại:
 
 ```bash
-zeroclaw --help
-zeroclaw <command> --help
+miroclaw --help
+miroclaw <command> --help
 ```

@@ -9,49 +9,49 @@ Last verified: **April 15, 2026**.
 Non-interactive bootstrap (API key + provider during install):
 
 ```bash
-./install.sh --api-key "sk-..." --provider openrouter
+bash scripts/install.sh --api-key "sk-..." --provider openrouter
 ```
 
 Equivalent with environment variables (see also [one-click-bootstrap.md](one-click-bootstrap.md)):
 
 ```bash
-MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" ./install.sh
+MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" bash scripts/install.sh
 ```
 
 Pre-built binaries and resource-constrained hosts:
 
 ```bash
-./install.sh --prefer-prebuilt
-./install.sh --prebuilt-only
+bash scripts/install.sh --prefer-prebuilt
+bash scripts/install.sh --prebuilt-only
 ```
 
 More install modes (Docker, system deps, Rust bootstrap): [one-click-bootstrap.md](one-click-bootstrap.md).
 
 ## Gateway and runtime
 
-Start the gateway (webhook server + web dashboard). `zeroclaw gateway` is shorthand for `gateway start` and uses `[gateway]` host and port from config (default **127.0.0.1:42617**).
+Start the gateway (webhook server + web dashboard). `miroclaw gateway` is shorthand for `gateway start` and uses `[gateway]` host and port from config (default **127.0.0.1:42617**).
 
 ```bash
-zeroclaw gateway
-zeroclaw gateway start
+miroclaw gateway
+miroclaw gateway start
 ```
 
-Bind an ephemeral port (read the bound port from logs or `zeroclaw status`):
+Bind an ephemeral port (read the bound port from logs or `miroclaw status`):
 
 ```bash
-zeroclaw gateway start --port 0
+miroclaw gateway start --port 0
 ```
 
 Interactive agent session (REPL-style):
 
 ```bash
-zeroclaw agent
+miroclaw agent
 ```
 
 Full autonomous runtime (gateway + channels + cron + hands):
 
 ```bash
-zeroclaw daemon
+miroclaw daemon
 ```
 
 ## From source (development)
@@ -59,13 +59,13 @@ zeroclaw daemon
 After pulling the latest sources, a normal release build is usually enough. If incremental artifacts confuse the compiler, use `cargo clean && cargo build`.
 
 ```bash
-git clone https://github.com/zeroclaw-labs/zeroclaw.git
-cd zeroclaw
+git clone https://github.com/morpheum-labs/miroclaw.git
+cd miroclaw
 
 cargo build --release --locked
 cargo install --path . --force --locked
 
-zeroclaw onboard
+miroclaw onboard
 ```
 
 **Dev fallback (no global install):** prefix CLI invocations with `cargo run --release --`, for example:
@@ -79,10 +79,10 @@ cargo run --release -- agent -m "hello"
 
 ```bash
 cargo build --release
-ls -lh target/release/zeroclaw
+ls -lh target/release/miroclaw
 
-/usr/bin/time -l target/release/zeroclaw --help
-/usr/bin/time -l target/release/zeroclaw status
+/usr/bin/time -l target/release/miroclaw --help
+/usr/bin/time -l target/release/miroclaw status
 ```
 
 On Linux, use `time -v` instead of `/usr/bin/time -l` if you prefer GNU `time`.
@@ -93,22 +93,22 @@ Auth storage: `~/.zeroclaw/auth-profiles.json`; encryption key: `~/.zeroclaw/.se
 
 ```bash
 # OpenAI Codex OAuth (ChatGPT subscription)
-zeroclaw auth login --provider openai-codex --device-code
+miroclaw auth login --provider openai-codex --device-code
 
 # Gemini OAuth
-zeroclaw auth login --provider gemini --profile default
+miroclaw auth login --provider gemini --profile default
 
 # Anthropic setup-token
-zeroclaw auth paste-token --provider anthropic --profile default --auth-kind authorization
+miroclaw auth paste-token --provider anthropic --profile default --auth-kind authorization
 
 # Check / refresh / switch profile
-zeroclaw auth status
-zeroclaw auth refresh --provider openai-codex --profile default
-zeroclaw auth use --provider openai-codex --profile work
+miroclaw auth status
+miroclaw auth refresh --provider openai-codex --profile default
+miroclaw auth use --provider openai-codex --profile work
 
 # Run the agent with subscription auth
-zeroclaw agent --provider openai-codex -m "hello"
-zeroclaw agent --provider anthropic -m "hello"
+miroclaw agent --provider openai-codex -m "hello"
+miroclaw agent --provider anthropic -m "hello"
 ```
 
 Provider tables and failover: [providers-reference.md](../reference/api/providers-reference.md).
@@ -116,10 +116,10 @@ Provider tables and failover: [providers-reference.md](../reference/api/provider
 ## Skills
 
 ```bash
-zeroclaw skills list
-zeroclaw skills install https://github.com/user/my-skill.git
-zeroclaw skills audit https://github.com/user/my-skill.git
-zeroclaw skills remove my-skill
+miroclaw skills list
+miroclaw skills install https://github.com/user/my-skill.git
+miroclaw skills audit https://github.com/user/my-skill.git
+miroclaw skills remove my-skill
 ```
 
 ## CLI cheat sheet (common workflows)
@@ -127,85 +127,85 @@ zeroclaw skills remove my-skill
 Workspace and health:
 
 ```bash
-zeroclaw onboard
-zeroclaw status
-zeroclaw doctor
+miroclaw onboard
+miroclaw status
+miroclaw doctor
 ```
 
 Gateway and daemon:
 
 ```bash
-zeroclaw gateway start
-zeroclaw gateway get-paircode
-zeroclaw daemon
+miroclaw gateway start
+miroclaw gateway get-paircode
+miroclaw daemon
 ```
 
 Agent:
 
 ```bash
-zeroclaw agent
-zeroclaw agent -m "message"
+miroclaw agent
+miroclaw agent -m "message"
 ```
 
 Service (launchd / systemd):
 
 ```bash
-zeroclaw service install
-zeroclaw service start|stop|restart|status
+miroclaw service install
+miroclaw service start|stop|restart|status
 ```
 
 Channels:
 
 ```bash
-zeroclaw channel list
-zeroclaw channel doctor
-zeroclaw channel bind-telegram 123456789
+miroclaw channel list
+miroclaw channel doctor
+miroclaw channel bind-telegram 123456789
 ```
 
 Cron:
 
 ```bash
-zeroclaw cron list
-zeroclaw cron add "*/5 * * * *" --agent "Check system health"
-zeroclaw cron remove <id>
+miroclaw cron list
+miroclaw cron add "*/5 * * * *" --agent "Check system health"
+miroclaw cron remove <id>
 ```
 
 Memory:
 
 ```bash
-zeroclaw memory list
-zeroclaw memory get <key>
-zeroclaw memory stats
+miroclaw memory list
+miroclaw memory get <key>
+miroclaw memory stats
 ```
 
 Auth profiles (API-style):
 
 ```bash
-zeroclaw auth login --provider <name>
-zeroclaw auth status
-zeroclaw auth use --provider <name> --profile <profile>
+miroclaw auth login --provider <name>
+miroclaw auth status
+miroclaw auth use --provider <name> --profile <profile>
 ```
 
 Hardware:
 
 ```bash
-zeroclaw hardware discover
-zeroclaw peripheral list
-zeroclaw peripheral flash
+miroclaw hardware discover
+miroclaw peripheral list
+miroclaw peripheral flash
 ```
 
 Migration:
 
 ```bash
-zeroclaw migrate openclaw --dry-run
-zeroclaw migrate openclaw
+miroclaw migrate openclaw --dry-run
+miroclaw migrate openclaw
 ```
 
 Shell completions:
 
 ```bash
-source <(zeroclaw completions bash)
-zeroclaw completions zsh > ~/.zfunc/_zeroclaw
+source <(miroclaw completions bash)
+miroclaw completions zsh > ~/.zfunc/_miroclaw
 ```
 
 For every subcommand and flag, use [commands-reference.md](../reference/cli/commands-reference.md).

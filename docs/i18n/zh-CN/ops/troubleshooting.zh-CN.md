@@ -1,4 +1,4 @@
-# ZeroClaw 故障排除
+# Miroclaw 故障排除
 
 本指南侧重于常见的安装/运行时故障和快速解决路径。
 
@@ -15,7 +15,7 @@
 修复：
 
 ```bash
-./install.sh --install-rust
+bash scripts/install.sh --install-rust
 ```
 
 或从 <https://rustup.rs/> 安装。
@@ -29,7 +29,7 @@
 修复：
 
 ```bash
-./install.sh --install-system-deps
+bash scripts/install.sh --install-system-deps
 ```
 
 ### 低内存/低磁盘主机上构建失败
@@ -48,13 +48,13 @@
 资源受限机器的首选路径：
 
 ```bash
-./install.sh --prefer-prebuilt
+bash scripts/install.sh --prefer-prebuilt
 ```
 
 仅二进制模式（无源码回退）：
 
 ```bash
-./install.sh --prebuilt-only
+bash scripts/install.sh --prebuilt-only
 ```
 
 如果你必须在资源受限主机上从源码编译：
@@ -81,7 +81,7 @@ cargo build --release --locked --features hardware
 - `cargo check` / `cargo build` 似乎长时间卡在 `Checking zeroclaw`
 - 重复出现 `Blocking waiting for file lock on package cache` 或 `build directory`
 
-ZeroClaw 中出现此问题的原因：
+Miroclaw 中出现此问题的原因：
 
 - Matrix E2EE 栈（`matrix-sdk`、`ruma`、`vodozemac`）很大，类型检查开销高。
 - TLS + 加密原生构建脚本（`aws-lc-sys`、`ring`）增加了明显的编译时间。
@@ -125,17 +125,17 @@ pgrep -af \"cargo (check|build|test)|cargo check|cargo build|cargo test\"
 
 在运行自己的构建前停止不相关的 cargo 任务。
 
-### 安装后找不到 `zeroclaw` 命令
+### 安装后找不到 `miroclaw` 命令
 
 症状：
 
-- 安装成功，但 shell 找不到 `zeroclaw`
+- 安装成功，但 shell 找不到 `miroclaw`
 
 修复：
 
 ```bash
 export PATH=\"$HOME/.cargo/bin:$PATH\"
-which zeroclaw
+which miroclaw
 ```
 
 如有需要，持久化到你的 shell 配置文件中。
@@ -147,8 +147,8 @@ which zeroclaw
 检查：
 
 ```bash
-zeroclaw status
-zeroclaw doctor
+miroclaw status
+miroclaw doctor
 ```
 
 验证 `~/.zeroclaw/config.toml`：
@@ -166,7 +166,7 @@ zeroclaw doctor
 3. 重新运行诊断：
 
 ```bash
-zeroclaw doctor
+miroclaw doctor
 ```
 
 ## 渠道问题
@@ -180,14 +180,14 @@ zeroclaw doctor
 修复：
 
 - 为该令牌仅保留一个活动运行时
-- 停止额外的 `zeroclaw daemon` / `zeroclaw channel start` 进程
+- 停止额外的 `miroclaw daemon` / `miroclaw channel start` 进程
 
 ### `channel doctor` 中渠道不健康
 
 检查：
 
 ```bash
-zeroclaw channel doctor
+miroclaw channel doctor
 ```
 
 然后验证配置中特定渠道的凭证 + 白名单字段。
@@ -199,14 +199,14 @@ zeroclaw channel doctor
 检查：
 
 ```bash
-zeroclaw service status
+miroclaw service status
 ```
 
 恢复：
 
 ```bash
-zeroclaw service stop
-zeroclaw service start
+miroclaw service stop
+miroclaw service start
 ```
 
 Linux 日志：
@@ -218,7 +218,7 @@ journalctl --user -u zeroclaw.service -f
 ## 安装程序 URL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/morpheum-labs/miroclaw/master/scripts/install.sh | bash
 ```
 
 ## 仍然卡住？
@@ -226,10 +226,10 @@ curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/insta
 提交 issue 时收集并包含这些输出：
 
 ```bash
-zeroclaw --version
-zeroclaw status
-zeroclaw doctor
-zeroclaw channel doctor
+miroclaw --version
+miroclaw status
+miroclaw doctor
+miroclaw channel doctor
 ```
 
 同时包含操作系统、安装方法和脱敏的配置片段（无密钥）。

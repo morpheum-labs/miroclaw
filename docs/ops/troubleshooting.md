@@ -1,4 +1,4 @@
-# ZeroClaw Troubleshooting
+# Miroclaw Troubleshooting
 
 This guide focuses on common setup/runtime failures and fast resolution paths.
 
@@ -15,7 +15,7 @@ Symptom:
 Fix:
 
 ```bash
-./install.sh --install-rust
+bash scripts/install.sh --install-rust
 ```
 
 Or install from <https://rustup.rs/>.
@@ -29,7 +29,7 @@ Symptom:
 Fix:
 
 ```bash
-./install.sh --install-system-deps
+bash scripts/install.sh --install-system-deps
 ```
 
 ### Build fails on low-RAM / low-disk hosts
@@ -48,13 +48,13 @@ Why this happens:
 Preferred path for constrained machines:
 
 ```bash
-./install.sh --prefer-prebuilt
+bash scripts/install.sh --prefer-prebuilt
 ```
 
 Binary-only mode (no source fallback):
 
 ```bash
-./install.sh --prebuilt-only
+bash scripts/install.sh --prebuilt-only
 ```
 
 If you must compile from source on constrained hosts:
@@ -81,7 +81,7 @@ Symptoms:
 - `cargo check` / `cargo build` appears stuck at `Checking zeroclaw` for a long time
 - repeated `Blocking waiting for file lock on package cache` or `build directory`
 
-Why this happens in ZeroClaw:
+Why this happens in Miroclaw:
 
 - Matrix E2EE stack (`matrix-sdk`, `ruma`, `vodozemac`) is large and expensive to type-check.
 - TLS + crypto native build scripts (`aws-lc-sys`, `ring`) add noticeable compile time.
@@ -125,17 +125,17 @@ pgrep -af "cargo (check|build|test)|cargo check|cargo build|cargo test"
 
 Stop unrelated cargo jobs before running your own build.
 
-### `zeroclaw` command not found after install
+### `miroclaw` command not found after install
 
 Symptom:
 
-- install succeeds but shell cannot find `zeroclaw`
+- install succeeds but shell cannot find `miroclaw`
 
 Fix:
 
 ```bash
 export PATH="$HOME/.cargo/bin:$PATH"
-which zeroclaw
+which miroclaw
 ```
 
 Persist in your shell profile if needed.
@@ -147,8 +147,8 @@ Persist in your shell profile if needed.
 Checks:
 
 ```bash
-zeroclaw status
-zeroclaw doctor
+miroclaw status
+miroclaw doctor
 ```
 
 Verify `~/.zeroclaw/config.toml`:
@@ -166,7 +166,7 @@ Checks:
 3. Re-run diagnostics:
 
 ```bash
-zeroclaw doctor
+miroclaw doctor
 ```
 
 ## Channel Issues
@@ -180,14 +180,14 @@ Cause:
 Fix:
 
 - keep only one active runtime for that token
-- stop extra `zeroclaw daemon` / `zeroclaw channel start` processes
+- stop extra `miroclaw daemon` / `miroclaw channel start` processes
 
 ### Channel unhealthy in `channel doctor`
 
 Checks:
 
 ```bash
-zeroclaw channel doctor
+miroclaw channel doctor
 ```
 
 Then verify channel-specific credentials + allowlist fields in config.
@@ -199,14 +199,14 @@ Then verify channel-specific credentials + allowlist fields in config.
 Checks:
 
 ```bash
-zeroclaw service status
+miroclaw service status
 ```
 
 Recovery:
 
 ```bash
-zeroclaw service stop
-zeroclaw service start
+miroclaw service stop
+miroclaw service start
 ```
 
 Linux logs:
@@ -218,7 +218,7 @@ journalctl --user -u zeroclaw.service -f
 ## Installer URL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/morpheum-labs/miroclaw/master/scripts/install.sh | bash
 ```
 
 ## Still Stuck?
@@ -226,10 +226,10 @@ curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/insta
 Collect and include these outputs when filing an issue:
 
 ```bash
-zeroclaw --version
-zeroclaw status
-zeroclaw doctor
-zeroclaw channel doctor
+miroclaw --version
+miroclaw status
+miroclaw doctor
+miroclaw channel doctor
 ```
 
 Also include OS, install method, and sanitized config snippets (no secrets).

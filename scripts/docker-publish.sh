@@ -18,7 +18,7 @@ if [[ -n "${1}" ]]; then
 else
   TAG="$(git describe --tags --always 2>/dev/null || echo 'latest')"
 fi
-IMAGE_NAME="zeroclaw"
+IMAGE_NAME="miroclaw"
 
 if [[ -z "${DOCKER_SPACE_SORA}" || -z "${DOCKER_TOKEN_SORA}" ]]; then
   echo "Error: DOCKER_SPACE_SORA and DOCKER_TOKEN_SORA must be set."
@@ -49,4 +49,4 @@ docker tag "${IMAGE_NAME}:${TAG}" "${REMOTE_LATEST}"
 docker push "${REMOTE_LATEST}"
 
 echo "Published ${REMOTE_IMAGE} and ${REMOTE_LATEST}"
-echo "https://hub.docker.com/r/sorajez/zeroclaw"
+echo "https://hub.docker.com/r/sorajez/miroclaw"

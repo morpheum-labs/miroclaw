@@ -1,8 +1,10 @@
-# ZeroClaw 项目分类快照（2026-02-18）
+# 项目分类快照（2026-02-18）
 
 截止日期：**2026 年 2 月 18 日**。
 
 本快照捕获开放 PR/Issue 信号，以指导文档和信息架构工作。
+
+> **说明：** 下文中的 Issue/PR 链接指向快照采集时的**上游**仓库（`zeroclaw-labs/zeroclaw`）。本仓库的规范地址为 [`morpheum-labs/miroclaw`](https://github.com/morpheum-labs/miroclaw)；编号可能与上游不一致。
 
 ## 数据来源
 

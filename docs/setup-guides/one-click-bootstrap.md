@@ -1,21 +1,21 @@
 # One-Click Bootstrap
 
-This page defines the fastest supported path to install and initialize ZeroClaw.
+This page defines the fastest supported path to install and initialize Miroclaw.
 
 Last verified: **February 20, 2026**.
 
 ## Option 0: Homebrew (macOS/Linuxbrew)
 
 ```bash
-brew install zeroclaw
+brew install miroclaw
 ```
 
 ## Option A (Recommended): Clone + local script
 
 ```bash
-git clone https://github.com/zeroclaw-labs/zeroclaw.git
-cd zeroclaw
-./install.sh
+git clone https://github.com/morpheum-labs/miroclaw.git
+cd miroclaw
+bash scripts/install.sh
 ```
 
 What it does by default:
@@ -33,29 +33,29 @@ Source builds typically require at least:
 When resources are constrained, bootstrap now attempts a pre-built binary first.
 
 ```bash
-./install.sh --prefer-prebuilt
+bash scripts/install.sh --prefer-prebuilt
 ```
 
 To require binary-only installation and fail if no compatible release asset exists:
 
 ```bash
-./install.sh --prebuilt-only
+bash scripts/install.sh --prebuilt-only
 ```
 
 To bypass pre-built flow and force source compilation:
 
 ```bash
-./install.sh --force-source-build
+bash scripts/install.sh --force-source-build
 ```
 
 ## Dual-mode bootstrap
 
-Default behavior is **app-only** (build/install ZeroClaw) and expects existing Rust toolchain.
+Default behavior is **app-only** (build/install Miroclaw) and expects existing Rust toolchain.
 
 For fresh machines, enable environment bootstrap explicitly:
 
 ```bash
-./install.sh --install-system-deps --install-rust
+bash scripts/install.sh --install-system-deps --install-rust
 ```
 
 Notes:
@@ -69,7 +69,7 @@ Notes:
 ## Option B: Remote one-liner
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/morpheum-labs/miroclaw/master/scripts/install.sh | bash
 ```
 
 For high-security environments, prefer Option A so you can review the script before execution.
@@ -81,70 +81,61 @@ If you run Option B outside a repository checkout, the install script automatica
 ### Containerized onboarding (Docker)
 
 ```bash
-./install.sh --docker
+bash scripts/install.sh --docker
 ```
 
-This builds a local ZeroClaw image and launches onboarding inside a container while
+This builds a local Miroclaw image and launches onboarding inside a container while
 persisting config/workspace to `./.zeroclaw-docker`.
 
 Container CLI defaults to `docker`. If Docker CLI is unavailable and `podman` exists,
 the installer auto-falls back to `podman`. You can also set `MIROCLAW_CONTAINER_CLI`
-explicitly (for example: `MIROCLAW_CONTAINER_CLI=podman ./install.sh --docker`).
+explicitly (for example: `MIROCLAW_CONTAINER_CLI=podman bash scripts/install.sh --docker`).
 
 For Podman, the installer runs with `--userns keep-id` and `:Z` volume labels so
 workspace/config mounts remain writable inside the container.
 
 If you add `--skip-build`, the installer skips local image build. It first tries the local
-Docker tag (`MIROCLAW_DOCKER_IMAGE`, default: `zeroclaw-bootstrap:local`); if missing,
-it pulls `ghcr.io/zeroclaw-labs/zeroclaw:latest` and tags it locally before running.
+Docker tag (`MIROCLAW_DOCKER_IMAGE`, default: `miroclaw-bootstrap:local`); if missing,
+it pulls `ghcr.io/morpheum-labs/miroclaw:latest` and tags it locally before running.
 
 ### Stopping and restarting a Docker/Podman container
 
-After `./install.sh --docker` finishes, the container exits. Your config and workspace
+After `bash scripts/install.sh --docker` finishes, the container exits. Your config and workspace
 are persisted in the data directory (default: `./.zeroclaw-docker`, or `~/.zeroclaw-docker`
 when bootstrapping via `curl | bash`). You can override this path with `MIROCLAW_DOCKER_DATA_DIR`.
 
 **Do not re-run `install.sh`** to restart -- it will rebuild the image and re-run onboarding.
 Instead, start a new container from the existing image and mount the persisted data directory.
 
-#### Using the repository docker-compose.yml
+#### Repository `docker-compose.yml` (Clawgotcha)
 
-The simplest way to run ZeroClaw long-term in Docker/Podman is with the provided
-`docker-compose.yml` at the repository root. It uses a named volume (`zeroclaw-data`)
-and sets `restart: unless-stopped` so the container survives reboots.
+The root `docker-compose.yml` runs the **Clawgotcha** reference control plane (port **9847** by default). It does **not** start the Miroclaw gateway (**42617**).
 
 ```bash
-# Start (detached)
-docker compose up -d
-
-# Stop
-docker compose down
-
-# Restart after stopping
 docker compose up -d
 ```
 
-Replace `docker` with `podman` if you use Podman.
+Use `bash scripts/install.sh --docker` or the manual `docker run` examples below for the gateway image (`miroclaw-bootstrap:local`).
 
 #### Manual container run (using install.sh data directory)
 
-If you installed via `./install.sh --docker` and want to reuse the `.zeroclaw-docker`
+If you installed via `bash scripts/install.sh --docker` and want to reuse the `.zeroclaw-docker`
 data directory without compose:
 
 ```bash
 # Docker
-docker run -d --name zeroclaw \
+docker run -d --name miroclaw \
   --restart unless-stopped \
   -v "$PWD/.zeroclaw-docker/.zeroclaw:/zeroclaw-data/.zeroclaw" \
   -v "$PWD/.zeroclaw-docker/workspace:/zeroclaw-data/workspace" \
   -e HOME=/zeroclaw-data \
   -e MIROCLAW_WORKSPACE=/zeroclaw-data/workspace \
   -p 42617:42617 \
-  zeroclaw-bootstrap:local \
+  miroclaw-bootstrap:local \
   gateway
 
 # Podman (add --userns keep-id and :Z volume labels)
-podman run -d --name zeroclaw \
+podman run -d --name miroclaw \
   --restart unless-stopped \
   --userns keep-id \
   --user "$(id -u):$(id -g)" \
@@ -153,7 +144,7 @@ podman run -d --name zeroclaw \
   -e HOME=/zeroclaw-data \
   -e MIROCLAW_WORKSPACE=/zeroclaw-data/workspace \
   -p 42617:42617 \
-  zeroclaw-bootstrap:local \
+  miroclaw-bootstrap:local \
   gateway
 ```
 
@@ -161,19 +152,19 @@ podman run -d --name zeroclaw \
 
 ```bash
 # Stop the container (preserves data)
-docker stop zeroclaw
+docker stop miroclaw
 
 # Start a stopped container (config and workspace are intact)
-docker start zeroclaw
+docker start miroclaw
 
 # View logs
-docker logs -f zeroclaw
+docker logs -f miroclaw
 
 # Remove the container (data in volumes/.zeroclaw-docker is preserved)
-docker rm zeroclaw
+docker rm miroclaw
 
 # Check health
-docker exec zeroclaw zeroclaw status
+docker exec miroclaw miroclaw status
 ```
 
 #### Environment variables
@@ -182,13 +173,13 @@ When running manually, pass provider configuration as environment variables
 or ensure they are already saved in the persisted `config.toml`:
 
 ```bash
-docker run -d --name zeroclaw \
+docker run -d --name miroclaw \
   -e API_KEY="sk-..." \
   -e PROVIDER="openrouter" \
   -v "$PWD/.zeroclaw-docker/.zeroclaw:/zeroclaw-data/.zeroclaw" \
   -v "$PWD/.zeroclaw-docker/workspace:/zeroclaw-data/workspace" \
   -p 42617:42617 \
-  zeroclaw-bootstrap:local \
+  miroclaw-bootstrap:local \
   gateway
 ```
 
@@ -198,27 +189,27 @@ saved in `.zeroclaw-docker/.zeroclaw/config.toml` and do not need to be passed a
 ### Quick onboarding (non-interactive)
 
 ```bash
-./install.sh --api-key "sk-..." --provider openrouter
+bash scripts/install.sh --api-key "sk-..." --provider openrouter
 ```
 
 Or with environment variables:
 
 ```bash
-MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" ./install.sh
+MIROCLAW_API_KEY="sk-..." MIROCLAW_PROVIDER="openrouter" bash scripts/install.sh
 ```
 
 ## Useful flags
 
 - `--install-system-deps`
 - `--install-rust`
-- `--skip-build` (in `--docker` mode: use local image if present, otherwise pull `ghcr.io/zeroclaw-labs/zeroclaw:latest`)
+- `--skip-build` (in `--docker` mode: use local image if present, otherwise pull `ghcr.io/morpheum-labs/miroclaw:latest`)
 - `--skip-install`
 - `--provider <id>`
 
 See all options:
 
 ```bash
-./install.sh --help
+bash scripts/install.sh --help
 ```
 
 ## Related docs

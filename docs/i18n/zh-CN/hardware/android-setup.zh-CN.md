@@ -28,11 +28,11 @@ uname -m
 
 # 下载对应的二进制文件
 # 64 位（aarch64）：
-curl -LO https://github.com/zeroclaw-labs/zeroclaw/releases/latest/download/miroclaw-aarch64-linux-android.tar.gz
+curl -LO https://github.com/morpheum-labs/miroclaw/releases/latest/download/miroclaw-aarch64-linux-android.tar.gz
 tar xzf miroclaw-aarch64-linux-android.tar.gz
 
 # 32 位（armv7）：
-curl -LO https://github.com/zeroclaw-labs/zeroclaw/releases/latest/download/miroclaw-armv7-linux-androideabi.tar.gz
+curl -LO https://github.com/morpheum-labs/miroclaw/releases/latest/download/miroclaw-armv7-linux-androideabi.tar.gz
 tar xzf miroclaw-armv7-linux-androideabi.tar.gz
 ```
 

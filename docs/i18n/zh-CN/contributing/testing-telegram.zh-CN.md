@@ -305,6 +305,6 @@ RUST_LOG=debug zeroclaw channel start
 
 ## 📞 支持
 
-- Issue：<https://github.com/zeroclaw-labs/zeroclaw/issues>
+- Issue：<https://github.com/morpheum-labs/miroclaw/issues>
 - 文档：[testing-telegram.md](../../../../tests/telegram/testing-telegram.md)
 - 帮助：`zeroclaw --help`

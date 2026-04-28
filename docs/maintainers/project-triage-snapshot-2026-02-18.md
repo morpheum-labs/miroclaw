@@ -1,8 +1,10 @@
-# ZeroClaw Project Triage Snapshot (2026-02-18)
+# Project Triage Snapshot (2026-02-18)
 
 As-of date: **February 18, 2026**.
 
 This snapshot captures open PR/issue signals to guide docs and information-architecture work.
+
+> **Note:** Issue and PR links below reference the **upstream** repo (`zeroclaw-labs/zeroclaw`) as of the snapshot date. This fork’s canonical home is [`morpheum-labs/miroclaw`](https://github.com/morpheum-labs/miroclaw); numbering may not match here.
 
 ## Data Source
 

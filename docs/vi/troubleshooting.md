@@ -1,4 +1,4 @@
-# Khắc phục sự cố ZeroClaw
+# Khắc phục sự cố Miroclaw
 
 Các lỗi thường gặp khi cài đặt và chạy, kèm cách khắc phục.
 
@@ -15,7 +15,7 @@ Triệu chứng:
 Khắc phục:
 
 ```bash
-./install.sh --install-rust
+bash scripts/install.sh --install-rust
 ```
 
 Hoặc cài từ <https://rustup.rs/>.
@@ -29,7 +29,7 @@ Triệu chứng:
 Khắc phục:
 
 ```bash
-./install.sh --install-system-deps
+bash scripts/install.sh --install-system-deps
 ```
 
 ### Build thất bại trên máy ít RAM / ít dung lượng
@@ -48,13 +48,13 @@ Nguyên nhân:
 Cách tốt nhất cho máy hạn chế tài nguyên:
 
 ```bash
-./install.sh --prefer-prebuilt
+bash scripts/install.sh --prefer-prebuilt
 ```
 
 Chế độ chỉ dùng binary (không build từ nguồn):
 
 ```bash
-./install.sh --prebuilt-only
+bash scripts/install.sh --prebuilt-only
 ```
 
 Nếu bắt buộc phải build từ nguồn trên máy yếu:
@@ -119,17 +119,17 @@ pgrep -af "cargo (check|build|test)|cargo check|cargo build|cargo test"
 
 Dừng các cargo job không liên quan trước khi build.
 
-### Không tìm thấy lệnh `zeroclaw` sau cài đặt
+### Không tìm thấy lệnh `miroclaw` sau cài đặt
 
 Triệu chứng:
 
-- Cài đặt thành công nhưng shell không tìm thấy `zeroclaw`
+- Cài đặt thành công nhưng shell không tìm thấy `miroclaw`
 
 Khắc phục:
 
 ```bash
 export PATH="$HOME/.cargo/bin:$PATH"
-which zeroclaw
+which miroclaw
 ```
 
 Thêm vào shell profile nếu cần giữ lâu dài.
@@ -141,8 +141,8 @@ Thêm vào shell profile nếu cần giữ lâu dài.
 Kiểm tra:
 
 ```bash
-zeroclaw status
-zeroclaw doctor
+miroclaw status
+miroclaw doctor
 ```
 
 Xác minh `~/.zeroclaw/config.toml`:
@@ -160,7 +160,7 @@ Kiểm tra:
 3. Chạy lại chẩn đoán:
 
 ```bash
-zeroclaw doctor
+miroclaw doctor
 ```
 
 ## Sự cố kênh
@@ -174,14 +174,14 @@ Nguyên nhân:
 Khắc phục:
 
 - Chỉ giữ một runtime đang chạy cho token đó
-- Dừng các tiến trình `zeroclaw daemon` / `zeroclaw channel start` thừa
+- Dừng các tiến trình `miroclaw daemon` / `miroclaw channel start` thừa
 
 ### Kênh không khỏe trong `channel doctor`
 
 Kiểm tra:
 
 ```bash
-zeroclaw channel doctor
+miroclaw channel doctor
 ```
 
 Sau đó xác minh thông tin xác thực và trường allowlist cho từng kênh trong config.
@@ -193,14 +193,14 @@ Sau đó xác minh thông tin xác thực và trường allowlist cho từng kê
 Kiểm tra:
 
 ```bash
-zeroclaw service status
+miroclaw service status
 ```
 
 Khôi phục:
 
 ```bash
-zeroclaw service stop
-zeroclaw service start
+miroclaw service stop
+miroclaw service start
 ```
 
 Xem log trên Linux:
@@ -212,7 +212,7 @@ journalctl --user -u zeroclaw.service -f
 ## URL cài đặt
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/morpheum-labs/miroclaw/master/scripts/install.sh | bash
 ```
 
 ## Vẫn chưa giải quyết được?
@@ -220,10 +220,10 @@ curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/insta
 Thu thập và đính kèm các thông tin sau khi tạo issue:
 
 ```bash
-zeroclaw --version
-zeroclaw status
-zeroclaw doctor
-zeroclaw channel doctor
+miroclaw --version
+miroclaw status
+miroclaw doctor
+miroclaw channel doctor
 ```
 
 Kèm thêm: hệ điều hành, cách cài đặt, và đoạn config đã ẩn bí mật.

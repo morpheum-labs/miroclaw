@@ -1,16 +1,16 @@
-# ZeroClaw Commands Reference
+# Miroclaw Commands Reference
 
-This reference is derived from the current CLI surface (`zeroclaw --help`).
+This reference is derived from the current CLI surface (`miroclaw --help`).
 
 Last verified: **April 15, 2026**.
 
 ## Global options
 
-- `--config-dir <DIR>` — alternate ZeroClaw config/workspace root (accepted on the top-level command and propagated to subcommands).
+- `--config-dir <DIR>` — alternate Miroclaw config/workspace root (accepted on the top-level command and propagated to subcommands).
 
 ## Top-Level Commands
 
-Order matches `zeroclaw --help`.
+Order matches `miroclaw --help`.
 
 | Command | Purpose |
 |---|---|
@@ -34,7 +34,7 @@ Order matches `zeroclaw --help`.
 | `peripheral` | Configure and flash peripherals |
 | `memory` | List, get, clear, or summarize stored agent memory |
 | `shell` | Set the shell execution profile in `config.toml` (restart required) |
-| `mcp` | Run ZeroClaw as an MCP tool server (stdio or HTTP) |
+| `mcp` | Run Miroclaw as an MCP tool server (stdio or HTTP) |
 | `config` | Export machine-readable config schema |
 | `update` | Check for and install binary releases |
 | `self-test` | Run installation self-tests (optional `--quick` to skip network) |
@@ -48,13 +48,13 @@ Builds compiled with the **`plugins-wasm`** Cargo feature also expose `plugin` (
 
 ### `onboard`
 
-- `zeroclaw onboard`
-- `zeroclaw onboard --channels-only`
-- `zeroclaw onboard --force`
-- `zeroclaw onboard --reinit`
-- `zeroclaw onboard --api-key <KEY> --provider <ID> --memory <sqlite|lucid|markdown|none>`
-- `zeroclaw onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none>`
-- `zeroclaw onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none> --force`
+- `miroclaw onboard`
+- `miroclaw onboard --channels-only`
+- `miroclaw onboard --force`
+- `miroclaw onboard --reinit`
+- `miroclaw onboard --api-key <KEY> --provider <ID> --memory <sqlite|lucid|markdown|none>`
+- `miroclaw onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none>`
+- `miroclaw onboard --api-key <KEY> --provider <ID> --model <MODEL_ID> --memory <sqlite|lucid|markdown|none> --force`
 
 `onboard` safety behavior:
 
@@ -62,15 +62,15 @@ Builds compiled with the **`plugins-wasm`** Cargo feature also expose `plugin` (
   - Full onboarding (overwrite `config.toml`)
   - Provider-only update (update provider/model/API key while preserving existing channels, tunnel, memory, hooks, and other settings)
 - In non-interactive environments, existing `config.toml` causes a safe refusal unless `--force` is passed.
-- Use `zeroclaw onboard --channels-only` when you only need to rotate channel tokens/allowlists.
-- Use `zeroclaw onboard --reinit` to start fresh. This backs up your existing config directory with a timestamp suffix and creates a new configuration from scratch.
+- Use `miroclaw onboard --channels-only` when you only need to rotate channel tokens/allowlists.
+- Use `miroclaw onboard --reinit` to start fresh. This backs up your existing config directory with a timestamp suffix and creates a new configuration from scratch.
 
 ### `agent`
 
-- `zeroclaw agent`
-- `zeroclaw agent -m "Hello"`
-- `zeroclaw agent --provider <ID> --model <MODEL> --temperature <0.0-2.0>`
-- `zeroclaw agent --peripheral <board:path>`
+- `miroclaw agent`
+- `miroclaw agent -m "Hello"`
+- `miroclaw agent --provider <ID> --model <MODEL> --temperature <0.0-2.0>`
+- `miroclaw agent --peripheral <board:path>`
 
 Tip:
 
@@ -80,41 +80,41 @@ Tip:
 
 Gateway:
 
-- `zeroclaw gateway` — if no subcommand is given, starts the gateway using **`[gateway].host` / `[gateway].port`** from config only (no extra CLI flags on the bare command).
-- `zeroclaw gateway start [--port <PORT>] [--host <HOST>]`
-- `zeroclaw gateway restart [--port <PORT>] [--host <HOST>]` — tries graceful shutdown of an existing instance on that address, then starts.
-- `zeroclaw gateway get-paircode [--new]` — read or rotate pairing code from a **running** gateway.
+- `miroclaw gateway` — if no subcommand is given, starts the gateway using **`[gateway].host` / `[gateway].port`** from config only (no extra CLI flags on the bare command).
+- `miroclaw gateway start [--port <PORT>] [--host <HOST>]`
+- `miroclaw gateway restart [--port <PORT>] [--host <HOST>]` — tries graceful shutdown of an existing instance on that address, then starts.
+- `miroclaw gateway get-paircode [--new]` — read or rotate pairing code from a **running** gateway.
 
 Daemon:
 
-- `zeroclaw daemon [--host <HOST>] [--port <PORT>]` — full long-running runtime (uses gateway host/port overrides when passed).
+- `miroclaw daemon [--host <HOST>] [--port <PORT>]` — full long-running runtime (uses gateway host/port overrides when passed).
 
 ### `mcp`
 
-- `zeroclaw mcp serve` — stdio MCP (default; newline-delimited JSON-RPC)
-- `zeroclaw mcp serve --allow-tool <NAME>` — add a tool to the allowlist (repeatable; merged with `[mcp_serve].allowed_tools`)
-- `zeroclaw mcp serve --transport http [--bind <ADDR>] [--port <PORT>]` — HTTP `POST /mcp` (see [`mcp-serve.md`](../../mcp-serve.md) and `[mcp_serve]` in config)
+- `miroclaw mcp serve` — stdio MCP (default; newline-delimited JSON-RPC)
+- `miroclaw mcp serve --allow-tool <NAME>` — add a tool to the allowlist (repeatable; merged with `[mcp_serve].allowed_tools`)
+- `miroclaw mcp serve --transport http [--bind <ADDR>] [--port <PORT>]` — HTTP `POST /mcp` (see [`mcp-serve.md`](../../mcp-serve.md) and `[mcp_serve]` in config)
 
 ### `shell`
 
-- `zeroclaw shell profile safe` — set `[shell].profile` to `safe` (writes `config.toml`)
-- `zeroclaw shell profile balanced` / `zeroclaw shell profile autonomous` — same for built-in tiers
+- `miroclaw shell profile safe` — set `[shell].profile` to `safe` (writes `config.toml`)
+- `miroclaw shell profile balanced` / `miroclaw shell profile autonomous` — same for built-in tiers
 - Custom ids must exist under `[[shell.profiles]]` in config (validated before save)
 
 Restart the gateway or agent after changing profile; the engine reads the profile at process start only.
 
 ### `estop`
 
-- `zeroclaw estop` (engage `kill-all`)
-- `zeroclaw estop --level network-kill`
-- `zeroclaw estop --level domain-block --domain "*.chase.com" [--domain "*.paypal.com"]`
-- `zeroclaw estop --level tool-freeze --tool shell [--tool browser]`
-- `zeroclaw estop status`
-- `zeroclaw estop resume`
-- `zeroclaw estop resume --network`
-- `zeroclaw estop resume --domain "*.chase.com"`
-- `zeroclaw estop resume --tool shell`
-- `zeroclaw estop resume --otp <123456>`
+- `miroclaw estop` (engage `kill-all`)
+- `miroclaw estop --level network-kill`
+- `miroclaw estop --level domain-block --domain "*.chase.com" [--domain "*.paypal.com"]`
+- `miroclaw estop --level tool-freeze --tool shell [--tool browser]`
+- `miroclaw estop status`
+- `miroclaw estop resume`
+- `miroclaw estop resume --network`
+- `miroclaw estop resume --domain "*.chase.com"`
+- `miroclaw estop resume --tool shell`
+- `miroclaw estop resume --otp <123456>`
 
 Notes:
 
@@ -124,26 +124,26 @@ Notes:
 
 ### `service`
 
-- `zeroclaw service install`
-- `zeroclaw service start`
-- `zeroclaw service stop`
-- `zeroclaw service restart`
-- `zeroclaw service status`
-- `zeroclaw service uninstall`
+- `miroclaw service install`
+- `miroclaw service start`
+- `miroclaw service stop`
+- `miroclaw service restart`
+- `miroclaw service status`
+- `miroclaw service uninstall`
 
 Service commands accept `--service-init auto|systemd|openrc` (default `auto`) to pin the init backend.
 
 ### `cron`
 
-- `zeroclaw cron list`
-- `zeroclaw cron add <expr> [--tz <IANA_TZ>] [--agent] [--allowed-tool <NAME> …] <command-or-prompt>`
-- `zeroclaw cron add-at <rfc3339_timestamp> [--agent] [--allowed-tool <NAME> …] <command-or-prompt>`
-- `zeroclaw cron add-every <every_ms> [--agent] [--allowed-tool <NAME> …] <command-or-prompt>`
-- `zeroclaw cron once <delay> [--agent] [--allowed-tool <NAME> …] <command-or-prompt>` — delay examples: `30m`, `2h`, `1d`
-- `zeroclaw cron update <id> [--expression <EXPR>] [--tz <TZ>] [--command <CMD>] [--name <NAME>] [--allowed-tool <NAME> …]`
-- `zeroclaw cron remove <id>`
-- `zeroclaw cron pause <id>`
-- `zeroclaw cron resume <id>`
+- `miroclaw cron list`
+- `miroclaw cron add <expr> [--tz <IANA_TZ>] [--agent] [--allowed-tool <NAME> …] <command-or-prompt>`
+- `miroclaw cron add-at <rfc3339_timestamp> [--agent] [--allowed-tool <NAME> …] <command-or-prompt>`
+- `miroclaw cron add-every <every_ms> [--agent] [--allowed-tool <NAME> …] <command-or-prompt>`
+- `miroclaw cron once <delay> [--agent] [--allowed-tool <NAME> …] <command-or-prompt>` — delay examples: `30m`, `2h`, `1d`
+- `miroclaw cron update <id> [--expression <EXPR>] [--tz <TZ>] [--command <CMD>] [--name <NAME>] [--allowed-tool <NAME> …]`
+- `miroclaw cron remove <id>`
+- `miroclaw cron pause <id>`
+- `miroclaw cron resume <id>`
 
 Notes:
 
@@ -153,31 +153,31 @@ Notes:
 
 ### `models`
 
-- `zeroclaw models refresh`
-- `zeroclaw models refresh --provider <ID>`
-- `zeroclaw models refresh --force`
+- `miroclaw models refresh`
+- `miroclaw models refresh --provider <ID>`
+- `miroclaw models refresh --force`
 
 `models refresh` currently supports live catalog refresh for provider IDs: `openrouter`, `openai`, `anthropic`, `groq`, `mistral`, `deepseek`, `xai`, `together-ai`, `gemini`, `ollama`, `llamacpp`, `sglang`, `vllm`, `astrai`, `venice`, `fireworks`, `cohere`, `moonshot`, `glm`, `zai`, `qwen`, and `nvidia`.
 
 ### `doctor`
 
-- `zeroclaw doctor`
-- `zeroclaw doctor query-engine` — in-process QueryEngine transition tail, last system-prompt assembly, layered-memory selector stats (when enabled), last post-compaction **memory injection** timestamp, and a short preview of the latest **session-memory summary** from consolidation (process-local).
-- `zeroclaw doctor models [--provider <ID>] [--use-cache]`
-- `zeroclaw doctor traces [--limit <N>] [--event <TYPE>] [--contains <TEXT>]`
-- `zeroclaw doctor traces --id <TRACE_ID>`
-- `zeroclaw doctor long-run [HAND]` — optional `HAND` is the TOML stem under `~/.zeroclaw/hands` (omit to scan every hand). For each selected hand, checks coordinator scratchpad freshness (`decisions.md` / `final_summary.md`), workspace AutoMemory index age when `[memory.layered]` is on, and whether the assembled hand system prompt still contains `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` (Phase 1 cache split).
+- `miroclaw doctor`
+- `miroclaw doctor query-engine` — in-process QueryEngine transition tail, last system-prompt assembly, layered-memory selector stats (when enabled), last post-compaction **memory injection** timestamp, and a short preview of the latest **session-memory summary** from consolidation (process-local).
+- `miroclaw doctor models [--provider <ID>] [--use-cache]`
+- `miroclaw doctor traces [--limit <N>] [--event <TYPE>] [--contains <TEXT>]`
+- `miroclaw doctor traces --id <TRACE_ID>`
+- `miroclaw doctor long-run [HAND]` — optional `HAND` is the TOML stem under `~/.zeroclaw/hands` (omit to scan every hand). For each selected hand, checks coordinator scratchpad freshness (`decisions.md` / `final_summary.md`), workspace AutoMemory index age when `[memory.layered]` is on, and whether the assembled hand system prompt still contains `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` (Phase 1 cache split).
 
 `doctor traces` reads runtime tool/model diagnostics from `observability.runtime_trace_path`.
 
 ### `channel`
 
-- `zeroclaw channel list`
-- `zeroclaw channel start`
-- `zeroclaw channel doctor`
-- `zeroclaw channel bind-telegram <IDENTITY>`
-- `zeroclaw channel add <type> <json>`
-- `zeroclaw channel remove <name>`
+- `miroclaw channel list`
+- `miroclaw channel start`
+- `miroclaw channel doctor`
+- `miroclaw channel bind-telegram <IDENTITY>`
+- `miroclaw channel add <type> <json>`
+- `miroclaw channel remove <name>`
 
 Runtime in-chat commands (Telegram/Discord while channel server is running):
 
@@ -198,14 +198,14 @@ Channel runtime also watches `config.toml` and hot-applies updates to:
 
 ### `integrations`
 
-- `zeroclaw integrations info <name>`
+- `miroclaw integrations info <name>`
 
 ### `skills`
 
-- `zeroclaw skills list`
-- `zeroclaw skills audit <source_or_name>`
-- `zeroclaw skills install <source>`
-- `zeroclaw skills remove <name>`
+- `miroclaw skills list`
+- `miroclaw skills audit <source_or_name>`
+- `miroclaw skills install <source>`
+- `miroclaw skills remove <name>`
 
 `<source>` accepts git remotes (`https://...`, `http://...`, `ssh://...`, and `git@host:owner/repo.git`) or a local filesystem path.
 
@@ -221,88 +221,88 @@ Skill manifests (`SKILL.toml`) support `prompts` and `[[tools]]`; both are injec
 
 ### `migrate`
 
-- `zeroclaw migrate openclaw [--source <path>] [--dry-run]`
+- `miroclaw migrate openclaw [--source <path>] [--dry-run]`
 
 ### `auth`
 
-- `zeroclaw auth login --provider <openai-codex|gemini> [--profile <NAME>] [--device-code]`
-- `zeroclaw auth login --provider openai-codex --import <PATH>` (import existing `auth.json`; conflicts with `--device-code`)
-- `zeroclaw auth paste-redirect --provider openai-codex [--profile <NAME>] [--input <URL_OR_CODE>]`
-- `zeroclaw auth paste-token --provider anthropic [--profile <NAME>] [--token <VALUE>] [--auth-kind <authorization|api-key>]` (token omitted → interactive prompt)
-- `zeroclaw auth setup-token --provider anthropic [--profile <NAME>]` — alias for `paste-token` oriented at interactive setup
-- `zeroclaw auth refresh --provider openai-codex [--profile <NAME>]`
-- `zeroclaw auth logout --provider <NAME> [--profile <NAME>]`
-- `zeroclaw auth use --provider <NAME> --profile <NAME>`
-- `zeroclaw auth list`
-- `zeroclaw auth status`
+- `miroclaw auth login --provider <openai-codex|gemini> [--profile <NAME>] [--device-code]`
+- `miroclaw auth login --provider openai-codex --import <PATH>` (import existing `auth.json`; conflicts with `--device-code`)
+- `miroclaw auth paste-redirect --provider openai-codex [--profile <NAME>] [--input <URL_OR_CODE>]`
+- `miroclaw auth paste-token --provider anthropic [--profile <NAME>] [--token <VALUE>] [--auth-kind <authorization|api-key>]` (token omitted → interactive prompt)
+- `miroclaw auth setup-token --provider anthropic [--profile <NAME>]` — alias for `paste-token` oriented at interactive setup
+- `miroclaw auth refresh --provider openai-codex [--profile <NAME>]`
+- `miroclaw auth logout --provider <NAME> [--profile <NAME>]`
+- `miroclaw auth use --provider <NAME> --profile <NAME>`
+- `miroclaw auth list`
+- `miroclaw auth status`
 
-Use `zeroclaw auth <subcommand> --help` for the full flag set.
+Use `miroclaw auth <subcommand> --help` for the full flag set.
 
 ### `memory`
 
-- `zeroclaw memory list` (filters: see `zeroclaw memory list --help`)
-- `zeroclaw memory get <key>`
-- `zeroclaw memory stats`
-- `zeroclaw memory clear` (scopes and `--yes`; see `--help`)
+- `miroclaw memory list` (filters: see `miroclaw memory list --help`)
+- `miroclaw memory get <key>`
+- `miroclaw memory stats`
+- `miroclaw memory clear` (scopes and `--yes`; see `--help`)
 
 ### `config`
 
-- `zeroclaw config schema`
+- `miroclaw config schema`
 
 `config schema` prints a JSON Schema (draft 2020-12) for the full `config.toml` contract to stdout.
 
 ### `update`
 
-- `zeroclaw update` — download and install latest release (with confirmation)
-- `zeroclaw update --check` — check only
-- `zeroclaw update --force` — skip confirmation
-- `zeroclaw update --version <SEMVER>` — install a specific version
+- `miroclaw update` — download and install latest release (with confirmation)
+- `miroclaw update --check` — check only
+- `miroclaw update --force` — skip confirmation
+- `miroclaw update --version <SEMVER>` — install a specific version
 
 ### `self-test`
 
-- `zeroclaw self-test` — full suite (includes network-oriented checks when available)
-- `zeroclaw self-test --quick` — skip network checks
+- `miroclaw self-test` — full suite (includes network-oriented checks when available)
+- `miroclaw self-test --quick` — skip network checks
 
 ### `hands`
 
-- `zeroclaw hands list`
-- `zeroclaw hands run <name>` — `name` is the `name` field from a hand TOML under `~/.zeroclaw/hands/`
+- `miroclaw hands list`
+- `miroclaw hands run <name>` — `name` is the `name` field from a hand TOML under `~/.zeroclaw/hands/`
 
 ### `desktop`
 
-- `zeroclaw desktop` — launch the companion app
-- `zeroclaw desktop --install` — download and install the pre-built app for this platform
+- `miroclaw desktop` — launch the companion app
+- `miroclaw desktop --install` — download and install the pre-built app for this platform
 
 ### `completions`
 
-- `zeroclaw completions bash`
-- `zeroclaw completions fish`
-- `zeroclaw completions zsh`
-- `zeroclaw completions powershell`
-- `zeroclaw completions elvish`
+- `miroclaw completions bash`
+- `miroclaw completions fish`
+- `miroclaw completions zsh`
+- `miroclaw completions powershell`
+- `miroclaw completions elvish`
 
 `completions` is stdout-only by design so scripts can be sourced directly without log/warning contamination.
 
 ### `hardware`
 
-- `zeroclaw hardware discover`
-- `zeroclaw hardware introspect <path>`
-- `zeroclaw hardware info [--chip <chip_name>]`
+- `miroclaw hardware discover`
+- `miroclaw hardware introspect <path>`
+- `miroclaw hardware info [--chip <chip_name>]`
 
 ### `peripheral`
 
-- `zeroclaw peripheral list`
-- `zeroclaw peripheral add <board> <path>`
-- `zeroclaw peripheral flash [--port <serial_port>]`
-- `zeroclaw peripheral setup-uno-q [--host <ip_or_host>]`
-- `zeroclaw peripheral flash-nucleo`
+- `miroclaw peripheral list`
+- `miroclaw peripheral add <board> <path>`
+- `miroclaw peripheral flash [--port <serial_port>]`
+- `miroclaw peripheral setup-uno-q [--host <ip_or_host>]`
+- `miroclaw peripheral flash-nucleo`
 
 ## Validation Tip
 
 To verify docs against your current binary quickly:
 
 ```bash
-zeroclaw --help
-zeroclaw --config-dir /path/to/workspace --help
-zeroclaw <command> --help
+miroclaw --help
+miroclaw --config-dir /path/to/workspace --help
+miroclaw <command> --help
 ```
