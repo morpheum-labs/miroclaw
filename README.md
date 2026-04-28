@@ -35,6 +35,7 @@ If you want a personal, single-user assistant that feels local, fast, and always
   <a href="docs/README.md">Docs</a> ·
   <a href="docs/architecture.md">Architecture</a> ·
   <a href="#quick-start">Getting Started</a> ·
+  <a href="#setup-guide">Setup guide</a> ·
   <a href="#migrating-from-openclaw">Migrating from OpenClaw</a> ·
   <a href="docs/ops/troubleshooting.md">Troubleshoot</a> ·
   <a href="https://discord.com/invite/wDshRVqRjx">Discord</a>
@@ -102,6 +103,19 @@ miroclaw onboard
 ```
 
 Build notes, `cargo clean`, and running without a global install (`cargo run --release --`): [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#from-source-development).
+
+## Setup guide
+
+Use this table to pick a path; each link goes deeper.
+
+| Goal | What to do |
+|------|------------|
+| **First install (recommended)** | Run `miroclaw onboard` after [install](#install-recommended). It creates your workspace, provider, channels, security, memory, and optional **Clawgotcha** control-plane URL + instance name. |
+| **Guided walkthrough** | [Getting started](docs/setup-guides/one-click-bootstrap.md) — auth, pairing, channels, gateway. |
+| **Commands-only reference** | [Quick start command reference](docs/setup-guides/quick-start-command-reference.md) — ports, daemon, non-interactive install, completions, `cargo run`. |
+| **Run the gateway + assistant** | After onboarding: `miroclaw gateway` (or `miroclaw daemon` for gateway + channels + scheduler). See the command reference above. |
+| **Clawgotcha (optional)** | Configure `[clawgotcha]` in `config.toml` so Miroclaw registers and syncs agents/cron/swarm defaults from a control plane. Overview: [Clawgotcha integration](docs/reference/integrations/clawgotcha.md). HTTP contract: [clawgotcha-api-contract.md](docs/reference/integrations/clawgotcha-api-contract.md). Local reference server: `cargo run -p clawgotcha-server` (see [crates/clawgotcha-server/README.md](crates/clawgotcha-server/README.md)). |
+| **Docker** | Build/run the minimal Clawgotcha API with [`docker-compose.yml`](docker-compose.yml) (`docker compose up clawgotcha`). Build the Miroclaw binary image from the repo root [`Dockerfile`](Dockerfile) when you need a containerized gateway (bring your own workspace/config volume). |
 
 ## Migrating from OpenClaw
 

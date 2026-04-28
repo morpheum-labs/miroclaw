@@ -12,6 +12,8 @@ use crate::models::domain::{
 /// Payload for periodic heartbeat (counts filled by host).
 #[derive(Debug, Clone, Default)]
 pub struct HeartbeatPayload {
+    /// Same logical id as registration (`[clawgotcha].instance_name` on Miroclaw).
+    pub instance_name: String,
     pub loaded_agents_count: usize,
     pub cron_jobs_count: usize,
 }
@@ -121,6 +123,12 @@ impl ChangeEventSink for NoOpChangeSink {
 #[async_trait]
 pub trait ConfigReconciler: Send + Sync {
     async fn apply_batch(&self, events: Vec<ChangeEvent>) -> Result<(), ClawgotchaError>;
+
+    /// Merge swarm-level defaults after a successful `GET /v1/swarm/config` pull.
+    async fn apply_swarm_defaults(
+        &self,
+        defs: &crate::models::domain::SwarmDefaults,
+    ) -> Result<(), ClawgotchaError>;
 }
 
 /// Host hook: update delegate agents map / gateway-visible snapshot.

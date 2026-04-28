@@ -29,6 +29,8 @@ where
     pub agents: Arc<dyn AgentRuntimeUpdater>,
     pub cron: Arc<dyn CronSchedulerUpdater>,
     pub sink: Arc<dyn ChangeEventSink>,
+    /// Host fills counts + instance id each heartbeat tick.
+    heartbeat: Arc<dyn Fn() -> HeartbeatPayload + Send + Sync>,
     etag_agents: Arc<Mutex<Option<String>>>,
     etag_cron: Arc<Mutex<Option<String>>>,
     etag_swarm: Arc<Mutex<Option<String>>>,
@@ -50,6 +52,7 @@ where
         agents: Arc<dyn AgentRuntimeUpdater>,
         cron: Arc<dyn CronSchedulerUpdater>,
         sink: Arc<dyn ChangeEventSink>,
+        heartbeat: Arc<dyn Fn() -> HeartbeatPayload + Send + Sync>,
     ) -> Self {
         Self {
             client,
@@ -59,6 +62,7 @@ where
             agents,
             cron,
             sink,
+            heartbeat,
             etag_agents: Arc::new(Mutex::new(None)),
             etag_cron: Arc::new(Mutex::new(None)),
             etag_swarm: Arc::new(Mutex::new(None)),
@@ -181,6 +185,7 @@ where
             FetchDelta::Modified(s) => {
                 summary.global_max_revision = summary.global_max_revision.max(s.current_revision);
                 summary.config_revision_at = Some(s.current_revision);
+                self.reconciler.apply_swarm_defaults(&s).await?;
                 Ok(())
             }
         }
@@ -217,7 +222,7 @@ where
                     self.revisions.save(&summary).await?;
                 }
                 _ = hb_tick.tick() => {
-                    let hb = HeartbeatPayload::default();
+                    let hb = (self.heartbeat)();
                     if let Err(e) = self.client.send_heartbeat(&hb).await {
                         tracing::warn!(error = %e, "clawgotcha heartbeat failed");
                     }

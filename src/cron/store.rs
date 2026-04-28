@@ -220,6 +220,72 @@ pub fn remove_job(config: &Config, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Insert or update an **agent** cron job with a stable id (Clawgotcha / remote sync).
+pub fn upsert_clawgotcha_agent_job(
+    config: &Config,
+    job_id: &str,
+    expression: &str,
+    prompt: &str,
+    enabled: bool,
+) -> Result<()> {
+    let schedule = Schedule::Cron {
+        expr: expression.to_string(),
+        tz: None,
+    };
+    let now = Utc::now();
+    validate_schedule(&schedule, now)?;
+
+    if get_job(config, job_id).is_ok() {
+        update_job(
+            config,
+            job_id,
+            CronJobPatch {
+                schedule: Some(schedule.clone()),
+                prompt: Some(prompt.to_string()),
+                enabled: Some(enabled),
+                ..Default::default()
+            },
+        )?;
+        with_connection(config, |conn| {
+            conn.execute(
+                "UPDATE cron_jobs SET source = 'clawgotcha' WHERE id = ?1",
+                params![job_id],
+            )
+            .context("Failed to tag clawgotcha cron job")
+        })?;
+        return Ok(());
+    }
+
+    validate_delivery_config(None)?;
+    let next_run = next_run_for_schedule(&schedule, now)?;
+    let expression_row = schedule_cron_expression(&schedule).unwrap_or_default();
+    let schedule_json = serde_json::to_string(&schedule)?;
+    let delivery = DeliveryConfig::default();
+    let delivery_json = serde_json::to_string(&delivery)?;
+
+    with_connection(config, |conn| {
+        conn.execute(
+            "INSERT INTO cron_jobs (
+                id, expression, command, schedule, job_type, prompt, name, session_target, model,
+                enabled, delivery, delete_after_run, allowed_tools, source, created_at, next_run
+             ) VALUES (?1, ?2, '', ?3, 'agent', ?4, NULL, 'isolated', NULL, ?5, ?6, 0, NULL, 'clawgotcha', ?7, ?8)",
+            params![
+                job_id,
+                expression_row,
+                schedule_json,
+                prompt,
+                if enabled { 1 } else { 0 },
+                delivery_json,
+                now.to_rfc3339(),
+                next_run.to_rfc3339(),
+            ],
+        )
+        .context("Failed to insert clawgotcha cron job")
+    })?;
+
+    Ok(())
+}
+
 pub fn due_jobs(config: &Config, now: DateTime<Utc>) -> Result<Vec<CronJob>> {
     let lim = i64::try_from(config.scheduler.max_tasks.max(1))
         .context("Scheduler max_tasks overflows i64")?;

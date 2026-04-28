@@ -24,7 +24,7 @@ use crate::channels::{
     session_backend::SessionBackend, session_sqlite::SqliteSessionBackend, Channel,
     GmailPushChannel, LinqChannel, NextcloudTalkChannel, SendMessage, WatiChannel, WhatsAppChannel,
 };
-use crate::config::Config;
+use crate::config::{Config, DelegateAgentConfig};
 use crate::cost::CostTracker;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::providers::{self, ChatMessage, Provider};
@@ -459,12 +459,16 @@ pub struct AppState {
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::implicit_hasher)]
 pub async fn run_gateway(
     host: &str,
     port: u16,
     config: Config,
     clawgotcha_webhook_tx: Option<tokio::sync::mpsc::Sender<ChangeEvent>>,
+    shared_runtime_config: Option<Arc<Mutex<Config>>>,
+    delegate_agents_share: Option<
+        Arc<parking_lot::RwLock<std::collections::HashMap<String, DelegateAgentConfig>>>,
+    >,
 ) -> Result<()> {
     // ── Security: refuse public bind without tunnel or explicit opt-in ──
     if is_public_bind(host) && config.tunnel.provider == "none" && !config.gateway.allow_public_bind
@@ -478,7 +482,8 @@ pub async fn run_gateway(
              then connect from the container via ws://host.docker.internal:{port}."
         );
     }
-    let config_state = Arc::new(Mutex::new(config.clone()));
+    let config_state =
+        shared_runtime_config.unwrap_or_else(|| Arc::new(Mutex::new(config.clone())));
 
     let web_ui = web_ui::WebUiServeState::bootstrap(&config)?;
 
@@ -557,6 +562,7 @@ pub async fn run_gateway(
         config.api_key.as_deref(),
         &config,
         Some(canvas_store.clone()),
+        delegate_agents_share,
     );
 
     // ── Wire MCP tools into the gateway tool registry (non-fatal) ───

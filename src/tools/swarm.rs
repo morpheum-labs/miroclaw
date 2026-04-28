@@ -4,6 +4,7 @@ use crate::providers::{self, Provider};
 use crate::security::policy::ToolOperation;
 use crate::security::SecurityPolicy;
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ const SWARM_AGENT_TIMEOUT_SECS: u64 = 120;
 /// (pipeline), parallel (fan-out/fan-in), and router (LLM-selected) strategies.
 pub struct SwarmTool {
     swarms: Arc<HashMap<String, SwarmConfig>>,
-    agents: Arc<HashMap<String, DelegateAgentConfig>>,
+    agents: Arc<RwLock<HashMap<String, DelegateAgentConfig>>>,
     security: Arc<SecurityPolicy>,
     fallback_credential: Option<String>,
     provider_runtime_options: providers::ProviderRuntimeOptions,
@@ -32,7 +33,23 @@ impl SwarmTool {
     ) -> Self {
         Self {
             swarms: Arc::new(swarms),
-            agents: Arc::new(agents),
+            agents: Arc::new(RwLock::new(agents)),
+            security,
+            fallback_credential,
+            provider_runtime_options,
+        }
+    }
+
+    pub(crate) fn new_with_agents_lock(
+        swarms: HashMap<String, SwarmConfig>,
+        agents: Arc<RwLock<HashMap<String, DelegateAgentConfig>>>,
+        fallback_credential: Option<String>,
+        security: Arc<SecurityPolicy>,
+        provider_runtime_options: providers::ProviderRuntimeOptions,
+    ) -> Self {
+        Self {
+            swarms: Arc::new(swarms),
+            agents,
             security,
             fallback_credential,
             provider_runtime_options,
@@ -119,7 +136,7 @@ impl SwarmTool {
         let mut results = Vec::new();
 
         for (i, agent_name) in swarm_config.agents.iter().enumerate() {
-            let agent_config = match self.agents.get(agent_name) {
+            let agent_config = match self.agents.read().get(agent_name).cloned() {
                 Some(cfg) => cfg,
                 None => {
                     return Ok(ToolResult {
@@ -137,7 +154,7 @@ impl SwarmTool {
             };
 
             match self
-                .call_agent(agent_name, agent_config, &agent_prompt, per_agent_timeout)
+                .call_agent(agent_name, &agent_config, &agent_prompt, per_agent_timeout)
                 .await
             {
                 Ok(output) => {
@@ -183,8 +200,8 @@ impl SwarmTool {
         let mut join_set = tokio::task::JoinSet::new();
 
         for agent_name in &swarm_config.agents {
-            let agent_config = match self.agents.get(agent_name) {
-                Some(cfg) => cfg.clone(),
+            let agent_config = match self.agents.read().get(agent_name).cloned() {
+                Some(cfg) => cfg,
                 None => {
                     return Ok(ToolResult {
                         success: false,
@@ -294,7 +311,7 @@ impl SwarmTool {
             .agents
             .iter()
             .filter_map(|name| {
-                self.agents.get(name).map(|cfg| {
+                self.agents.read().get(name).map(|cfg| {
                     let desc = cfg
                         .system_prompt
                         .as_deref()
@@ -309,7 +326,7 @@ impl SwarmTool {
 
         // Use the first agent's provider for routing
         let first_agent_name = &swarm_config.agents[0];
-        let first_agent_config = match self.agents.get(first_agent_name) {
+        let first_agent_config = match self.agents.read().get(first_agent_name).cloned() {
             Some(cfg) => cfg,
             None => {
                 return Ok(ToolResult {
@@ -323,7 +340,7 @@ impl SwarmTool {
         };
 
         let router_provider = self
-            .create_provider_for_agent(first_agent_config, first_agent_name)
+            .create_provider_for_agent(&first_agent_config, first_agent_name)
             .map_err(|r| anyhow::anyhow!(r.error.unwrap_or_default()))?;
 
         let base_router_prompt = swarm_config
@@ -374,7 +391,7 @@ impl SwarmTool {
             .cloned()
             .unwrap_or_else(|| swarm_config.agents[0].clone());
 
-        let agent_config = match self.agents.get(&matched_name) {
+        let agent_config = match self.agents.read().get(&matched_name).cloned() {
             Some(cfg) => cfg,
             None => {
                 return Ok(ToolResult {
@@ -394,7 +411,7 @@ impl SwarmTool {
         match self
             .call_agent(
                 &matched_name,
-                agent_config,
+                &agent_config,
                 &full_prompt,
                 swarm_config.timeout_secs,
             )

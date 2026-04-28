@@ -196,6 +196,7 @@ impl McpServeRuntime {
             config.api_key.as_deref(),
             config,
             None,
+            None,
         );
 
         let loaded_skills = skills::load_skills_with_config(&config.workspace_dir, config);

@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/aardvark-sys", "crates/clawgotcha"]
+members = [".", "crates/aardvark-sys", "crates/clawgotcha", "crates/clawgotcha-server"]
 resolver = "2"
 
 [package]

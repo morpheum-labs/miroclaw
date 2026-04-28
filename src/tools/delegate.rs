@@ -61,7 +61,7 @@ pub enum BackgroundTaskStatus {
 /// Background results are persisted to `workspace/delegate_results/{task_id}.json`
 /// and can be retrieved via `action: "check_result"`.
 pub struct DelegateTool {
-    agents: Arc<HashMap<String, DelegateAgentConfig>>,
+    agents: Arc<RwLock<HashMap<String, DelegateAgentConfig>>>,
     security: Arc<SecurityPolicy>,
     /// Global credential fallback (from config.api_key)
     fallback_credential: Option<String>,
@@ -111,8 +111,22 @@ impl DelegateTool {
         security: Arc<SecurityPolicy>,
         provider_runtime_options: providers::ProviderRuntimeOptions,
     ) -> Self {
+        Self::new_with_agents_lock(
+            Arc::new(RwLock::new(agents)),
+            fallback_credential,
+            security,
+            provider_runtime_options,
+        )
+    }
+
+    pub(crate) fn new_with_agents_lock(
+        agents: Arc<RwLock<HashMap<String, DelegateAgentConfig>>>,
+        fallback_credential: Option<String>,
+        security: Arc<SecurityPolicy>,
+        provider_runtime_options: providers::ProviderRuntimeOptions,
+    ) -> Self {
         Self {
-            agents: Arc::new(agents),
+            agents,
             security,
             fallback_credential,
             provider_runtime_options,
@@ -155,7 +169,7 @@ impl DelegateTool {
         provider_runtime_options: providers::ProviderRuntimeOptions,
     ) -> Self {
         Self {
-            agents: Arc::new(agents),
+            agents: Arc::new(RwLock::new(agents)),
             security,
             fallback_credential,
             provider_runtime_options,
@@ -261,7 +275,15 @@ impl Tool for DelegateTool {
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
-        let agent_names: Vec<&str> = self.agents.keys().map(|s: &String| s.as_str()).collect();
+        let agent_names_joined = {
+            let g = self.agents.read();
+            let names: Vec<String> = g.keys().cloned().collect();
+            if names.is_empty() {
+                "(none configured)".to_string()
+            } else {
+                names.join(", ")
+            }
+        };
         json!({
             "type": "object",
             "additionalProperties": false,
@@ -279,11 +301,7 @@ impl Tool for DelegateTool {
                     "minLength": 1,
                     "description": format!(
                         "Name of the agent to delegate to. Available: {}",
-                        if agent_names.is_empty() {
-                            "(none configured)".to_string()
-                        } else {
-                            agent_names.join(", ")
-                        }
+                        agent_names_joined
                     )
                 },
                 "prompt": {
@@ -404,21 +422,24 @@ impl DelegateTool {
             .unwrap_or("");
 
         // Look up agent config
-        let agent_config = match self.agents.get(agent_name) {
+        let agent_config = match self.agents.read().get(agent_name).cloned() {
             Some(cfg) => cfg,
             None => {
-                let available: Vec<&str> =
-                    self.agents.keys().map(|s: &String| s.as_str()).collect();
+                let available_list = {
+                    let g = self.agents.read();
+                    let names: Vec<String> = g.keys().cloned().collect();
+                    if names.is_empty() {
+                        "(none configured)".to_string()
+                    } else {
+                        names.join(", ")
+                    }
+                };
                 return Ok(ToolResult {
                     success: false,
                     output: String::new(),
                     error: Some(format!(
                         "Unknown agent '{agent_name}'. Available agents: {}",
-                        if available.is_empty() {
-                            "(none configured)".to_string()
-                        } else {
-                            available.join(", ")
-                        }
+                        available_list
                     )),
                 });
             }
@@ -489,7 +510,7 @@ impl DelegateTool {
             return self
                 .execute_agentic(
                     agent_name,
-                    agent_config,
+                    &agent_config,
                     &*provider,
                     &full_prompt,
                     temperature,
@@ -519,7 +540,7 @@ impl DelegateTool {
 
         // Build enriched system prompt for non-agentic sub-agent.
         let enriched_system_prompt = self.build_enriched_system_prompt(
-            agent_config,
+            &agent_config,
             &[],
             &self.workspace_dir,
             layered_block.as_deref(),
@@ -592,21 +613,24 @@ impl DelegateTool {
         args: &serde_json::Value,
     ) -> anyhow::Result<ToolResult> {
         // Validate agent exists and check depth/security before spawning
-        let agent_config = match self.agents.get(agent_name) {
-            Some(cfg) => cfg.clone(),
+        let agent_config = match self.agents.read().get(agent_name).cloned() {
+            Some(cfg) => cfg,
             None => {
-                let available: Vec<&str> =
-                    self.agents.keys().map(|s: &String| s.as_str()).collect();
+                let available_list = {
+                    let g = self.agents.read();
+                    let names: Vec<String> = g.keys().cloned().collect();
+                    if names.is_empty() {
+                        "(none configured)".to_string()
+                    } else {
+                        names.join(", ")
+                    }
+                };
                 return Ok(ToolResult {
                     success: false,
                     output: String::new(),
                     error: Some(format!(
                         "Unknown agent '{agent_name}'. Available agents: {}",
-                        if available.is_empty() {
-                            "(none configured)".to_string()
-                        } else {
-                            available.join(", ")
-                        }
+                        available_list
                     )),
                 });
             }
@@ -811,19 +835,22 @@ impl DelegateTool {
 
         // Validate all agents exist before starting any
         for name in &agent_names {
-            if !self.agents.contains_key(name) {
-                let available: Vec<&str> =
-                    self.agents.keys().map(|s: &String| s.as_str()).collect();
+            if !self.agents.read().contains_key(name) {
+                let available_list = {
+                    let g = self.agents.read();
+                    let names: Vec<String> = g.keys().cloned().collect();
+                    if names.is_empty() {
+                        "(none configured)".to_string()
+                    } else {
+                        names.join(", ")
+                    }
+                };
                 return Ok(ToolResult {
                     success: false,
                     output: String::new(),
                     error: Some(format!(
                         "Unknown agent '{name}' in parallel list. Available: {}",
-                        if available.is_empty() {
-                            "(none configured)".to_string()
-                        } else {
-                            available.join(", ")
-                        }
+                        available_list
                     )),
                 });
             }

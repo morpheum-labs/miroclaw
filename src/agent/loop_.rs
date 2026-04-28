@@ -3892,6 +3892,7 @@ pub async fn run(
         config.api_key.as_deref(),
         &config,
         None,
+        None,
     );
 
     let peripheral_tools: Vec<Box<dyn Tool>> =
@@ -4953,6 +4954,7 @@ pub async fn process_message(
         &config.agents,
         config.api_key.as_deref(),
         &config,
+        None,
         None,
     );
     let peripheral_tools: Vec<Box<dyn Tool>> =

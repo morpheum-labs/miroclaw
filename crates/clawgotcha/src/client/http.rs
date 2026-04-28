@@ -184,6 +184,7 @@ impl ClawgotchaRegistration for ClawgotchaHttpAdapter {
 
     async fn send_heartbeat(&self, hb: &HeartbeatPayload) -> Result<(), ClawgotchaError> {
         let body = serde_json::json!({
+            "instance_name": hb.instance_name,
             "loaded_agents_count": hb.loaded_agents_count,
             "cron_jobs_count": hb.cron_jobs_count,
         });

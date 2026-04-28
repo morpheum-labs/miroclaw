@@ -69,6 +69,42 @@ fn has_launchable_channels(channels: &ChannelsConfig) -> bool {
     channels.channels_except_webhook().iter().any(|(_, ok)| *ok)
 }
 
+fn prompt_clawgotcha_optional() -> Result<crate::config::ClawgotchaConfig> {
+    if !std::io::stdin().is_terminal() {
+        return Ok(crate::config::ClawgotchaConfig::default());
+    }
+    let setup: bool = Confirm::new()
+        .with_prompt(format!(
+            "  {} Configure Clawgotcha control plane (optional)?",
+            style("🔗").cyan()
+        ))
+        .default(false)
+        .interact()?;
+    if !setup {
+        return Ok(crate::config::ClawgotchaConfig::default());
+    }
+    let url: String = Input::new()
+        .with_prompt("  Clawgotcha API base URL (include trailing path if APIs live under /api/…)")
+        .interact_text()?;
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Ok(crate::config::ClawgotchaConfig::default());
+    }
+    let instance_name: String = Input::new()
+        .with_prompt("  Logical instance name (registered with the control plane)")
+        .interact_text()?;
+    let instance_name = instance_name.trim().to_string();
+    if instance_name.is_empty() {
+        anyhow::bail!("instance name must not be empty when configuring Clawgotcha");
+    }
+    Ok(crate::config::ClawgotchaConfig {
+        enabled: true,
+        url: Some(url),
+        instance_name: Some(instance_name),
+        ..Default::default()
+    })
+}
+
 // ── Main wizard entry point ──────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,6 +161,8 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
     print_step(9, 9, "Workspace Files");
     scaffold_workspace(&workspace_dir, &project_ctx, &memory_config.backend).await?;
 
+    let clawgotcha_config = prompt_clawgotcha_optional()?;
+
     // ── Build config ──
     // Defaults: SQLite memory, supervised autonomy, workspace-scoped, native runtime
     let config = Config {
@@ -162,7 +200,7 @@ pub async fn run_wizard(force: bool) -> Result<Config> {
         embedding_routes: Vec::new(),
         heartbeat: HeartbeatConfig::default(),
         cron: crate::config::CronConfig::default(),
-        clawgotcha: crate::config::ClawgotchaConfig::default(),
+        clawgotcha: clawgotcha_config,
         channels_config,
         memory: memory_config, // User-selected memory backend
         storage: StorageConfig::default(),

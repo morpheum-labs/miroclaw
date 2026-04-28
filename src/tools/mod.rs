@@ -375,6 +375,7 @@ pub fn all_tools(
         fallback_api_key,
         root_config,
         canvas_store,
+        None,
     )
 }
 
@@ -399,6 +400,7 @@ pub fn all_tools_with_runtime(
     fallback_api_key: Option<&str>,
     root_config: &crate::config::Config,
     canvas_store: Option<CanvasStore>,
+    delegate_agents_share: Option<Arc<RwLock<HashMap<String, DelegateAgentConfig>>>>,
 ) -> (
     Vec<Box<dyn Tool>>,
     Option<DelegateParentToolsHandle>,
@@ -906,13 +908,21 @@ pub fn all_tools_with_runtime(
             .iter()
             .map(|(name, cfg)| (name.clone(), cfg.clone()))
             .collect();
+        let delegate_agents_cell = delegate_agents_share.clone().unwrap_or_else(|| {
+            Arc::new(RwLock::new(
+                delegate_agents
+                    .iter()
+                    .map(|(name, cfg)| (name.clone(), cfg.clone()))
+                    .collect(),
+            ))
+        });
         let parent_tools = Arc::new(RwLock::new(tool_arcs.clone()));
         let post_turn = crate::agent::loop_::PostTurnMemoryBinding {
             memory: Some(Arc::clone(&memory)),
             auto_save: root_config.memory.auto_save,
         };
-        let delegate_tool = DelegateTool::new_with_options(
-            delegate_agents,
+        let delegate_tool = DelegateTool::new_with_agents_lock(
+            delegate_agents_cell,
             delegate_fallback_credential.clone(),
             security.clone(),
             provider_runtime_options.clone(),
@@ -933,13 +943,21 @@ pub fn all_tools_with_runtime(
 
     // Add swarm tool when swarms are configured
     if !root_config.swarms.is_empty() {
-        let swarm_agents: HashMap<String, DelegateAgentConfig> = agents
+        let swarm_agents_map: HashMap<String, DelegateAgentConfig> = agents
             .iter()
             .map(|(name, cfg)| (name.clone(), cfg.clone()))
             .collect();
-        tool_arcs.push(Arc::new(SwarmTool::new(
+        let swarm_agents_cell = delegate_agents_share.clone().unwrap_or_else(|| {
+            Arc::new(RwLock::new(
+                swarm_agents_map
+                    .iter()
+                    .map(|(name, cfg)| (name.clone(), cfg.clone()))
+                    .collect(),
+            ))
+        });
+        tool_arcs.push(Arc::new(SwarmTool::new_with_agents_lock(
             root_config.swarms.clone(),
-            swarm_agents,
+            swarm_agents_cell,
             delegate_fallback_credential,
             security.clone(),
             provider_runtime_options,

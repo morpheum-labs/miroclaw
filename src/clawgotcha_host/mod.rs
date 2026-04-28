@@ -3,11 +3,13 @@
 mod glue;
 pub mod mapping;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Context;
+use parking_lot::{Mutex, RwLock};
 
-use crate::config::Config;
+use crate::config::{Config, DelegateAgentConfig};
 
 /// Build [`clawgotcha::config::ClawgotchaRuntimeConfig`] from loaded host config.
 pub fn runtime_config_from_host(
@@ -46,9 +48,12 @@ pub fn runtime_config_from_host(
 }
 
 /// Registration + heartbeat + periodic delta sync + webhook fan-in (daemon supervisor restarts on failure).
+#[allow(clippy::implicit_hasher)]
 pub async fn run_sync_supervised(
     config: Config,
     webhook_rx: tokio::sync::mpsc::Receiver<clawgotcha::ChangeEvent>,
+    shared_config: Arc<Mutex<Config>>,
+    delegate_agents: Option<Arc<RwLock<HashMap<String, DelegateAgentConfig>>>>,
 ) -> anyhow::Result<()> {
     crate::health::mark_component_ok("clawgotcha");
 
@@ -65,13 +70,33 @@ pub async fn run_sync_supervised(
         dir.join("offline.json"),
     ));
 
-    let reconciler = Arc::new(glue::StubReconciler);
-    let agents = Arc::new(glue::StubAgents);
-    let cron = Arc::new(glue::StubCron);
+    let reconciler = Arc::new(glue::HostReconciler {
+        config: Arc::clone(&shared_config),
+    });
+    let agents = Arc::new(glue::HostAgents {
+        config: Arc::clone(&shared_config),
+        delegate_agents: delegate_agents.clone(),
+    });
+    let cron = Arc::new(glue::HostCron {
+        config: Arc::clone(&shared_config),
+    });
     let sink = Arc::new(clawgotcha::NoOpChangeSink);
 
+    let instance_name = rt.instance_name.clone();
+    let hb_cfg = Arc::clone(&shared_config);
+    let heartbeat: Arc<dyn Fn() -> clawgotcha::traits::HeartbeatPayload + Send + Sync> =
+        Arc::new(move || {
+            let cfg = hb_cfg.lock();
+            let cron_jobs_count = crate::cron::list_jobs(&cfg).map(|v| v.len()).unwrap_or(0);
+            clawgotcha::traits::HeartbeatPayload {
+                instance_name: instance_name.clone(),
+                loaded_agents_count: cfg.agents.len(),
+                cron_jobs_count,
+            }
+        });
+
     let sync = clawgotcha::sync::SyncService::new(
-        client, revisions, offline, reconciler, agents, cron, sink,
+        client, revisions, offline, reconciler, agents, cron, sink, heartbeat,
     );
 
     let callback = config
@@ -84,6 +109,12 @@ pub async fn run_sync_supervised(
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))
         .context("clawgotcha bootstrap")?;
+
+    tracing::info!(
+        url = %rt.base_url,
+        instance = %rt.instance_name,
+        "Registered with Clawgotcha; sync loop running"
+    );
 
     sync.run_periodic(rt, webhook_rx)
         .await

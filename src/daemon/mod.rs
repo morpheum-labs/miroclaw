@@ -1,8 +1,12 @@
-use crate::config::Config;
+use crate::config::{Config, DelegateAgentConfig};
 use anyhow::Result;
 use chrono::Utc;
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use parking_lot::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
@@ -62,6 +66,23 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
 
     let mut handles: Vec<JoinHandle<()>> = vec![spawn_state_writer(config.clone())];
 
+    let clawgotcha_shared_gateway_config = if config.clawgotcha.enabled {
+        Some(Arc::new(Mutex::new(config.clone())))
+    } else {
+        None
+    };
+    let delegate_agents_share = if config.clawgotcha.enabled {
+        Some(Arc::new(RwLock::new(
+            config
+                .agents
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect::<HashMap<String, DelegateAgentConfig>>(),
+        )))
+    } else {
+        None
+    };
+
     let (clawgotcha_tx, clawgotcha_rx) = if config.clawgotcha.enabled {
         let (tx, rx) = tokio::sync::mpsc::channel::<clawgotcha::ChangeEvent>(256);
         (Some(tx), Some(rx))
@@ -73,6 +94,8 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
         let gateway_cfg = config.clone();
         let gateway_host = host.clone();
         let cg_tx = clawgotcha_tx.clone();
+        let gw_shared = clawgotcha_shared_gateway_config.clone();
+        let gw_delegate = delegate_agents_share.clone();
         handles.push(spawn_component_supervisor(
             "gateway",
             initial_backoff,
@@ -81,7 +104,19 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
                 let cfg = gateway_cfg.clone();
                 let host = gateway_host.clone();
                 let cg_tx = cg_tx.clone();
-                async move { Box::pin(crate::gateway::run_gateway(&host, port, cfg, cg_tx)).await }
+                let gw_shared = gw_shared.clone();
+                let gw_delegate = gw_delegate.clone();
+                async move {
+                    Box::pin(crate::gateway::run_gateway(
+                        &host,
+                        port,
+                        cfg,
+                        cg_tx,
+                        gw_shared,
+                        gw_delegate,
+                    ))
+                    .await
+                }
             },
         ));
     }
@@ -136,6 +171,10 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
     if let Some(rx) = clawgotcha_rx {
         let sync_cfg = config.clone();
         let cg_rx_cell = std::sync::Arc::new(std::sync::Mutex::new(Some(rx)));
+        let cg_shared = clawgotcha_shared_gateway_config
+            .clone()
+            .expect("clawgotcha enabled implies shared gateway config");
+        let cg_delegate = delegate_agents_share.clone();
         handles.push(spawn_component_supervisor(
             "clawgotcha",
             initial_backoff,
@@ -143,13 +182,21 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
             move || {
                 let cfg = sync_cfg.clone();
                 let rx_slot = std::sync::Arc::clone(&cg_rx_cell);
+                let cg_shared = Arc::clone(&cg_shared);
+                let cg_delegate = cg_delegate.clone();
                 async move {
                     let rx = rx_slot
                         .lock()
                         .expect("clawgotcha rx mutex poisoned")
                         .take()
                         .expect("clawgotcha receiver already taken");
-                    Box::pin(crate::clawgotcha_host::run_sync_supervised(cfg, rx)).await
+                    Box::pin(crate::clawgotcha_host::run_sync_supervised(
+                        cfg,
+                        rx,
+                        cg_shared,
+                        cg_delegate,
+                    ))
+                    .await
                 }
             },
         ));

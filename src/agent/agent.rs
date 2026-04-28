@@ -534,6 +534,7 @@ impl Agent {
             config.api_key.as_deref(),
             config,
             None,
+            None,
         );
 
         // ── Wire MCP tools (non-fatal) ─────────────────────────────

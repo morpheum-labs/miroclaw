@@ -1,0 +1,18 @@
+# Example: Clawgotcha control plane (reference server).
+#
+# Build: `docker compose build`
+# Run:   `docker compose up clawgotcha`
+#
+# Miroclaw is typically run on the host or in a separate image with a prepared workspace
+# (`config.toml` with `[clawgotcha].url` pointing at this service). See
+# `docs/reference/integrations/clawgotcha-api-contract.md`.
+
+services:
+  clawgotcha:
+    build:
+      context: .
+      dockerfile: crates/clawgotcha-server/Dockerfile
+    ports:
+      - "9847:9847"
+    environment:
+      CLAWGOTCHA_SERVER_PORT: "9847"
