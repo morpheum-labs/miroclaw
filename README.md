@@ -1,37 +1,37 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/morpheum-labs/zeroclaw/master/docs/assets/zeroclaw-banner.png" alt="ZeroClaw" width="600" />
+  <img src="https://raw.githubusercontent.com/morpheum-labs/miroclaw/master/docs/assets/miroclaw-banner.png" alt="Miroclaw" width="600" />
 </p>
 
-<h1 align="center">🦀 ZeroClaw — Personal AI Assistant</h1>
+<h1 align="center">🦀 Miroclaw — Personal AI Assistant</h1>
 
 <p align="center">
-  <strong>Zero overhead. Zero compromise. 100% Rust. 100% Agnostic.</strong><br>
+  <strong>Lean runtime. Full control. 100% Rust. 100% Agnostic.</strong><br>
   ⚡️ <strong>Runs on $10 hardware with <5MB RAM: That's 99% less memory than OpenClaw and 98% cheaper than a Mac mini!</strong>
 </p>
 
 <p align="center">
   <a href="LICENSE-APACHE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache%202.0-blue.svg" alt="License: MIT OR Apache-2.0" /></a>
-  <a href="https://github.com/zeroclaw-labs/zeroclaw/graphs/contributors"><img src="https://img.shields.io/github/contributors/zeroclaw-labs/zeroclaw?color=green" alt="Contributors" /></a>
+  <a href="https://github.com/morpheum-labs/miroclaw/graphs/contributors"><img src="https://img.shields.io/github/contributors/morpheum-labs/miroclaw?color=green" alt="Contributors" /></a>
   <a href="https://buymeacoffee.com/argenistherose"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow.svg?style=flat&logo=buy-me-a-coffee" alt="Buy Me a Coffee" /></a>
-  <a href="https://x.com/zeroclawlabs?s=21"><img src="https://img.shields.io/badge/X-%40zeroclawlabs-000000?style=flat&logo=x&logoColor=white" alt="X: @zeroclawlabs" /></a>
-  <a href="https://www.facebook.com/groups/zeroclawlabs"><img src="https://img.shields.io/badge/Facebook-Group-1877F2?style=flat&logo=facebook&logoColor=white" alt="Facebook Group" /></a>
+  <a href="https://x.com/miroclawlabs?s=21"><img src="https://img.shields.io/badge/X-%40miroclawlabs-000000?style=flat&logo=x&logoColor=white" alt="X: @miroclawlabs" /></a>
+  <a href="https://www.facebook.com/groups/miroclawlabs"><img src="https://img.shields.io/badge/Facebook-Group-1877F2?style=flat&logo=facebook&logoColor=white" alt="Facebook Group" /></a>
   <a href="https://discord.com/invite/wDshRVqRjx"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord" /></a>
-  <a href="https://www.instagram.com/therealzeroclaw"><img src="https://img.shields.io/badge/Instagram-%40therealzeroclaw-E4405F?style=flat&logo=instagram&logoColor=white" alt="Instagram: @therealzeroclaw" /></a>
-  <a href="https://www.tiktok.com/@zeroclawlabs"><img src="https://img.shields.io/badge/TikTok-%40zeroclawlabs-000000?style=flat&logo=tiktok&logoColor=white" alt="TikTok: @zeroclawlabs" /></a>
+  <a href="https://www.instagram.com/therealmiroclaw"><img src="https://img.shields.io/badge/Instagram-%40therealmiroclaw-E4405F?style=flat&logo=instagram&logoColor=white" alt="Instagram: @therealmiroclaw" /></a>
+  <a href="https://www.tiktok.com/@miroclawlabs"><img src="https://img.shields.io/badge/TikTok-%40miroclawlabs-000000?style=flat&logo=tiktok&logoColor=white" alt="TikTok: @miroclawlabs" /></a>
   <a href="https://www.rednote.com/user/profile/69b735e6000000002603927e"><img src="https://img.shields.io/badge/RedNote-Official-FF2442?style=flat" alt="RedNote" /></a>
-  <a href="https://www.reddit.com/r/zeroclawlabs/"><img src="https://img.shields.io/badge/Reddit-r%2Fzeroclawlabs-FF4500?style=flat&logo=reddit&logoColor=white" alt="Reddit: r/zeroclawlabs" /></a>
+  <a href="https://www.reddit.com/r/miroclawlabs/"><img src="https://img.shields.io/badge/Reddit-r%2Fmiroclawlabs-FF4500?style=flat&logo=reddit&logoColor=white" alt="Reddit: r/miroclawlabs" /></a>
 </p>
 
 <p align="center">
 Built by students and members of the Harvard, MIT, and Sundai.Club communities.
 </p>
 
-ZeroClaw is a personal AI assistant you run on your own devices. It answers you on the channels you already use (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work, and more). It has a web dashboard for real-time control and can connect to hardware peripherals (ESP32, STM32, Arduino, Raspberry Pi). The Gateway is just the control plane — the product is the assistant.
+Miroclaw is a personal AI assistant you run on your own devices. It answers you on the channels you already use (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work, and more). It has a web dashboard for real-time control and can connect to hardware peripherals (ESP32, STM32, Arduino, Raspberry Pi). The Gateway is just the control plane — the product is the assistant.
 
 If you want a personal, single-user assistant that feels local, fast, and always-on, this is it.
 
 <p align="center">
-  <a href="https://zeroclawlabs.ai">Website</a> ·
+  <a href="https://miroclawlabs.ai">Website</a> ·
   <a href="docs/README.md">Docs</a> ·
   <a href="docs/architecture.md">Architecture</a> ·
   <a href="#quick-start">Getting Started</a> ·
@@ -40,7 +40,7 @@ If you want a personal, single-user assistant that feels local, fast, and always
   <a href="https://discord.com/invite/wDshRVqRjx">Discord</a>
 </p>
 
-> **Preferred setup:** run `zeroclaw onboard` in your terminal. ZeroClaw Onboard guides you step by step through setting up the gateway, workspace, channels, and provider. It is the recommended setup path and works on macOS, Linux, and Windows (via WSL2). New install? Start here: [Getting started](#quick-start)
+> **Preferred setup:** run `miroclaw onboard` in your terminal. Miroclaw Onboard guides you step by step through setting up the gateway, workspace, channels, and provider. It is the recommended setup path and works on macOS, Linux, and Windows (via WSL2). New install? Start here: [Getting started](#quick-start)
 
 ### Subscription Auth (OAuth)
 
@@ -60,18 +60,18 @@ Runtime: Rust stable toolchain. Single binary, no runtime dependencies.
 ### Homebrew (macOS/Linuxbrew)
 
 ```bash
-brew install zeroclaw
+brew install miroclaw
 ```
 
 ### One-click bootstrap
 
 ```bash
-git clone https://github.com/morpheum-labs/zeroclaw.git
-cd zeroclaw
+git clone https://github.com/morpheum-labs/miroclaw.git
+cd miroclaw
 bash scripts/install.sh
 ```
 
-`zeroclaw onboard` runs automatically after install to configure your workspace and provider.
+`miroclaw onboard` runs automatically after install to configure your workspace and provider.
 
 ## Quick start (TL;DR)
 
@@ -81,54 +81,54 @@ Detailed command lines (non-interactive install, gateway ports, daemon, auth, co
 
 ```bash
 bash scripts/install.sh
-zeroclaw gateway
-zeroclaw agent -m "Hello, ZeroClaw!"
-zeroclaw status
-zeroclaw doctor
+miroclaw gateway
+miroclaw agent -m "Hello, Miroclaw!"
+miroclaw status
+miroclaw doctor
 ```
 
-Upgrading? Run `zeroclaw doctor` after updating.
+Upgrading? Run `miroclaw doctor` after updating.
 
 ### From source (development)
 
 ```bash
-git clone https://github.com/morpheum-labs/zeroclaw.git
-cd zeroclaw
+git clone https://github.com/morpheum-labs/miroclaw.git
+cd miroclaw
 
 cargo build --release --locked
 cargo install --path . --force --locked
 
-zeroclaw onboard
+miroclaw onboard
 ```
 
 Build notes, `cargo clean`, and running without a global install (`cargo run --release --`): [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#from-source-development).
 
 ## Migrating from OpenClaw
 
-ZeroClaw can import your OpenClaw workspace, memory, and configuration:
+Miroclaw can import your OpenClaw workspace, memory, and configuration:
 
 ```bash
 # Preview what will be migrated (safe, read-only)
-zeroclaw migrate openclaw --dry-run
+miroclaw migrate openclaw --dry-run
 
 # Run the migration
-zeroclaw migrate openclaw
+miroclaw migrate openclaw
 ```
 
-This migrates your memory entries, workspace files, and configuration from `~/.openclaw/` to `~/.zeroclaw/`. Config is converted from JSON to TOML automatically.
+This migrates your memory entries, workspace files, and configuration from `~/.openclaw/` to `~/.miroclaw/`. Config is converted from JSON to TOML automatically.
 
 ## Security defaults (DM access)
 
-ZeroClaw connects to real messaging surfaces. Treat inbound DMs as untrusted input.
+Miroclaw connects to real messaging surfaces. Treat inbound DMs as untrusted input.
 
 Full security guide: [docs/security/README.md](docs/security/README.md)
 
 Default behavior on all channels:
 
 - **DM pairing** (default): unknown senders receive a short pairing code and the bot does not process their message.
-- Approve with: `zeroclaw pairing approve <channel> <code>` (then the sender is added to a local allowlist).
+- Approve with: `miroclaw pairing approve <channel> <code>` (then the sender is added to a local allowlist).
 - Public inbound DMs require an explicit opt-in in `config.toml`.
-- Run `zeroclaw doctor` to surface risky or misconfigured DM policies.
+- Run `miroclaw doctor` to surface risky or misconfigured DM policies.
 
 **Autonomy levels:**
 
@@ -149,8 +149,8 @@ Use this board for important notices (breaking changes, security advisories, mai
 
 | Date (UTC) | Level       | Notice                                                                                                                                                                                                                                                                                                                                                 | Action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-02-19 | _Critical_  | We are **not affiliated** with `openagen/zeroclaw`, `zeroclaw.org` or `zeroclaw.net`. The `zeroclaw.org` and `zeroclaw.net` domains currently points to the `openagen/zeroclaw` fork, and that domain/repository are impersonating our official website/project.                                                                                       | Do not trust information, binaries, fundraising, or announcements from those sources. Use only [this repository](https://github.com/morpheum-labs/zeroclaw) and our verified social accounts.                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| 2026-02-21 | _Important_ | Our official website is now live: [zeroclawlabs.ai](https://zeroclawlabs.ai). Thanks for your patience while we prepared the launch. We are still seeing impersonation attempts, so do **not** join any investment or fundraising activity claiming the ZeroClaw name unless it is published through our official channels.                            | Use [this repository](https://github.com/zeroclaw-labs/zeroclaw) as the single source of truth. Follow [X (@zeroclawlabs)](https://x.com/zeroclawlabs?s=21), [Facebook (Group)](https://www.facebook.com/groups/zeroclawlabs), and [Reddit (r/zeroclawlabs)](https://www.reddit.com/r/zeroclawlabs/) for official updates. |
+| 2026-02-19 | _Critical_  | We are **not affiliated** with `openagen/zeroclaw`, `zeroclaw.org` or `zeroclaw.net`. The `zeroclaw.org` and `zeroclaw.net` domains previously pointed to third-party forks impersonating this project.                                                                                       | Do not trust information, binaries, fundraising, or announcements from those sources. Use only [this repository](https://github.com/morpheum-labs/miroclaw) and our verified social accounts.                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 2026-02-21 | _Important_ | Our official website is now live: [miroclawlabs.ai](https://miroclawlabs.ai). Thanks for your patience while we prepared the launch. We are still seeing impersonation attempts, so do **not** join any investment or fundraising activity claiming the Miroclaw name unless it is published through our official channels.                            | Use [this repository](https://github.com/morpheum-labs/miroclaw) as the single source of truth. Follow [X (@miroclawlabs)](https://x.com/miroclawlabs?s=21), [Facebook (Group)](https://www.facebook.com/groups/miroclawlabs), and [Reddit (r/miroclawlabs)](https://www.reddit.com/r/miroclawlabs/) for official updates. |
 | 2026-02-19 | _Important_ | Anthropic updated the Authentication and Credential Use terms on 2026-02-19. Claude Code OAuth tokens (Free, Pro, Max) are intended exclusively for Claude Code and Claude.ai; using OAuth tokens from Claude Free/Pro/Max in any other product, tool, or service (including Agent SDK) is not permitted and may violate the Consumer Terms of Service. | Please temporarily avoid Claude Code OAuth integrations to prevent potential loss. Original clause: [Authentication and Credential Use](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use).                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ## Highlights
@@ -170,18 +170,18 @@ Use this board for important notices (breaking changes, security advisories, mai
 - **Skills platform** — bundled, community, and workspace skills with security auditing.
 - **Tunnel support** — Cloudflare, Tailscale, ngrok, OpenVPN, and custom tunnels for remote access.
 
-### Why teams pick ZeroClaw
+### Why teams pick Miroclaw
 
 - **Lean by default:** small Rust binary, fast startup, low memory footprint.
 - **Secure by design:** pairing, strict sandboxing, explicit allowlists, workspace scoping.
 - **Fully swappable:** core systems are traits (providers, channels, tools, memory, tunnels).
 - **No lock-in:** OpenAI-compatible provider support + pluggable custom endpoints.
 
-## Benchmark Snapshot (ZeroClaw vs OpenClaw, Reproducible)
+## Benchmark Snapshot (Miroclaw vs OpenClaw, Reproducible)
 
 Local machine quick benchmark (macOS arm64, Feb 2026) normalized for 0.8GHz edge hardware.
 
-|                           | OpenClaw      | NanoBot        | PicoClaw        | ZeroClaw 🦀          |
+|                           | OpenClaw      | NanoBot        | PicoClaw        | Miroclaw 🦀          |
 | ------------------------- | ------------- | -------------- | --------------- | -------------------- |
 | **Language**              | TypeScript    | Python         | Go              | **Rust**             |
 | **RAM**                   | > 1GB         | > 100MB        | < 10MB          | **< 5MB**            |
@@ -189,10 +189,10 @@ Local machine quick benchmark (macOS arm64, Feb 2026) normalized for 0.8GHz edge
 | **Binary Size**           | ~28MB (dist)  | N/A (Scripts)  | ~8MB            | **~8.8 MB**          |
 | **Cost**                  | Mac Mini $599 | Linux SBC ~$50 | Linux Board $10 | **Any hardware $10** |
 
-> Notes: ZeroClaw results are measured on release builds using `/usr/bin/time -l`. OpenClaw requires Node.js runtime (typically ~390MB additional memory overhead), while NanoBot requires Python runtime. PicoClaw and ZeroClaw are static binaries. The RAM figures above are runtime memory; build-time compilation requirements are higher.
+> Notes: Miroclaw results are measured on release builds using `/usr/bin/time -l`. OpenClaw requires Node.js runtime (typically ~390MB additional memory overhead), while NanoBot requires Python runtime. PicoClaw and Miroclaw are static binaries. The RAM figures above are runtime memory; build-time compilation requirements are higher.
 
 <p align="center">
-  <img src="docs/assets/zeroclaw-comparison.jpeg" alt="ZeroClaw vs OpenClaw Comparison" width="800" />
+  <img src="docs/assets/zeroclaw-comparison.jpeg" alt="Miroclaw vs OpenClaw Comparison" width="800" />
 </p>
 
 ### Reproducible local measurement
@@ -236,7 +236,7 @@ React 19 + Vite 6 + Tailwind CSS 4 web dashboard served directly from the Gatewa
 - **Integrations** — integration status and setup
 - **Pairing** — device pairing management
 
-**External dashboard (optional):** set `[webui].external_path` in `config.toml` (or `MIROCLAW_WEBUI_EXTERNAL_PATH`, or `zeroclaw gateway start --webui-external-path /path/to/web/dist`) to serve the built UI from disk. When the path is missing or invalid, the gateway falls back to embedded `web/dist/`. Use `POST /api/webui/reload` or `/webui reload` in gateway chat to re-scan the path without restarting. To build a slimmer binary without embedded assets, compile with default features minus `embedded-web-ui` and always supply a valid external `dist/` at runtime.
+**External dashboard (optional):** set `[webui].external_path` in `config.toml` (or `MIROCLAW_WEBUI_EXTERNAL_PATH`, or `miroclaw gateway start --webui-external-path /path/to/web/dist`) to serve the built UI from disk. When the path is missing or invalid, the gateway falls back to embedded `web/dist/`. Use `POST /api/webui/reload` or `/webui reload` in gateway chat to re-scan the path without restarting. To build a slimmer binary without embedded assets, compile with default features minus `embedded-web-ui` and always supply a valid external `dist/` at runtime.
 
 ### Firmware targets
 
@@ -279,7 +279,7 @@ React 19 + Vite 6 + Tailwind CSS 4 web dashboard served directly from the Gatewa
 
 ## Configuration
 
-Minimal `~/.zeroclaw/config.toml`:
+Minimal `~/.miroclaw/config.toml`:
 
 ```toml
 default_provider = "anthropic"
@@ -347,17 +347,17 @@ Set `runtime.kind = "docker"` for strict sandboxing or network isolation.
 
 ## Subscription Auth (OpenAI Codex / Claude Code / Gemini)
 
-ZeroClaw supports subscription-native auth profiles (multi-account, encrypted at rest).
+Miroclaw supports subscription-native auth profiles (multi-account, encrypted at rest).
 
-- Store file: `~/.zeroclaw/auth-profiles.json`
-- Encryption key: `~/.zeroclaw/.secret_key`
+- Store file: `~/.miroclaw/auth-profiles.json`
+- Encryption key: `~/.miroclaw/.secret_key`
 - Profile id format: `<provider>:<profile_name>` (example: `openai-codex:work`)
 
-Login, refresh, and `zeroclaw agent --provider …` examples: [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#subscription-auth-oauth--tokens).
+Login, refresh, and `miroclaw agent --provider …` examples: [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#subscription-auth-oauth--tokens).
 
 ## Agent workspace + skills
 
-Workspace root: `~/.zeroclaw/workspace/` (configurable via config).
+Workspace root: `~/.miroclaw/workspace/` (configurable via config).
 
 Injected prompt files:
 - `IDENTITY.md` — agent personality and role
@@ -366,10 +366,10 @@ Injected prompt files:
 - `AGENTS.md` — session conventions and initialization rules
 - `SOUL.md` — core identity and operating principles
 
-Skills: `~/.zeroclaw/workspace/skills/<skill>/SKILL.md` or `SKILL.toml`.
+Skills: `~/.miroclaw/workspace/skills/<skill>/SKILL.md` or `SKILL.toml`.
 
 ```bash
-zeroclaw skills list
+miroclaw skills list
 ```
 
 Install, audit, and remove: [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#skills).
@@ -441,10 +441,10 @@ Full commands reference: [docs/reference/cli/commands-reference.md](docs/referen
 
 #### One-Line Installer
 
-Or skip the steps above and install everything (system deps, Rust, ZeroClaw) in a single command:
+Or skip the steps above and install everything (system deps, Rust, Miroclaw) in a single command:
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/morpheum-labs/zeroclaw/master/scripts/install.sh | bash
+curl -LsSf https://raw.githubusercontent.com/morpheum-labs/miroclaw/master/scripts/install.sh | bash
 ```
 
 #### Compilation resource requirements
@@ -475,7 +475,7 @@ Release assets are published for:
 - Windows: `x86_64`
 
 Download the latest assets from:
-<https://github.com/morpheum-labs/zeroclaw/releases/latest>
+<https://github.com/morpheum-labs/miroclaw/releases/latest>
 
 ## Docs
 
@@ -485,7 +485,7 @@ Use these when you're past the onboarding flow and want the deeper reference.
 - Read the [architecture overview](docs/architecture.md) for the full system model.
 - Use the [configuration reference](docs/reference/api/config-reference.md) when you need every key and example.
 - Run the Gateway by the book with the [operational runbook](docs/ops/operations-runbook.md).
-- Follow [ZeroClaw Onboard](#quick-start) for a guided setup.
+- Follow [Miroclaw Onboard](#quick-start) for a guided setup.
 - Debug common failures with the [troubleshooting guide](docs/ops/troubleshooting.md).
 - Review [security guidance](docs/security/README.md) before exposing anything.
 
@@ -517,14 +517,14 @@ Use these when you're past the onboarding flow and want the deeper reference.
 
 ## Smooth Crab 🦀
 
-ZeroClaw was built for the smooth crab 🦀, a fast and efficient AI assistant. Built by Argenis De La Rosa and the community.
+Miroclaw was built for the smooth crab 🦀, a fast and efficient AI assistant. Built by Argenis De La Rosa and the community.
 
-- [zeroclawlabs.ai](https://zeroclawlabs.ai)
-- [@zeroclawlabs](https://x.com/zeroclawlabs)
+- [miroclawlabs.ai](https://miroclawlabs.ai)
+- [@miroclawlabs](https://x.com/miroclawlabs)
 
-## Support ZeroClaw
+## Support Miroclaw
 
-If ZeroClaw helps your work and you want to support ongoing development, you can donate here:
+If Miroclaw helps your work and you want to support ongoing development, you can donate here:
 
 <a href="https://buymeacoffee.com/argenistherose"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow.svg?style=for-the-badge&logo=buy-me-a-coffee" alt="Buy Me a Coffee" /></a>
 
@@ -541,7 +541,7 @@ We're building in the open because the best ideas come from everywhere. If you'r
 
 ## Contributing
 
-New to ZeroClaw? Look for issues labeled [`good first issue`](https://github.com/morpheum-labs/zeroclaw/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — start with [the contributor documentation](docs/contributing/README.md#suggested-reading-order). AI/vibe-coded PRs welcome! 🤖
+New to Miroclaw? Look for issues labeled [`good first issue`](https://github.com/morpheum-labs/miroclaw/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — start with [the contributor documentation](docs/contributing/README.md#suggested-reading-order). AI/vibe-coded PRs welcome! 🤖
 
 See [docs/contributing/README.md](docs/contributing/README.md) and the [CLA](docs/contributing/cla.md). Implement a trait, submit a PR:
 
@@ -553,26 +553,26 @@ See [docs/contributing/README.md](docs/contributing/README.md) and the [CLA](doc
 - New `Memory` → `src/memory/`
 - New `Tunnel` → `src/tunnel/`
 - New `Peripheral` → `src/peripherals/`
-- New `Skill` → `~/.zeroclaw/workspace/skills/<name>/`
+- New `Skill` → `~/.miroclaw/workspace/skills/<name>/`
 
 <!-- BEGIN:RECENT_CONTRIBUTORS -->
 <!-- END:RECENT_CONTRIBUTORS -->
 
 ## ⚠️ Official Repository & Impersonation Warning
 
-**This is the only official ZeroClaw repository:**
+**This is the only official Miroclaw repository:**
 
-> https://github.com/morpheum-labs/zeroclaw
+> https://github.com/morpheum-labs/miroclaw
 
-Any other repository, organization, domain, or package claiming to be "ZeroClaw" or implying affiliation with ZeroClaw Labs is **unauthorized and not affiliated with this project**. Known unauthorized forks will be listed in [TRADEMARK.md](docs/maintainers/trademark.md).
+Any other repository, organization, domain, or package claiming to be "Miroclaw" or implying affiliation with Miroclaw Labs is **unauthorized and not affiliated with this project**. Known unauthorized forks will be listed in [TRADEMARK.md](docs/maintainers/trademark.md).
 
-If you encounter impersonation or trademark misuse, please [open an issue](https://github.com/morpheum-labs/zeroclaw/issues).
+If you encounter impersonation or trademark misuse, please [open an issue](https://github.com/morpheum-labs/miroclaw/issues).
 
 ---
 
 ## License
 
-ZeroClaw is dual-licensed for maximum openness and contributor protection:
+Miroclaw is dual-licensed for maximum openness and contributor protection:
 
 | License | Use case |
 |---|---|
@@ -583,7 +583,7 @@ You may choose either license. **Contributors automatically grant rights under b
 
 ### Trademark
 
-The **ZeroClaw** name and logo are trademarks of ZeroClaw Labs. This license does not grant permission to use them to imply endorsement or affiliation. See [TRADEMARK.md](docs/maintainers/trademark.md) for permitted and prohibited uses.
+The **Miroclaw** name and logo are trademarks of Miroclaw Labs. This license does not grant permission to use them to imply endorsement or affiliation. See [TRADEMARK.md](docs/maintainers/trademark.md) for permitted and prohibited uses.
 
 ### Contributor Protections
 
@@ -594,12 +594,12 @@ The **ZeroClaw** name and logo are trademarks of ZeroClaw Labs. This license doe
 
 ---
 
-**ZeroClaw** — Zero overhead. Zero compromise. Deploy anywhere. Swap anything. 🦀
+**Miroclaw** — Lean runtime. Full control. Deploy anywhere. Swap anything. 🦀
 
 ## Contributors
 
-<a href="https://github.com/zeroclaw-labs/zeroclaw/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=zeroclaw-labs/zeroclaw" alt="ZeroClaw contributors" />
+<a href="https://github.com/morpheum-labs/miroclaw/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=morpheum-labs/miroclaw" alt="Miroclaw contributors" />
 </a>
 
 This list is generated from the GitHub contributors graph and updates automatically.
@@ -607,11 +607,11 @@ This list is generated from the GitHub contributors graph and updates automatica
 ## Star History
 
 <p align="center">
-  <a href="https://www.star-history.com/#zeroclaw-labs/zeroclaw&type=date&legend=top-left">
+  <a href="https://www.star-history.com/#morpheum-labs/miroclaw&type=date&legend=top-left">
     <picture>
-     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&theme=dark&legend=top-left" />
-     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&legend=top-left" />
-     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=date&legend=top-left" />
+     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=morpheum-labs/miroclaw&type=date&theme=dark&legend=top-left" />
+     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=morpheum-labs/miroclaw&type=date&legend=top-left" />
+     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=morpheum-labs/miroclaw&type=date&legend=top-left" />
     </picture>
   </a>
 </p>
