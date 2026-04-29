@@ -230,7 +230,7 @@ pub struct Config {
     #[serde(default)]
     pub gateway: GatewayConfig,
 
-    /// Web dashboard: optional on-disk `web/dist/` override (`[webui]`).
+    /// Web dashboard: on-disk `web/dist/` (`[webui]`).
     #[serde(default)]
     pub webui: WebUiConfig,
 
@@ -2260,20 +2260,35 @@ impl Default for GatewayConfig {
     }
 }
 
+fn default_webui_disabled() -> bool {
+    true
+}
+
 /// Web dashboard static files (`[webui]` section).
 ///
 /// When `external_path` is set to a directory containing `index.html` (a Vite `web/dist`
-/// build), the gateway serves the UI from disk instead of embedded assets.
+/// build), the gateway serves the UI from disk.
 /// When `disabled` is true (or env `MIROCLAW_WEBUI_DISABLED`), static dashboard routes return 503;
 /// webhooks and APIs keep running.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct WebUiConfig {
-    /// Directory with built dashboard (`index.html`, `assets/`, …). Empty uses embedded `web/dist/`.
+    /// Directory with built dashboard (`index.html`, `assets/`, …). Required unless WebUI is disabled.
     #[serde(default)]
     pub external_path: String,
-    /// When true, skip serving the web dashboard (gateway APIs and webhooks only).
-    #[serde(default)]
+    /// When true, skip serving the web dashboard (gateway APIs and webhooks only). Defaults to true
+    /// so a gateway can start without a built `dist/`; set false with a valid `external_path` to
+    /// enable the dashboard.
+    #[serde(default = "default_webui_disabled")]
     pub disabled: bool,
+}
+
+impl Default for WebUiConfig {
+    fn default() -> Self {
+        Self {
+            external_path: String::new(),
+            disabled: true,
+        }
+    }
 }
 
 /// Pairing dashboard configuration (`[gateway.pairing_dashboard]`).

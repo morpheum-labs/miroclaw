@@ -1,4 +1,4 @@
-//! Static dashboard files: embedded `web/dist/` and optional `[webui]` disk override.
+//! Static dashboard files served from `[webui].external_path`.
 //!
 //! Handlers live in [`super::web_ui`].
 

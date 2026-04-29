@@ -54,7 +54,7 @@ Gateway bind address, port, pairing, and path prefix: **`[gateway]`** in [config
 
 ## Web dashboard
 
-The gateway can serve a **web UI** from **embedded** build assets (when the `embedded-web-ui` feature is enabled) or from a **local Vite `dist/`** tree. Use **`[webui].external_path`** to point at a directory that contains `index.html` (and the usual `assets/`). If `external_path` is empty, the runtime prefers embedded assets when the binary was built with that feature. See [config-reference.md](../reference/api/config-reference.md) for `[webui]` keys.
+The gateway serves the **web UI** from a **local Vite `dist/`** tree. Use **`[webui].external_path`** to point at a directory that contains `index.html` (and the usual `assets/`). See [config-reference.md](../reference/api/config-reference.md) for `[webui]` keys.
 
 ## Health checks (do this after reboot or network changes)
 

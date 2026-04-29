@@ -1,8 +1,7 @@
-//! Embedded `web/dist/` assets and optional on-disk dashboard override (`[webui]`).
+//! Optional on-disk dashboard (`[webui].external_path`).
 //!
-//! When `[webui].external_path` points at a valid Vite `dist/` directory, static files
-//! are read from disk; otherwise the gateway uses compile-time embedded assets (when the
-//! `embedded-web-ui` feature is enabled).
+//! When `[webui].external_path` points at a valid Vite `dist/` directory, static files are read
+//! from disk.
 
 use std::fmt::Write as _;
 use std::path::{Component, Path, PathBuf};
@@ -19,11 +18,6 @@ use crate::config::Config;
 
 /// Optional manifest inside an external `dist/` folder. When present, `schema` should be `1`.
 pub const WEBUI_MANIFEST: &str = "zeroclaw-webui.json";
-
-#[cfg(feature = "embedded-web-ui")]
-#[derive(rust_embed::Embed)]
-#[folder = "web/dist/"]
-struct WebAssets;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WebUiStatus {
@@ -45,7 +39,6 @@ struct WebUiInner {
 enum WebUiActive {
     /// Dashboard intentionally off (`[webui].disabled` / `MIROCLAW_WEBUI_DISABLED`).
     Disabled,
-    Embedded,
     External {
         root_display: PathBuf,
         root_canonical: PathBuf,
@@ -53,9 +46,8 @@ enum WebUiActive {
 }
 
 impl WebUiServeState {
-    /// Build-time + runtime validation. Fails hard only when the dashboard is not disabled
-    /// (`[webui].disabled` / `MIROCLAW_WEBUI_DISABLED`) and embedded assets are unavailable
-    /// with no usable external tree.
+    /// Build-time + runtime validation. Fails when the dashboard is not disabled and there is
+    /// no usable `[webui].external_path`.
     pub fn bootstrap(config: &Config) -> anyhow::Result<Self> {
         let active = resolve_initial_active(config)?;
         log_startup(&active, config.gateway.path_prefix.as_deref().unwrap_or(""));
@@ -66,10 +58,7 @@ impl WebUiServeState {
         })
     }
 
-    /// Test helper: embedded-only (or external if `config.webui` is set and valid).
-    ///
-    /// When the binary is built without `embedded-web-ui` and no valid `[webui].external_path`
-    /// is present, creates a minimal temp directory with `index.html` so gateway tests can
+    /// Test helper: external path from `config`, or a minimal temp `dist/` so gateway tests can
     /// construct [`AppState`] without bundling the full dashboard.
     pub fn for_tests(config: &Config) -> Self {
         match Self::bootstrap(config) {
@@ -100,11 +89,6 @@ impl WebUiServeState {
                 external_path: None,
                 path_prefix_rewrite,
             },
-            WebUiActive::Embedded => WebUiStatus {
-                source: "embedded",
-                external_path: None,
-                path_prefix_rewrite,
-            },
             WebUiActive::External { root_display, .. } => WebUiStatus {
                 source: "external",
                 external_path: Some(root_display.display().to_string()),
@@ -129,19 +113,6 @@ impl WebUiServeState {
 
     fn active(&self) -> WebUiActive {
         self.inner.active.read().clone()
-    }
-
-    fn downgrade_to_embedded_if_possible(&self, reason: &str) {
-        #[cfg(feature = "embedded-web-ui")]
-        {
-            if WebAssets::get("index.html").is_some() {
-                tracing::warn!(
-                    "WebUI external path unusable ({reason}); falling back to embedded assets"
-                );
-                *self.inner.active.write() = WebUiActive::Embedded;
-            }
-        }
-        let _ = reason;
     }
 }
 
@@ -174,9 +145,6 @@ fn log_startup(active: &WebUiActive, path_prefix: &str) {
         WebUiActive::Disabled => {
             tracing::info!("WebUI: disabled — API-only gateway ({rewrite})");
         }
-        WebUiActive::Embedded => {
-            tracing::info!("WebUI source: embedded (default) ({rewrite})");
-        }
         WebUiActive::External { root_display, .. } => {
             tracing::info!(
                 "WebUI source: external path {} ({rewrite})",
@@ -190,72 +158,27 @@ fn resolve_initial_active(config: &Config) -> anyhow::Result<WebUiActive> {
     try_resolve_active(config).map_err(|e| anyhow::anyhow!(e))
 }
 
-fn embedded_index_present() -> bool {
-    #[cfg(feature = "embedded-web-ui")]
-    {
-        WebAssets::get("index.html").is_some()
-    }
-    #[cfg(not(feature = "embedded-web-ui"))]
-    {
-        false
-    }
-}
-
 fn try_resolve_active(config: &Config) -> Result<WebUiActive, String> {
     if config.webui.disabled {
         return Ok(WebUiActive::Disabled);
     }
 
     let raw = config.webui.external_path.trim();
-    if !raw.is_empty() {
-        let candidate = resolve_external_path(raw, &config.workspace_dir);
-        match validate_external_root(&candidate) {
-            Ok((display, canonical)) => {
-                return Ok(WebUiActive::External {
-                    root_display: display,
-                    root_canonical: canonical,
-                });
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "WebUI external_path {:?} is not usable ({e}) — falling back when possible",
-                    raw
-                );
-            }
-        }
-    }
-
-    #[cfg(feature = "embedded-web-ui")]
-    {
-        if embedded_index_present() {
-            return Ok(WebUiActive::Embedded);
-        }
-        if raw.is_empty() {
-            return Err(
-                "Embedded web dashboard has no index.html (build web/dist) and [webui].external_path is unset."
-                    .into(),
-            );
-        }
-        return Err(format!(
-            "Invalid [webui].external_path {:?} and embedded bundle has no index.html",
-            raw
-        ));
-    }
-
-    #[cfg(not(feature = "embedded-web-ui"))]
-    {
-        if !raw.is_empty() {
-            // External was set but failed validation — error is clearer than "embedded disabled"
-            return Err(
-                "Invalid [webui].external_path for this binary (built without embedded web UI)."
-                    .into(),
-            );
-        }
-        Err(
-            "This binary was built without embedded web assets (`embedded-web-ui` disabled). \
-             Set [webui].external_path to a built `web/dist` directory (with index.html)."
+    if raw.is_empty() {
+        return Err(
+            "[webui].external_path is unset. Set it to a built `web/dist` directory (with index.html), \
+             or set [webui].disabled / MIROCLAW_WEBUI_DISABLED."
                 .into(),
-        )
+        );
+    }
+
+    let candidate = resolve_external_path(raw, &config.workspace_dir);
+    match validate_external_root(&candidate) {
+        Ok((display, canonical)) => Ok(WebUiActive::External {
+            root_display: display,
+            root_canonical: canonical,
+        }),
+        Err(e) => Err(format!("Invalid [webui].external_path {raw:?}: {e}")),
     }
 }
 
@@ -362,18 +285,6 @@ fn response_bytes(path: &str, bytes: Vec<u8>) -> Response {
         .into_response()
 }
 
-fn embedded_bytes(path: &str) -> Option<Vec<u8>> {
-    #[cfg(feature = "embedded-web-ui")]
-    {
-        WebAssets::get(path).map(|c| c.data.to_vec())
-    }
-    #[cfg(not(feature = "embedded-web-ui"))]
-    {
-        let _ = path;
-        None
-    }
-}
-
 fn webui_disabled_gateway_response() -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
@@ -382,41 +293,16 @@ fn webui_disabled_gateway_response() -> Response {
         .into_response()
 }
 
-fn serve_embedded_index(path_prefix: &str) -> Response {
-    #[cfg(feature = "embedded-web-ui")]
-    {
-        let Some(content) = WebAssets::get("index.html") else {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Web dashboard not available. Build it with: cd web && bun install && bun run build",
-            )
-                .into_response();
-        };
-        let html = String::from_utf8_lossy(&content.data);
-        let html = apply_index_transform(&html, path_prefix);
-        return (
-            StatusCode::OK,
-            [
-                (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
-                (header::CACHE_CONTROL, "no-cache".to_string()),
-            ],
-            html,
-        )
-            .into_response();
-    }
-    #[cfg(not(feature = "embedded-web-ui"))]
-    {
-        let _ = path_prefix;
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Web dashboard not available in this build. Set [webui].external_path to a built dist directory.",
-        )
-            .into_response()
-    }
+fn webui_external_unavailable_response(reason: &str) -> Response {
+    tracing::warn!("WebUI: {reason}");
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        format!("Web dashboard unavailable ({reason})."),
+    )
+        .into_response()
 }
 
 pub async fn handle_static(State(state): State<AppState>, uri: Uri) -> Response {
-    let retry = state.clone();
     let path = uri
         .path()
         .strip_prefix("/_app/")
@@ -425,18 +311,9 @@ pub async fn handle_static(State(state): State<AppState>, uri: Uri) -> Response 
 
     match state.web_ui.active() {
         WebUiActive::Disabled => webui_disabled_gateway_response(),
-        WebUiActive::Embedded => {
-            if let Some(bytes) = embedded_bytes(path) {
-                return response_bytes(path, bytes);
-            }
-            (StatusCode::NOT_FOUND, "Not found").into_response()
-        }
         WebUiActive::External { root_canonical, .. } => {
             if !root_canonical.is_dir() || !root_canonical.join("index.html").is_file() {
-                state
-                    .web_ui
-                    .downgrade_to_embedded_if_possible("external root missing");
-                return Box::pin(handle_static(State(retry), uri)).await;
+                return webui_external_unavailable_response("external root missing");
             }
             let rel = path;
             let file_path = if rel.is_empty() {
@@ -466,39 +343,29 @@ pub async fn handle_static(State(state): State<AppState>, uri: Uri) -> Response 
                             .into_response();
                     }
                     Err(e) => {
-                        tracing::warn!("WebUI read {}: {e}", file_path.display());
-                        state
-                            .web_ui
-                            .downgrade_to_embedded_if_possible("index read failed");
-                        return Box::pin(handle_static(State(retry), uri)).await;
+                        return webui_external_unavailable_response(&format!(
+                            "index read failed: {e}"
+                        ));
                     }
                 }
             }
             match tokio::fs::read(&file_path).await {
                 Ok(bytes) => response_bytes(mime_path, bytes),
-                Err(e) => {
-                    tracing::warn!("WebUI read {}: {e}", file_path.display());
-                    (StatusCode::NOT_FOUND, "Not found").into_response()
-                }
+                Err(e) => webui_external_unavailable_response(&format!("read failed: {e}")),
             }
         }
     }
 }
 
 pub async fn handle_spa_fallback(State(state): State<AppState>) -> Response {
-    let retry = state.clone();
     let path_prefix = state.path_prefix.as_str();
 
     match state.web_ui.active() {
         WebUiActive::Disabled => webui_disabled_gateway_response(),
-        WebUiActive::Embedded => serve_embedded_index(path_prefix),
         WebUiActive::External { root_canonical, .. } => {
             let index = root_canonical.join("index.html");
             if !root_canonical.is_dir() || !index.is_file() {
-                state
-                    .web_ui
-                    .downgrade_to_embedded_if_possible("SPA fallback: external index missing");
-                return Box::pin(handle_spa_fallback(State(retry))).await;
+                return webui_external_unavailable_response("SPA fallback: external index missing");
             }
             match tokio::fs::read_to_string(&index).await {
                 Ok(html) => {
@@ -513,13 +380,7 @@ pub async fn handle_spa_fallback(State(state): State<AppState>) -> Response {
                     )
                         .into_response()
                 }
-                Err(e) => {
-                    tracing::warn!("WebUI SPA read {}: {e}", index.display());
-                    state
-                        .web_ui
-                        .downgrade_to_embedded_if_possible("SPA read failed");
-                    Box::pin(handle_spa_fallback(State(retry))).await
-                }
+                Err(e) => webui_external_unavailable_response(&format!("SPA read failed: {e}")),
             }
         }
     }

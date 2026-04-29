@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # Miroclaw multi-stage image (`miroclaw` binary).
 #
-# The dashboard is optional rust-embed of `web/dist/` only when built with `--features embedded-web-ui`.
-# Default features omit it (see Cargo.toml). This image does not build Bun/Vite or embed assets;
-# use `[webui].external_path` (or `MIROCLAW_WEBUI_EXTERNAL_PATH`) to serve a built `dist/` from disk.
+# This image does not build Bun/Vite; use `[webui].external_path` (or `MIROCLAW_WEBUI_EXTERNAL_PATH`)
+# to serve a built `dist/` from disk, or disable the dashboard with `[webui].disabled`.
 
 # ── Stage 0: Rust build ───────────────────────────────────────
 FROM rust:1.94-slim@sha256:da9dab7a6b8dd428e71718402e97207bb3e54167d37b5708616050b1e8f60ed6 AS builder
