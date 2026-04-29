@@ -54,7 +54,6 @@ zeroclaw/
 ├── playground/           # （空、実験用スクラッチ）
 ├── Cargo.toml            # ワークスペースマニフェスト
 ├── Dockerfile            # コンテナビルド
-├── docker-compose.yml    # サービス構成
 ├── flake.nix             # Nix 開発環境
 └── install.sh            # ワンコマンドセットアップ
 ```

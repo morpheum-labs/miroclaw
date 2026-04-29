@@ -107,16 +107,6 @@ when bootstrapping via `curl | bash`). You can override this path with `MIROCLAW
 **Do not re-run `install.sh`** to restart -- it will rebuild the image and re-run onboarding.
 Instead, start a new container from the existing image and mount the persisted data directory.
 
-#### Repository `docker-compose.yml` (Clawgotcha)
-
-The root `docker-compose.yml` runs the **Clawgotcha** reference control plane (port **9847** by default). It does **not** start the Miroclaw gateway (**42617**).
-
-```bash
-docker compose up -d
-```
-
-Use `bash scripts/install.sh --docker` or the manual `docker run` examples below for the gateway image (`miroclaw-bootstrap:local`).
-
 #### Manual container run (using install.sh data directory)
 
 If you installed via `bash scripts/install.sh --docker` and want to reuse the `.zeroclaw-docker`

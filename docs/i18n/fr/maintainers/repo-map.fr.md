@@ -55,7 +55,6 @@ zeroclaw/
 ├── playground/           # (vide, espace d’essais)
 ├── Cargo.toml            # Manifeste du workspace
 ├── Dockerfile            # Build conteneur
-├── docker-compose.yml    # Composition des services
 ├── flake.nix             # Environnement de dev Nix
 └── install.sh            # Script d’installation en une commande
 ```

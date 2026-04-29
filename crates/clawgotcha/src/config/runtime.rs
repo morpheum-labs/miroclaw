@@ -5,6 +5,10 @@
 pub struct ClawgotchaRuntimeConfig {
     pub base_url: String,
     pub instance_name: String,
+    /// Sent on `POST …/instances/register` (agentbook / OpenAPI contract).
+    pub hostname: String,
+    /// Runtime version string for registration (e.g. crate version).
+    pub version: String,
     pub sync_mode: SyncMode,
     pub heartbeat_interval_secs: u64,
     pub poll_interval_secs: u64,

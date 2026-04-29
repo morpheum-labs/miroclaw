@@ -92,12 +92,6 @@ bash scripts/install.sh --docker
 
 如果你添加 `--skip-build` 参数，安装程序会跳过本地镜像构建。它会首先尝试本地 Docker 标签（`MIROCLAW_DOCKER_IMAGE`，默认：`miroclaw-bootstrap:local`）；如果不存在，会拉取 `ghcr.io/morpheum-labs/miroclaw:latest` 并在运行前打本地标签。
 
-### 仓库根目录 `docker-compose.yml`（Clawgotcha）
-
-根目录的 `docker-compose.yml` 运行 **Clawgotcha** 参考控制平面（默认端口 **9847**）。它**不会**启动 Miroclaw 网关（**42617**）。
-
-长时间在 Docker 中运行网关请使用 `./scripts/install.sh --docker`，或参阅英文文档中的手动 `docker run` 示例。
-
 ### 快速引导（非交互式）
 
 ```bash

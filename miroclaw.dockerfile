@@ -22,7 +22,6 @@ COPY Cargo.toml Cargo.lock ./
 # Include every workspace member: Cargo.lock is generated for the full workspace.
 COPY crates/aardvark-sys/ crates/aardvark-sys/
 COPY crates/clawgotcha/ crates/clawgotcha/
-COPY crates/clawgotcha-server/ crates/clawgotcha-server/
 # Create dummy targets declared in Cargo.toml so manifest parsing succeeds.
 RUN mkdir -p src benches \
   && echo "fn main() {}" > src/main.rs \

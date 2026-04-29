@@ -80,6 +80,8 @@ where
                 instance: crate::models::domain::ClawgotchaInstance {
                     instance_name: cfg.instance_name.clone(),
                     callback_url: instance_callback_url,
+                    hostname: cfg.hostname.clone(),
+                    version: cfg.version.clone(),
                 },
             })
             .await?;

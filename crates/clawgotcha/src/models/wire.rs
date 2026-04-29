@@ -2,9 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::domain::{
-    AgentDefinition, ClawgotchaInstance, CronJobDefinition, SwarmDefaults, ToolMetadata,
-};
+use super::domain::{AgentDefinition, CronJobDefinition, SwarmDefaults, ToolMetadata};
 
 /// Errors converting wire payloads into domain entities.
 #[derive(Debug, thiserror::Error)]
@@ -16,25 +14,141 @@ pub enum WireParseError {
     Invalid(&'static str, String),
 }
 
-/// Mirrors `swarm_runtime_instances` registration response bodies (subset).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WireInstanceRecord {
+/// `POST /api/v1/instances/register` body (agentbook OpenAPI `RegisterInstanceRequest`).
+#[derive(Debug, Clone, Serialize)]
+pub struct RegisterInstanceBody {
     pub instance_name: String,
-    #[serde(default)]
-    pub callback_url: Option<String>,
+    pub hostname: String,
+    pub version: String,
+    pub callback_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instance_type: Option<String>,
 }
 
-impl TryFrom<WireInstanceRecord> for ClawgotchaInstance {
+/// Agentbook `SwarmAgent` list element (mixed PascalCase / snake_case JSON).
+#[derive(Debug, Deserialize)]
+pub(crate) struct AgentbookSwarmAgent {
+    #[serde(rename = "Name")]
+    pub name: String,
+    #[serde(rename = "SystemPrompt")]
+    pub system_prompt: Option<String>,
+    #[serde(rename = "Tools", default)]
+    pub tools: Vec<String>,
+    #[serde(rename = "Provider")]
+    pub provider: Option<String>,
+    #[serde(rename = "Model")]
+    pub model: Option<String>,
+    #[serde(rename = "TimeoutSeconds")]
+    pub timeout_seconds: Option<u64>,
+    #[serde(default)]
+    pub current_revision: u64,
+    #[serde(default)]
+    pub deleted: bool,
+}
+
+/// Agentbook `SwarmCronJob` list element.
+#[derive(Debug, Deserialize)]
+pub(crate) struct AgentbookCronJob {
+    #[serde(rename = "ID")]
+    pub id: String,
+    #[serde(rename = "AgentName")]
+    pub agent_name: String,
+    #[serde(rename = "Schedule")]
+    pub schedule: String,
+    #[serde(rename = "Prompt")]
+    pub prompt: Option<String>,
+    #[serde(rename = "TimeoutSeconds")]
+    pub timeout_seconds: Option<u64>,
+    #[serde(rename = "Active", default = "default_true")]
+    pub active: bool,
+    #[serde(rename = "CurrentRevision", default)]
+    pub current_revision: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct AgentbookAgentListEnvelope {
+    pub agents: Vec<AgentbookSwarmAgent>,
+    #[serde(default)]
+    pub revision_summary: Option<AgentbookRevisionSummary>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub(crate) struct AgentbookRevisionSummary {
+    /// Present in API payloads; sync uses `agents_max_revision` / `cron_jobs_max_revision` watermarks.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub config_revision: u64,
+    #[serde(default)]
+    pub agents_max_revision: u64,
+    #[serde(default)]
+    pub cron_jobs_max_revision: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct AgentbookCronListEnvelope {
+    pub cron_jobs: Vec<AgentbookCronJob>,
+    #[serde(default)]
+    pub revision_summary: Option<AgentbookRevisionSummary>,
+}
+
+impl TryFrom<AgentbookSwarmAgent> for AgentDefinition {
     type Error = WireParseError;
 
-    fn try_from(value: WireInstanceRecord) -> Result<Self, Self::Error> {
-        let instance_name = value.instance_name.trim().to_string();
-        if instance_name.is_empty() {
-            return Err(WireParseError::MissingField("instance_name"));
+    fn try_from(value: AgentbookSwarmAgent) -> Result<Self, Self::Error> {
+        let name = value.name.trim().to_string();
+        if name.is_empty() {
+            return Err(WireParseError::MissingField("name"));
+        }
+        let provider = value.provider.unwrap_or_default().trim().to_string();
+        let model = value.model.unwrap_or_default().trim().to_string();
+        let tool_names = value.tools;
+        Ok(Self {
+            name,
+            provider,
+            model,
+            system_prompt: value.system_prompt.filter(|s| !s.trim().is_empty()),
+            api_key: None,
+            temperature: None,
+            max_depth: default_max_depth(),
+            agentic: false,
+            allowed_tools: tool_names.clone(),
+            max_iterations: default_max_iterations(),
+            timeout_secs: value.timeout_seconds,
+            agentic_timeout_secs: None,
+            skills_directory: None,
+            memory_namespace: None,
+            tools: tool_names
+                .into_iter()
+                .map(|name| ToolMetadata {
+                    name,
+                    description: None,
+                })
+                .collect(),
+            current_revision: value.current_revision,
+        })
+    }
+}
+
+impl TryFrom<AgentbookCronJob> for CronJobDefinition {
+    type Error = WireParseError;
+
+    fn try_from(value: AgentbookCronJob) -> Result<Self, Self::Error> {
+        let id = value.id.trim().to_string();
+        if id.is_empty() {
+            return Err(WireParseError::MissingField("id"));
+        }
+        let agent_name = value.agent_name.trim().to_string();
+        if agent_name.is_empty() {
+            return Err(WireParseError::MissingField("agent_name"));
         }
         Ok(Self {
-            instance_name,
-            callback_url: value.callback_url,
+            id,
+            expression: value.schedule,
+            target_agent_name: Some(agent_name),
+            prompt: value.prompt,
+            timeout_seconds: value.timeout_seconds,
+            enabled: value.active,
+            current_revision: value.current_revision,
         })
     }
 }

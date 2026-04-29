@@ -1,179 +1,96 @@
 # Clawgotcha HTTP API contract (Miroclaw client alignment)
 
-This document is the **authoritative wire contract** for the Clawgotcha control plane as consumed by [`crates/clawgotcha`](../../../crates/clawgotcha) [`ClawgotchaHttpAdapter`](../../../crates/clawgotcha/src/client/http.rs).
+This document describes the wire contract implemented by [`crates/clawgotcha`](../../../crates/clawgotcha) [`ClawgotchaHttpAdapter`](../../../crates/clawgotcha/src/client/http.rs).
+
+The **reference surface** is the agentbook clawgotcha OpenAPI (`internal/api/openapi.json` in that repository): routes live under **`/api/v1/...`** on the HTTP server. The client prepends **`[clawgotcha].url`** to paths such as **`/v1/instances/register`**, so operators expose **`…/api`** as the prefix when the server mounts **`/api/v1`** (see table below).
+
+Legacy control planes that used snake_case JSON (`revision_watermark`, `jobs`, **`GET /v1/cron`**, **`GET /v1/swarm/config`**) are still accepted where the adapter implements a fallback.
 
 ## Base URL
 
 The Miroclaw setting **`[clawgotcha].url`** is the **HTTP prefix** prepended to every path below (no automatic `/api` insertion).
-
-Examples:
 
 | `clawgotcha.url` value | Example full URL for register |
 |------------------------|--------------------------------|
 | `https://cp.example.com` | `https://cp.example.com/v1/instances/register` |
 | `https://cp.example.com/api` | `https://cp.example.com/api/v1/instances/register` |
 
-Operators who expose APIs under `/api/v1/...` should set `url` to `…/api`.
-
 ## Authentication
 
-Phase 0 implementations may omit auth. Production deployments should require **`Authorization: Bearer <token>`** or **`X-API-Key`** on all mutating routes; Miroclaw can be extended later to send these headers.
-
-## Instance identity on heartbeat
-
-`POST /v1/instances/heartbeat` carries **`instance_name`** in the JSON body (same value as `[clawgotcha].instance_name`) so a single control-plane URL can serve many instances without path-per-instance URLs.
+When the server enables API keys, requests should send **`Authorization: Bearer <token>`** or **`X-API-Key: <key>`** on mutating routes; Miroclaw can be extended later to send these headers from config.
 
 ---
 
 ## `POST /v1/instances/register`
 
-Registers or refreshes a runtime instance.
+Registers or upserts a runtime instance (agentbook **`RegisterInstanceRequest`**).
 
 **Request JSON**
 
 | Field | Type | Required | Notes |
 |-------|------|----------|--------|
-| `instance_name` | string | yes | Non-empty after trim |
-| `callback_url` | string or null | no | Miroclaw webhook URL when using webhook/hybrid sync |
+| `instance_name` | string | yes | Same as `[clawgotcha].instance_name` |
+| `hostname` | string | yes | Miroclaw sends `hostname::get()` or `"unknown"` |
+| `version` | string | yes | Miroclaw sends the running crate version (`CARGO_PKG_VERSION`) |
+| `callback_url` | string | yes | Webhook URL when using webhook/hybrid sync; use `""` if unset |
+| `instance_type` | string | no | Miroclaw sends `"miroclaw"` |
 
-**Response:** `200` with empty body on success.
+**Response:** `200` JSON (`RegisterInstanceResponse` on agentbook); the client treats any **2xx** as success.
 
 ---
 
-## `POST /v1/instances/heartbeat`
+## `POST /v1/instances/{instance_name}/heartbeat`
+
+Runtime heartbeat (agentbook **`HeartbeatRequest`**). The instance key is in the **path** (URL-encoded); **`instance_name` is not duplicated** in the JSON body.
 
 **Request JSON**
 
 | Field | Type | Required |
 |-------|------|----------|
-| `instance_name` | string | yes |
-| `loaded_agents_count` | number (usize) | yes |
-| `cron_jobs_count` | number (usize) | yes |
+| `status` | string | no | Miroclaw sends `"online"` |
+| `metadata` | object | no | Miroclaw sends `loaded_agents_count` and `cron_jobs_count` as integers |
 
-**Response:** `200` empty body.
-
----
-
-## `GET /v1/instances`
-
-Lists registered instances (control-plane UI / ops).
-
-**Response JSON**
-
-```json
-{
-  "instances": [
-    {
-      "instance_name": "prod-gateway-1",
-      "callback_url": "https://tunnel.example/webhook/clawgotcha",
-      "online": true,
-      "last_heartbeat_at": "2026-04-28T12:00:00Z",
-      "loaded_agents_count": 3,
-      "cron_jobs_count": 2,
-      "registered_revision": 42
-    }
-  ]
-}
-```
-
-Optional fields may be omitted when unknown.
-
----
-
-## `GET /v1/instances/{instance_name}`
-
-Returns one instance record (same shape as list elements).
+**Response:** `200` (agentbook may return `revision_summary`; the client ignores the body).
 
 ---
 
 ## `GET /v1/agents`
 
-Returns full agent list or **delta** when `since_revision` is present.
+**Primary (agentbook):** **`AgentListResponse`**: `agents` ( **`SwarmAgent`** rows, mixed PascalCase/snake_case JSON per OpenAPI) plus **`revision_summary`** (`agents_max_revision`, etc.).
 
-**Query**
+**Legacy fallback:** snake_case envelope with **`revision_watermark`** and **`agents`** shaped like [`WireAgent`](../../../crates/clawgotcha/src/models/wire.rs).
 
-| Param | Meaning |
-|-------|---------|
-| `since_revision` | Optional `u64`; when set, server may return only agents changed after this revision |
-
-**Conditional GET:** Clients send **`If-None-Match: "<etag>"`**. Respond **`304 Not Modified`** when nothing changed; otherwise **`200`** with **`ETag`** header.
-
-**Response JSON**
-
-```json
-{
-  "revision_watermark": 100,
-  "agents": [
-    {
-      "name": "researcher",
-      "provider": "openrouter",
-      "model": "anthropic/claude-sonnet-4",
-      "system_prompt": null,
-      "api_key": null,
-      "temperature": null,
-      "max_depth": 8,
-      "agentic": false,
-      "allowed_tools": [],
-      "max_iterations": 10,
-      "timeout_secs": null,
-      "agentic_timeout_secs": null,
-      "skills_directory": null,
-      "memory_namespace": null,
-      "tools": [],
-      "current_revision": 7
-    }
-  ]
-}
-```
-
-Field semantics match [`WireAgent`](../../../crates/clawgotcha/src/models/wire.rs).
+**Conditional GET:** clients send **`If-None-Match`**; **`304`** is handled.
 
 ---
 
-## `GET /v1/cron`
+## `GET /v1/cron-jobs`
 
-Same pattern as agents: `since_revision`, `If-None-Match`, `revision_watermark`, `jobs` array per [`WireCronJob`](../../../crates/clawgotcha/src/models/wire.rs).
+**Primary (agentbook):** **`CronJobListResponse`**: **`cron_jobs`** (**`SwarmCronJob`**, PascalCase fields in JSON) plus **`revision_summary`**.
+
+**Legacy fallback:** **`GET /v1/cron`** with **`revision_watermark`** and **`jobs`** shaped like [`WireCronJob`](../../../crates/clawgotcha/src/models/wire.rs).
 
 ---
 
-## `GET /v1/swarm/config`
+## `GET /v1/config`
 
-Singleton swarm defaults.
+Singleton swarm defaults (**`SwarmConfig`** on agentbook).
+
+If **`GET /v1/config`** returns **`404`**, the client retries **`GET /v1/swarm/config`** (legacy path).
 
 **Conditional GET:** `If-None-Match` / `ETag` / `304`.
 
-**Response JSON**
+---
 
-```json
-{
-  "default_provider": "openrouter",
-  "default_model": "anthropic/claude-sonnet-4",
-  "current_revision": 3
-}
-```
+## Webhooks
+
+Agentbook registers webhook subscriptions during **`POST /v1/instances/register`**; there is **no** separate **`POST /v1/webhooks`** in the OpenAPI document. Miroclaw’s **`register_webhook`** call is a **no-op** when using this adapter.
 
 ---
 
-## `POST /v1/webhooks`
+## Optional: `GET /api/v1/events` (SSE)
 
-Registers outbound webhook fan-out from Clawgotcha into Miroclaw.
-
-**Request JSON**
-
-```json
-{
-  "callback_url": "https://tunnel.example/webhook/clawgotcha",
-  "event_types": ["agent", "cron", "config"]
-}
-```
-
-**Response:** `200` empty body.
-
----
-
-## Optional: `GET /v1/events` (SSE)
-
-Recommended for low-latency sync without polling. Emit **`text/event-stream`** with JSON payloads compatible with [`ChangeEvent`](../../../crates/clawgotcha/src/events.rs) (`kind` tag, snake_case). Not yet consumed by the Rust client by default.
+Low-latency change notifications; payloads align with **`ChangeEvent`** where applicable. Not consumed by the Rust client by default.
 
 ---
 
@@ -181,8 +98,8 @@ Recommended for low-latency sync without polling. Emit **`text/event-stream`** w
 
 | Logical table | Purpose |
 |---------------|---------|
-| `swarm_runtime_instances` | Instance registry + heartbeat timestamps + stats |
-| `swarm_webhook_subscriptions` | Registered callbacks |
-| `swarm_agents` / `swarm_cron_jobs` / `swarm_config` | Authoritative definitions with `current_revision` + `last_changed_at` |
+| `swarm_runtime_instances` | Instance registry + heartbeat |
+| Webhook subscriptions | Registered callbacks (created at registration on agentbook) |
+| `swarm_agents` / `swarm_cron_jobs` / `swarm_config` | Authoritative definitions with revisions |
 
-Implementations may use different physical names; behavior must match this HTTP contract.
+Implementations may use different physical names; HTTP behavior matches the OpenAPI where listed above.

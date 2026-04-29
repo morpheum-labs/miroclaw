@@ -98,16 +98,6 @@ Sau khi `bash scripts/install.sh --docker` kết thúc, container thoát. Config
 
 **Không chạy lại `install.sh`** chỉ để restart — sẽ rebuild image và chạy lại onboarding. Thay vào đó, khởi động container mới từ image hiện có và mount lại thư mục dữ liệu.
 
-#### `docker-compose.yml` trong repo (Clawgotcha)
-
-`docker-compose.yml` ở gốc repo chạy máy chủ tham chiếu **Clawgotcha** (mặc định cổng **9847**). Nó **không** khởi động gateway Miroclaw (**42617**).
-
-```bash
-docker compose up -d
-```
-
-Để chạy gateway trong Docker lâu dài, dùng `./scripts/install.sh --docker` hoặc ví dụ `docker run` thủ công bên dưới (image `miroclaw-bootstrap:local`).
-
 #### Chạy container thủ công (thư mục dữ liệu từ install.sh)
 
 Nếu đã cài qua `bash scripts/install.sh --docker` và muốn tái sử dụng `.zeroclaw-docker` không dùng compose:

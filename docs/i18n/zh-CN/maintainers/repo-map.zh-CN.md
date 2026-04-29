@@ -54,7 +54,6 @@ zeroclaw/
 ├── playground/           # （空，实验性临时空间）
 ├── Cargo.toml            # 工作区清单
 ├── Dockerfile            # 容器构建文件
-├── docker-compose.yml    # 服务编排
 ├── flake.nix             # Nix 开发环境
 └── install.sh            # 一键安装脚本
 ```

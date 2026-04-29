@@ -2,7 +2,7 @@
 
 This document describes how Miroclaw integrates with the Clawgotcha control plane: crate layout, merge policy with external agent lists, and hot-reload scope.
 
-**HTTP wire contract (paths, bodies, ETags):** [clawgotcha-api-contract.md](clawgotcha-api-contract.md). A minimal test server lives in [`crates/clawgotcha-server`](../../../crates/clawgotcha-server).
+**HTTP wire contract (paths, bodies, ETags):** [clawgotcha-api-contract.md](clawgotcha-api-contract.md). Implement that contract in your control plane or use any compatible deployment.
 
 ## Crate layout
 

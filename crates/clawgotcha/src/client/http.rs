@@ -1,15 +1,22 @@
 //! HTTP transport for the Clawgotcha API (retries + ETag plumbing).
+//!
+//! Wire contract follows the agentbook clawgotcha OpenAPI (`RegisterInstanceRequest`, `HeartbeatRequest`,
+//! agent/cron list envelopes, etc.). See `docs/reference/integrations/clawgotcha-api-contract.md`.
 
 use std::time::Duration;
 
 use async_trait::async_trait;
 use reqwest::header::{HeaderMap, HeaderValue, IF_NONE_MATCH};
 use reqwest::StatusCode;
+use urlencoding::encode;
 
 use crate::config::ClawgotchaRuntimeConfig;
 use crate::error::ClawgotchaError;
 use crate::models::domain::{AgentDefinition, CronJobDefinition, SwarmDefaults};
-use crate::models::wire::{WireAgent, WireCronJob, WireInstanceRecord, WireSwarmDefaults};
+use crate::models::wire::{
+    AgentbookAgentListEnvelope, AgentbookCronListEnvelope, AgentbookRevisionSummary,
+    RegisterInstanceBody, WireAgent, WireCronJob, WireSwarmDefaults,
+};
 use crate::traits::{
     AgentsDelta, ClawgotchaRegistration, ClawgotchaSyncRead, ClawgotchaWebhooks, CronDelta,
     FetchDelta, HeartbeatPayload, InstanceRegistration,
@@ -40,6 +47,19 @@ impl ClawgotchaHttpAdapter {
 
     fn url(&self, path: &str) -> String {
         format!("{}{}", self.base, path)
+    }
+
+    fn watermark_from_summary(
+        summary: &Option<AgentbookRevisionSummary>,
+        field: WatermarkField,
+    ) -> u64 {
+        summary
+            .as_ref()
+            .map(|s| match field {
+                WatermarkField::Agents => s.agents_max_revision,
+                WatermarkField::Cron => s.cron_jobs_max_revision,
+            })
+            .unwrap_or(0)
     }
 
     async fn get_json_retry<T: serde::de::DeserializeOwned>(
@@ -154,6 +174,11 @@ impl ClawgotchaHttpAdapter {
     }
 }
 
+enum WatermarkField {
+    Agents,
+    Cron,
+}
+
 #[derive(serde::Deserialize)]
 struct AgentsEnvelope {
     #[serde(default)]
@@ -173,24 +198,30 @@ struct CronEnvelope {
 #[async_trait]
 impl ClawgotchaRegistration for ClawgotchaHttpAdapter {
     async fn register_instance(&self, reg: &InstanceRegistration) -> Result<(), ClawgotchaError> {
-        let wire = WireInstanceRecord {
+        let body = RegisterInstanceBody {
             instance_name: reg.instance.instance_name.clone(),
-            callback_url: reg.instance.callback_url.clone(),
+            hostname: reg.instance.hostname.clone(),
+            version: reg.instance.version.clone(),
+            callback_url: reg.instance.callback_url.clone().unwrap_or_default(),
+            instance_type: Some("miroclaw".to_string()),
         };
-        let bytes = serde_json::to_vec(&wire)?;
+        let bytes = serde_json::to_vec(&body)?;
         self.post_empty_retry("/v1/instances/register", &bytes)
             .await
     }
 
     async fn send_heartbeat(&self, hb: &HeartbeatPayload) -> Result<(), ClawgotchaError> {
+        let enc = encode(hb.instance_name.trim());
+        let path = format!("/v1/instances/{enc}/heartbeat");
         let body = serde_json::json!({
-            "instance_name": hb.instance_name,
-            "loaded_agents_count": hb.loaded_agents_count,
-            "cron_jobs_count": hb.cron_jobs_count,
+            "status": "online",
+            "metadata": {
+                "loaded_agents_count": hb.loaded_agents_count,
+                "cron_jobs_count": hb.cron_jobs_count,
+            }
         });
         let bytes = serde_json::to_vec(&body)?;
-        self.post_empty_retry("/v1/instances/heartbeat", &bytes)
-            .await
+        self.post_empty_retry(&path, &bytes).await
     }
 }
 
@@ -201,22 +232,51 @@ impl ClawgotchaSyncRead for ClawgotchaHttpAdapter {
         revision: Option<u64>,
         etag: Option<&str>,
     ) -> Result<(FetchDelta<AgentsDelta>, Option<String>), ClawgotchaError> {
-        let path = match revision {
-            Some(r) => format!("/v1/agents?since_revision={r}"),
-            None => "/v1/agents".to_string(),
-        };
-        let (status, out_etag, parsed) = self.get_json_retry::<AgentsEnvelope>(&path, etag).await?;
+        let _ = revision;
+        let path = "/v1/agents".to_string();
+        let (status, out_etag, parsed) = self
+            .get_json_retry::<serde_json::Value>(&path, etag)
+            .await?;
         if status == StatusCode::NOT_MODIFIED {
             return Ok((FetchDelta::NotModified, out_etag));
         }
-        let env = parsed.ok_or_else(|| ClawgotchaError::InvalidResponse("agents body".into()))?;
-        let mut agents = Vec::with_capacity(env.agents.len());
-        for a in env.agents {
-            agents.push(AgentDefinition::try_from(a)?);
-        }
+
+        let value = parsed.ok_or_else(|| ClawgotchaError::InvalidResponse("agents body".into()))?;
+
+        // Prefer agentbook `AgentListResponse`; fall back to legacy snake_case envelope.
+        let (revision_watermark, agents): (u64, Vec<AgentDefinition>) = if let Ok(env) =
+            serde_json::from_value::<AgentbookAgentListEnvelope>(value.clone())
+        {
+            let wm = Self::watermark_from_summary(&env.revision_summary, WatermarkField::Agents)
+                .max(
+                    env.agents
+                        .iter()
+                        .filter(|a| !a.deleted)
+                        .map(|a| a.current_revision)
+                        .max()
+                        .unwrap_or(0),
+                );
+            let mut agents = Vec::with_capacity(env.agents.len());
+            for a in env.agents {
+                if a.deleted {
+                    continue;
+                }
+                agents.push(AgentDefinition::try_from(a)?);
+            }
+            (wm, agents)
+        } else {
+            let env: AgentsEnvelope = serde_json::from_value(value)
+                .map_err(|e| ClawgotchaError::InvalidResponse(format!("agents envelope: {e}")))?;
+            let mut agents = Vec::with_capacity(env.agents.len());
+            for a in env.agents {
+                agents.push(AgentDefinition::try_from(a)?);
+            }
+            (env.revision_watermark, agents)
+        };
+
         Ok((
             FetchDelta::Modified(AgentsDelta {
-                revision_watermark: env.revision_watermark,
+                revision_watermark,
                 agents,
             }),
             out_etag,
@@ -228,22 +288,45 @@ impl ClawgotchaSyncRead for ClawgotchaHttpAdapter {
         revision: Option<u64>,
         etag: Option<&str>,
     ) -> Result<(FetchDelta<CronDelta>, Option<String>), ClawgotchaError> {
-        let path = match revision {
-            Some(r) => format!("/v1/cron?since_revision={r}"),
-            None => "/v1/cron".to_string(),
-        };
-        let (status, out_etag, parsed) = self.get_json_retry::<CronEnvelope>(&path, etag).await?;
+        let _ = revision;
+        let path = "/v1/cron-jobs".to_string();
+        let (status, out_etag, parsed) = self
+            .get_json_retry::<serde_json::Value>(&path, etag)
+            .await?;
         if status == StatusCode::NOT_MODIFIED {
             return Ok((FetchDelta::NotModified, out_etag));
         }
-        let env = parsed.ok_or_else(|| ClawgotchaError::InvalidResponse("cron body".into()))?;
-        let mut jobs = Vec::with_capacity(env.jobs.len());
-        for j in env.jobs {
-            jobs.push(CronJobDefinition::try_from(j)?);
-        }
+
+        let value = parsed.ok_or_else(|| ClawgotchaError::InvalidResponse("cron body".into()))?;
+
+        let (revision_watermark, jobs): (u64, Vec<CronJobDefinition>) = if let Ok(env) =
+            serde_json::from_value::<AgentbookCronListEnvelope>(value.clone())
+        {
+            let wm = Self::watermark_from_summary(&env.revision_summary, WatermarkField::Cron).max(
+                env.cron_jobs
+                    .iter()
+                    .map(|j| j.current_revision)
+                    .max()
+                    .unwrap_or(0),
+            );
+            let mut jobs = Vec::with_capacity(env.cron_jobs.len());
+            for j in env.cron_jobs {
+                jobs.push(CronJobDefinition::try_from(j)?);
+            }
+            (wm, jobs)
+        } else {
+            let env: CronEnvelope = serde_json::from_value(value)
+                .map_err(|e| ClawgotchaError::InvalidResponse(format!("cron envelope: {e}")))?;
+            let mut jobs = Vec::with_capacity(env.jobs.len());
+            for j in env.jobs {
+                jobs.push(CronJobDefinition::try_from(j)?);
+            }
+            (env.revision_watermark, jobs)
+        };
+
         Ok((
             FetchDelta::Modified(CronDelta {
-                revision_watermark: env.revision_watermark,
+                revision_watermark,
                 jobs,
             }),
             out_etag,
@@ -255,8 +338,14 @@ impl ClawgotchaSyncRead for ClawgotchaHttpAdapter {
         etag: Option<&str>,
     ) -> Result<(FetchDelta<SwarmDefaults>, Option<String>), ClawgotchaError> {
         let (status, out_etag, parsed) = self
-            .get_json_retry::<WireSwarmDefaults>("/v1/swarm/config", etag)
+            .get_json_retry::<WireSwarmDefaults>("/v1/config", etag)
             .await?;
+        let (status, out_etag, parsed) = if status == StatusCode::NOT_FOUND {
+            self.get_json_retry::<WireSwarmDefaults>("/v1/swarm/config", etag)
+                .await?
+        } else {
+            (status, out_etag, parsed)
+        };
         if status == StatusCode::NOT_MODIFIED {
             return Ok((FetchDelta::NotModified, out_etag));
         }
@@ -269,14 +358,12 @@ impl ClawgotchaSyncRead for ClawgotchaHttpAdapter {
 impl ClawgotchaWebhooks for ClawgotchaHttpAdapter {
     async fn register_webhook(
         &self,
-        callback_url: &str,
-        event_types: &[&str],
+        _callback_url: &str,
+        _event_types: &[&str],
     ) -> Result<(), ClawgotchaError> {
-        let body = serde_json::json!({
-            "callback_url": callback_url,
-            "event_types": event_types,
-        });
-        let bytes = serde_json::to_vec(&body)?;
-        self.post_empty_retry("/v1/webhooks", &bytes).await
+        tracing::debug!(
+            "clawgotcha: skipping POST …/webhooks; agentbook registers callbacks at instance registration"
+        );
+        Ok(())
     }
 }

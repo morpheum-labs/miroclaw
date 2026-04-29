@@ -29,7 +29,7 @@ For first-time installation, start from [one-click-bootstrap.md](../setup-guides
 If you installed via `bash scripts/install.sh --docker`, the container exits after onboarding. To run
 Miroclaw as a long-lived gateway container, start a container manually against the persisted data directory.
 
-The repository root `docker-compose.yml` runs the **Clawgotcha** reference server (not the gateway). For gateway hosting in Docker, use the bootstrap flow or the manual run below; see [one-click-bootstrap.md](../setup-guides/one-click-bootstrap.md#repository-docker-composeyml-clawgotcha).
+For gateway hosting in Docker, use the bootstrap flow or the manual run below; see [one-click-bootstrap.md](../setup-guides/one-click-bootstrap.md).
 
 ### Manual container lifecycle (gateway)
 

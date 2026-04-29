@@ -64,6 +64,10 @@ pub struct RevisionSummary {
 pub struct ClawgotchaInstance {
     pub instance_name: String,
     pub callback_url: Option<String>,
+    /// Required by agentbook `POST /api/v1/instances/register`.
+    pub hostname: String,
+    /// Required by agentbook registration (e.g. Miroclaw package version).
+    pub version: String,
 }
 
 /// Snapshot persisted when Clawgotcha is unreachable (`OfflineCache`).

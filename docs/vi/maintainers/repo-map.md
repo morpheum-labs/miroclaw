@@ -54,7 +54,6 @@ zeroclaw/
 ├── playground/           # (trống, không gian thử)
 ├── Cargo.toml            # Manifest workspace
 ├── Dockerfile            # Build container
-├── docker-compose.yml    # Thành phần dịch vụ
 ├── flake.nix             # Môi trường dev Nix
 └── install.sh            # Script cài đặt một lệnh
 ```

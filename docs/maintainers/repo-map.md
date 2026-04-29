@@ -54,7 +54,6 @@ zeroclaw/
 ├── playground/           # (empty, experimental scratch space)
 ├── Cargo.toml            # Workspace manifest
 ├── Dockerfile            # Container build
-├── docker-compose.yml    # Service composition
 ├── flake.nix             # Nix dev environment
 └── install.sh            # One-command setup script
 ```

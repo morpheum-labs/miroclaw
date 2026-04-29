@@ -54,7 +54,6 @@ zeroclaw/
 ├── playground/           # (пусто, эксперименты)
 ├── Cargo.toml            # Манифест workspace
 ├── Dockerfile            # Сборка контейнера
-├── docker-compose.yml    # Состав сервисов
 ├── flake.nix             # Среда Nix
 └── install.sh            # Установка одной командой
 ```

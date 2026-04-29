@@ -36,9 +36,15 @@ pub fn runtime_config_from_host(
         anyhow::bail!("clawgotcha.instance_name is empty");
     }
 
+    let hostname = hostname::get()
+        .map(|h| h.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "unknown".to_string());
+
     Ok(clawgotcha::config::ClawgotchaRuntimeConfig {
         base_url: url.to_string(),
         instance_name,
+        hostname,
+        version: env!("CARGO_PKG_VERSION").to_string(),
         sync_mode,
         heartbeat_interval_secs: config.clawgotcha.heartbeat_interval_seconds,
         poll_interval_secs: config.clawgotcha.poll_interval_seconds,
