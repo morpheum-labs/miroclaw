@@ -2264,6 +2264,8 @@ impl Default for GatewayConfig {
 ///
 /// When `external_path` is set to a directory containing `index.html` (a Vite `web/dist`
 /// build), the gateway serves the UI from disk instead of embedded assets.
+/// When `disabled` is true (or env `MIROCLAW_WEBUI_DISABLED`), static dashboard routes return 503;
+/// webhooks and APIs keep running.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct WebUiConfig {
     /// Directory with built dashboard (`index.html`, `assets/`, …). Empty uses embedded `web/dist/`.

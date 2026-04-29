@@ -53,8 +53,9 @@ enum WebUiActive {
 }
 
 impl WebUiServeState {
-    /// Build-time + runtime validation. Fails hard only when embedded assets are disabled
-    /// and no usable external tree exists.
+    /// Build-time + runtime validation. Fails hard only when the dashboard is not disabled
+    /// (`[webui].disabled` / `MIROCLAW_WEBUI_DISABLED`) and embedded assets are unavailable
+    /// with no usable external tree.
     pub fn bootstrap(config: &Config) -> anyhow::Result<Self> {
         let active = resolve_initial_active(config)?;
         log_startup(&active, config.gateway.path_prefix.as_deref().unwrap_or(""));
