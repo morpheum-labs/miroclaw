@@ -21,6 +21,9 @@
 #
 # Environment:
 #   MIROCLAW_LOCAL_DEBUG=1  Use debug profile (target/debug and `cargo run` without --release).
+#
+# Agent workspace (data/config) defaults to ~/miroclaw_space when neither MIROCLAW_WORKSPACE nor
+# MIROCLAW_CONFIG_DIR is set. See src/config/schema.rs (resolve_runtime_config_dirs).
 
 set -euo pipefail
 
@@ -39,6 +42,11 @@ _workspace_root() {
 
 workspace_root="$(_workspace_root)"
 cd "${workspace_root}"
+
+# Rust/Cargo workspace root is `workspace_root`; Miroclaw agent files default under ~/miroclaw_space.
+if [[ -n "${HOME:-}" && -z "${MIROCLAW_WORKSPACE:-}" && -z "${MIROCLAW_CONFIG_DIR:-}" ]]; then
+  export MIROCLAW_WORKSPACE="${HOME}/miroclaw_space"
+fi
 
 if [[ "$#" -eq 0 ]]; then
   set -- --help
