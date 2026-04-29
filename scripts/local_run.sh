@@ -10,7 +10,9 @@
 # The workspace root comes from Cargo (`cargo locate-project --workspace`); the
 # binary is searched there and under the resolved target-dir (custom or default).
 #
-# With no arguments, prints `miroclaw --help`.
+# With no arguments, runs `miroclaw gateway` (webhooks + HTTP API). Web dashboard static files are
+# off by default here (`MIROCLAW_WEBUI_DISABLED=1`); set MIROCLAW_WEBUI_DISABLED=0 and supply a dist/
+# path via config or MIROCLAW_WEBUI_EXTERNAL_PATH to enable the UI.
 #
 # Examples:
 #   bash scripts/local_run.sh status
@@ -20,10 +22,14 @@
 #   bash scripts/local_run.sh onboard
 #
 # Environment:
-#   MIROCLAW_LOCAL_DEBUG=1  Use debug profile (target/debug and `cargo run` without --release).
+#   MIROCLAW_LOCAL_DEBUG=1       Use debug profile (target/debug and `cargo run` without --release).
+#   MIROCLAW_WEBUI_DISABLED      Defaults to 1 for this script (API-only gateway). Set to 0 to serve
+#                                a dashboard from [webui].external_path / MIROCLAW_WEBUI_EXTERNAL_PATH.
 #
 # Agent workspace (data/config) defaults to ~/miroclaw_space when neither MIROCLAW_WORKSPACE nor
 # MIROCLAW_CONFIG_DIR is set. See src/config/schema.rs (resolve_runtime_config_dirs).
+#
+# Web dashboard is skipped unless you explicitly enable it (see MIROCLAW_WEBUI_DISABLED below).
 
 set -euo pipefail
 
@@ -49,7 +55,11 @@ if [[ -n "${HOME:-}" && -z "${MIROCLAW_WORKSPACE:-}" && -z "${MIROCLAW_CONFIG_DI
 fi
 
 if [[ "$#" -eq 0 ]]; then
-  set -- --help
+  set -- gateway
+fi
+
+if [[ -z "${MIROCLAW_WEBUI_DISABLED+x}" ]]; then
+  export MIROCLAW_WEBUI_DISABLED=1
 fi
 
 # Prefer $CARGO_TARGET_DIR, then `cargo metadata` (respects .cargo/config.toml target-dir),

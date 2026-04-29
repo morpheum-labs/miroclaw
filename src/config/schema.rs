@@ -2269,6 +2269,9 @@ pub struct WebUiConfig {
     /// Directory with built dashboard (`index.html`, `assets/`, …). Empty uses embedded `web/dist/`.
     #[serde(default)]
     pub external_path: String,
+    /// When true, skip serving the web dashboard (gateway APIs and webhooks only).
+    #[serde(default)]
+    pub disabled: bool,
 }
 
 /// Pairing dashboard configuration (`[gateway.pairing_dashboard]`).
@@ -10665,6 +10668,22 @@ impl Config {
             let trimmed = path.trim();
             if !trimmed.is_empty() {
                 self.webui.external_path = trimmed.to_string();
+            }
+        }
+
+        // API-only gateway (no dashboard static files): MIROCLAW_WEBUI_DISABLED
+        if let Ok(val) = std::env::var("MIROCLAW_WEBUI_DISABLED") {
+            let v = val.trim();
+            if v.is_empty() {
+                // leave config value
+            } else if v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("yes") {
+                self.webui.disabled = true;
+            } else if v == "0" || v.eq_ignore_ascii_case("false") || v.eq_ignore_ascii_case("no") {
+                self.webui.disabled = false;
+            } else {
+                tracing::warn!(
+                    "Ignoring MIROCLAW_WEBUI_DISABLED={val:?}: expected 0/1, true/false, yes/no"
+                );
             }
         }
 

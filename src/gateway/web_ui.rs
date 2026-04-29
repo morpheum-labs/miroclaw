@@ -43,6 +43,8 @@ struct WebUiInner {
 
 #[derive(Clone)]
 enum WebUiActive {
+    /// Dashboard intentionally off (`[webui].disabled` / `MIROCLAW_WEBUI_DISABLED`).
+    Disabled,
     Embedded,
     External {
         root_display: PathBuf,
@@ -92,6 +94,11 @@ impl WebUiServeState {
         let active = self.inner.active.read().clone();
         let path_prefix_rewrite = !path_prefix.is_empty();
         match &active {
+            WebUiActive::Disabled => WebUiStatus {
+                source: "disabled",
+                external_path: None,
+                path_prefix_rewrite,
+            },
             WebUiActive::Embedded => WebUiStatus {
                 source: "embedded",
                 external_path: None,
@@ -163,6 +170,9 @@ fn log_startup(active: &WebUiActive, path_prefix: &str) {
         "path-prefix rewriting on"
     };
     match active {
+        WebUiActive::Disabled => {
+            tracing::info!("WebUI: disabled — API-only gateway ({rewrite})");
+        }
         WebUiActive::Embedded => {
             tracing::info!("WebUI source: embedded (default) ({rewrite})");
         }
@@ -191,6 +201,10 @@ fn embedded_index_present() -> bool {
 }
 
 fn try_resolve_active(config: &Config) -> Result<WebUiActive, String> {
+    if config.webui.disabled {
+        return Ok(WebUiActive::Disabled);
+    }
+
     let raw = config.webui.external_path.trim();
     if !raw.is_empty() {
         let candidate = resolve_external_path(raw, &config.workspace_dir);
@@ -359,6 +373,14 @@ fn embedded_bytes(path: &str) -> Option<Vec<u8>> {
     }
 }
 
+fn webui_disabled_gateway_response() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Web dashboard disabled ([webui].disabled or MIROCLAW_WEBUI_DISABLED).",
+    )
+        .into_response()
+}
+
 fn serve_embedded_index(path_prefix: &str) -> Response {
     #[cfg(feature = "embedded-web-ui")]
     {
@@ -401,6 +423,7 @@ pub async fn handle_static(State(state): State<AppState>, uri: Uri) -> Response 
         .trim_start_matches('/');
 
     match state.web_ui.active() {
+        WebUiActive::Disabled => webui_disabled_gateway_response(),
         WebUiActive::Embedded => {
             if let Some(bytes) = embedded_bytes(path) {
                 return response_bytes(path, bytes);
@@ -466,6 +489,7 @@ pub async fn handle_spa_fallback(State(state): State<AppState>) -> Response {
     let path_prefix = state.path_prefix.as_str();
 
     match state.web_ui.active() {
+        WebUiActive::Disabled => webui_disabled_gateway_response(),
         WebUiActive::Embedded => serve_embedded_index(path_prefix),
         WebUiActive::External { root_canonical, .. } => {
             let index = root_canonical.join("index.html");
