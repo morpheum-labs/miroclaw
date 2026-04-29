@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish mormclaw Docker image using DOCKER_SPACE_SORA (login/namespace) and DOCKER_TOKEN_SORA (API token).
+# Publish Miroclaw Docker image using DOCKER_SPACE_SORA (login/namespace) and DOCKER_TOKEN_SORA (API token).
 # Usage (from repo root): bash scripts/docker-publish.sh [tag]
 #   If no tag given: uses git describe (version from latest tag + commit, e.g. 0.1.2 or 0.1.2-1-gabc1234)
 # Example: DOCKER_SPACE_SORA=myuser DOCKER_TOKEN_SORA=xxx bash scripts/docker-publish.sh
@@ -28,7 +28,7 @@ if [[ -z "${DOCKER_SPACE_SORA}" || -z "${DOCKER_TOKEN_SORA}" ]]; then
 fi
 
 echo "Building ${IMAGE_NAME}:${TAG}..."
-docker build -f mormsodockerfile --target release -t "${IMAGE_NAME}:${TAG}" .
+docker build -f miroclaw.dockerfile --target release -t "${IMAGE_NAME}:${TAG}" .
 
 REMOTE_IMAGE="${DOCKER_SPACE_SORA}/${IMAGE_NAME}:${TAG}"
 echo "Logging in and pushing ${REMOTE_IMAGE}..."
