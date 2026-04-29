@@ -1489,7 +1489,7 @@ if [[ "$SKIP_INSTALL" == false ]]; then
   step_dot "Installing miroclaw to cargo bin"
 
   # Clean up stale cargo install tracking from the old "zeroclaw" package name
-  # (renamed to "zeroclawlabs" with binary "miroclaw"). Without this, `cargo install zeroclawlabs` from
+  # (renamed to "miroclawlabs" with binary "miroclaw"). Without this, `cargo install miroclawlabs` from
   # crates.io fails with "binary already exists as part of `miroclaw`".
   if have_cmd cargo; then
     if [[ -f "$HOME/.cargo/.crates.toml" ]] && grep -qE '^"(zeroclaw|miroclaw) ' "$HOME/.cargo/.crates.toml" 2>/dev/null; then

@@ -1,4 +1,4 @@
-# Miroclaw / zeroclawlabs gateway image (multi-stage). Build from repo root.
+# Miroclaw / miroclawlabs gateway image (multi-stage). Build from repo root.
 FROM rust:1-bookworm AS builder
 WORKDIR /app
 COPY . .

@@ -3,7 +3,7 @@ members = [".", "crates/aardvark-sys", "crates/clawgotcha", "crates/clawgotcha-s
 resolver = "2"
 
 [package]
-name = "zeroclawlabs"
+name = "miroclawlabs"
 version = "0.6.1"
 edition = "2021"
 authors = ["theonlyhennygod"]

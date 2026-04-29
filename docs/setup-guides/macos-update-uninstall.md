@@ -80,7 +80,7 @@ brew uninstall miroclaw
 Cargo/bootstrap/manual (`~/.cargo/bin/miroclaw`):
 
 ```bash
-cargo uninstall zeroclawlabs || true
+cargo uninstall miroclawlabs || true
 rm -f ~/.cargo/bin/miroclaw
 ```
 

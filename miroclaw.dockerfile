@@ -1,15 +1,11 @@
 # syntax=docker/dockerfile:1.7
-# Miroclaw multi-stage image (web UI + zeroclawlabs binary `miroclaw`).
+# Miroclaw multi-stage image (`miroclaw` binary).
+#
+# The dashboard is optional rust-embed of `web/dist/` only when built with `--features embedded-web-ui`.
+# Default features omit it (see Cargo.toml). This image does not build Bun/Vite or embed assets;
+# use `[webui].external_path` (or `MIROCLAW_WEBUI_EXTERNAL_PATH`) to serve a built `dist/` from disk.
 
-# ── Stage 0: Frontend build ─────────────────────────────────────
-FROM oven/bun:1.3-alpine AS web-builder
-WORKDIR /web
-COPY web/package.json web/bun.lock ./
-RUN bun install --frozen-lockfile
-COPY web/ .
-RUN bun run build
-
-# ── Stage 1: Build ────────────────────────────────────────────
+# ── Stage 0: Rust build ───────────────────────────────────────
 FROM rust:1.94-slim@sha256:da9dab7a6b8dd428e71718402e97207bb3e54167d37b5708616050b1e8f60ed6 AS builder
 
 WORKDIR /app
@@ -25,11 +21,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # 1. Copy manifests to cache dependencies
 COPY Cargo.toml Cargo.lock ./
 # Include every workspace member: Cargo.lock is generated for the full workspace.
-# Previously we used sed to drop `crates/robot-kit`, which made the manifest disagree
-# with the lockfile and caused `cargo --locked` to fail (Cargo refused to rewrite the lock).
-COPY crates/robot-kit/ crates/robot-kit/
 COPY crates/aardvark-sys/ crates/aardvark-sys/
-COPY apps/tauri/ apps/tauri/
+COPY crates/clawgotcha/ crates/clawgotcha/
+COPY crates/clawgotcha-server/ crates/clawgotcha-server/
 # Create dummy targets declared in Cargo.toml so manifest parsing succeeds.
 RUN mkdir -p src benches \
   && echo "fn main() {}" > src/main.rs \
@@ -39,28 +33,26 @@ RUN --mount=type=cache,id=miroclaw-cargo-registry,target=/usr/local/cargo/regist
   --mount=type=cache,id=miroclaw-cargo-git,target=/usr/local/cargo/git,sharing=locked \
   --mount=type=cache,id=miroclaw-target,target=/app/target,sharing=locked \
   if [ -n "$MIROCLAW_CARGO_FEATURES" ]; then \
-  cargo build --release --locked -p zeroclawlabs --features "$MIROCLAW_CARGO_FEATURES"; \
+  cargo build --release --locked -p miroclawlabs --features "$MIROCLAW_CARGO_FEATURES"; \
   else \
-  cargo build --release --locked -p zeroclawlabs; \
+  cargo build --release --locked -p miroclawlabs; \
   fi
 RUN rm -rf src benches
 
 # 2. Copy only build-relevant source paths (avoid cache-busting on docs/tests/scripts)
 COPY src/ src/
-COPY benches/ benches/
-COPY --from=web-builder /web/dist web/dist
 COPY *.rs .
 RUN touch src/main.rs
 RUN --mount=type=cache,id=miroclaw-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
   --mount=type=cache,id=miroclaw-cargo-git,target=/usr/local/cargo/git,sharing=locked \
   --mount=type=cache,id=miroclaw-target,target=/app/target,sharing=locked \
-  rm -rf target/release/.fingerprint/zeroclawlabs-* \
-  target/release/deps/zeroclawlabs-* \
-  target/release/incremental/zeroclawlabs-* && \
+  rm -rf target/release/.fingerprint/miroclawlabs-* \
+  target/release/deps/miroclawlabs-* \
+  target/release/incremental/miroclawlabs-* && \
   if [ -n "$MIROCLAW_CARGO_FEATURES" ]; then \
-  cargo build --release --locked -p zeroclawlabs --features "$MIROCLAW_CARGO_FEATURES"; \
+  cargo build --release --locked -p miroclawlabs --features "$MIROCLAW_CARGO_FEATURES"; \
   else \
-  cargo build --release --locked -p zeroclawlabs; \
+  cargo build --release --locked -p miroclawlabs; \
   fi && \
   cp target/release/miroclaw /app/miroclaw && \
   strip /app/miroclaw
@@ -88,7 +80,7 @@ RUN mkdir -p /miroclaw-data/.miroclaw /miroclaw-data/workspace && \
   > /miroclaw-data/.miroclaw/config.toml && \
   chown -R 1000:1000 /miroclaw-data
 
-# ── Stage 2: Development Runtime (Debian) ────────────────────
+# ── Stage 1: Development Runtime (Debian) ───────────────────
 FROM debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045e9a0d21712ae3ba AS dev
 
 # Install essential runtime dependencies only (use docker-compose.override.yml for dev tools)
@@ -126,7 +118,7 @@ HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=10s \
 ENTRYPOINT ["miroclaw"]
 CMD ["daemon"]
 
-# ── Stage 3: Production Runtime (Distroless) ─────────────────
+# ── Stage 2: Production Runtime (Distroless) ─────────────────
 FROM gcr.io/distroless/cc-debian13:nonroot@sha256:84fcd3c223b144b0cb6edc5ecc75641819842a9679a3a58fd6294bec47532bf7 AS release
 
 COPY --from=builder /app/miroclaw /usr/local/bin/miroclaw

@@ -1508,7 +1508,7 @@ async fn main() -> Result<()> {
         Commands::Desktop {
             install: do_install,
         } => {
-            let download_url = "https://www.zeroclawlabs.ai/download";
+            let download_url = "https://www.miroclawlabs.ai/download";
 
             if do_install {
                 println!("Download the ZeroClaw companion app:");

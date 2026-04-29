@@ -80,7 +80,7 @@ brew uninstall miroclaw
 Cargo/引导安装/手动安装（`~/.cargo/bin/miroclaw`）：
 
 ```bash
-cargo uninstall zeroclawlabs || true
+cargo uninstall miroclawlabs || true
 rm -f ~/.cargo/bin/miroclaw
 ```
 
