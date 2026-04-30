@@ -19,6 +19,12 @@ The Miroclaw setting **`[clawgotcha].url`** is the **HTTP prefix** prepended to 
 
 When the server enables API keys, requests should send **`Authorization: Bearer <token>`** or **`X-API-Key: <key>`** on mutating routes; Miroclaw can be extended later to send these headers from config.
 
+### What the Miroclaw client implements
+
+[`ClawgotchaHttpAdapter`](../../../crates/clawgotcha/src/client/http.rs) and [`ClawgotchaSyncRead`](../../../crates/clawgotcha/src/traits.rs) only drive **registration**, **heartbeat**, and pulls of **agents**, **cron jobs**, and **swarm config**. They do **not** call **`GET /v1/instances`** or **`GET /v1/instances/{instance_name}`**.
+
+So **runtime-instance discovery** (listing every registered Miroclaw/zero-claw peer on the control plane) is **not** surfaced in this repo: that data is for **Clawgotcha’s own UI/API** (or other ops tools) that query the server directly. A running Miroclaw node only registers **itself** under `[clawgotcha].instance_name`; it never downloads the full instance catalog.
+
 ---
 
 ## `POST /v1/instances/register`
