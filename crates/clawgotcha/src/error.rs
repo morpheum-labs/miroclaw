@@ -33,9 +33,26 @@ pub enum ClawgotchaError {
     Io(#[from] std::io::Error),
 }
 
+pub(crate) fn classify_reqwest_transport(err: &reqwest::Error) -> String {
+    let kind = if err.is_connect() {
+        "cannot reach Clawgotcha (connection failed)"
+    } else if err.is_timeout() {
+        "Clawgotcha request timed out"
+    } else if err.is_decode() {
+        "Clawgotcha response could not be decoded"
+    } else {
+        "Clawgotcha HTTP transport error"
+    };
+    let mut out = format!("{kind}: {err}");
+    if let Some(url) = err.url() {
+        out.push_str(&format!(" ({})", url.as_str()));
+    }
+    out
+}
+
 impl From<reqwest::Error> for ClawgotchaError {
     fn from(value: reqwest::Error) -> Self {
-        ClawgotchaError::Http(value.to_string())
+        ClawgotchaError::Http(classify_reqwest_transport(&value))
     }
 }
 

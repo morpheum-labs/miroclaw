@@ -38,10 +38,10 @@ Registers or upserts a runtime instance (agentbook **`RegisterInstanceRequest`**
 | `instance_name` | string | yes | Same as `[clawgotcha].instance_name` |
 | `hostname` | string | yes | Miroclaw sends `hostname::get()` or `"unknown"` |
 | `version` | string | yes | Miroclaw sends the running crate version (`CARGO_PKG_VERSION`) |
-| `callback_url` | string | yes | Webhook URL when using webhook/hybrid sync; use `""` if unset |
+| `callback_url` | string | yes | Full webhook URL (`…/webhook/clawgotcha`). **Agentbook rejects empty/whitespace** (`400`), stores it `NOT NULL`, and creates an HMAC webhook subscription targeting this URL. Miroclaw only fills this when `[clawgotcha].callback_public_base_url` is set — **poll-only setups against agentbook must still supply a non-empty reachable URL** (or relax validation server-side). |
 | `instance_type` | string | no | Miroclaw sends `"miroclaw"` |
 
-**Response:** `200` JSON (`RegisterInstanceResponse` on agentbook); the client treats any **2xx** as success.
+**Response:** `200` JSON **`RegisterInstanceResponse`**: `instance` (runtime row; agentbook/OpenAPI uses PascalCase fields on `SwarmRuntimeInstance`) and `revision_summary` (`RevisionSummary`: revision watermarks). The Miroclaw [`ClawgotchaHttpAdapter`](../../../crates/clawgotcha/src/client/http.rs) **does not parse this JSON** — it treats **any HTTP 2xx** as success (`post_empty_retry` returns `Ok(())` and drops the body). Initial sync still follows with separate `GET /v1/agents` (etc.) calls.
 
 ---
 

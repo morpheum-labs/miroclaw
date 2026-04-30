@@ -61,8 +61,6 @@ pub async fn run_sync_supervised(
     shared_config: Arc<Mutex<Config>>,
     delegate_agents: Option<Arc<RwLock<HashMap<String, DelegateAgentConfig>>>>,
 ) -> anyhow::Result<()> {
-    crate::health::mark_component_ok("clawgotcha");
-
     let rt = runtime_config_from_host(&config).context("clawgotcha runtime config")?;
     let client = Arc::new(
         clawgotcha::client::ClawgotchaHttpAdapter::new(&rt).context("clawgotcha HTTP client")?,
@@ -116,6 +114,12 @@ pub async fn run_sync_supervised(
         .map_err(|e| anyhow::anyhow!("{e}"))
         .context("clawgotcha bootstrap")?;
 
+    crate::health::mark_component_ok("clawgotcha");
+
+    println!(
+        "   Clawgotcha: registered instance {:?} at {}",
+        rt.instance_name, rt.base_url
+    );
     tracing::info!(
         url = %rt.base_url,
         instance = %rt.instance_name,

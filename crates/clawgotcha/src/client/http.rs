@@ -25,6 +25,10 @@ use crate::traits::{
 const DEFAULT_RETRIES: u32 = 3;
 const RETRY_BASE_MS: u64 = 200;
 
+async fn retry_backoff(attempt: u32) {
+    tokio::time::sleep(Duration::from_millis(RETRY_BASE_MS * (1u64 << attempt))).await;
+}
+
 /// HTTP client implementation with bounded retries and If-None-Match support.
 pub struct ClawgotchaHttpAdapter {
     http: reqwest::Client,
@@ -98,10 +102,7 @@ impl ClawgotchaHttpAdapter {
                     let body = resp.text().await.unwrap_or_default();
                     if attempt < DEFAULT_RETRIES && status.is_server_error() {
                         tracing::warn!(%status, path, attempt, "clawgotcha GET retry");
-                        tokio::time::sleep(Duration::from_millis(
-                            RETRY_BASE_MS * (1u64 << attempt),
-                        ))
-                        .await;
+                        retry_backoff(attempt).await;
                         attempt += 1;
                         continue;
                     }
@@ -112,11 +113,13 @@ impl ClawgotchaHttpAdapter {
                 }
                 Err(e) => {
                     if attempt < DEFAULT_RETRIES {
-                        tracing::warn!(error = %e, path, attempt, "clawgotcha GET transport retry");
-                        tokio::time::sleep(Duration::from_millis(
-                            RETRY_BASE_MS * (1u64 << attempt),
-                        ))
-                        .await;
+                        tracing::warn!(
+                            error = %crate::error::classify_reqwest_transport(&e),
+                            path,
+                            attempt,
+                            "clawgotcha GET transport retry"
+                        );
+                        retry_backoff(attempt).await;
                         attempt += 1;
                         continue;
                     }
@@ -145,10 +148,7 @@ impl ClawgotchaHttpAdapter {
                     let body = resp.text().await.unwrap_or_default();
                     if attempt < DEFAULT_RETRIES && status.is_server_error() {
                         tracing::warn!(%status, path, attempt, "clawgotcha POST retry");
-                        tokio::time::sleep(Duration::from_millis(
-                            RETRY_BASE_MS * (1u64 << attempt),
-                        ))
-                        .await;
+                        retry_backoff(attempt).await;
                         attempt += 1;
                         continue;
                     }
@@ -159,11 +159,13 @@ impl ClawgotchaHttpAdapter {
                 }
                 Err(e) => {
                     if attempt < DEFAULT_RETRIES {
-                        tracing::warn!(error = %e, path, attempt, "clawgotcha POST transport retry");
-                        tokio::time::sleep(Duration::from_millis(
-                            RETRY_BASE_MS * (1u64 << attempt),
-                        ))
-                        .await;
+                        tracing::warn!(
+                            error = %crate::error::classify_reqwest_transport(&e),
+                            path,
+                            attempt,
+                            "clawgotcha POST transport retry"
+                        );
+                        retry_backoff(attempt).await;
                         attempt += 1;
                         continue;
                     }

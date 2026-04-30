@@ -67,6 +67,13 @@ pub fn mark_component_ok(component: &str) {
     });
 }
 
+/// Long-running connect phase (e.g. Clawgotcha before control plane registration succeeds).
+pub fn mark_component_starting(component: &str) {
+    upsert_component(component, |entry| {
+        entry.status = "starting".into();
+    });
+}
+
 #[allow(clippy::needless_pass_by_value)]
 pub fn mark_component_error(component: &str, error: impl ToString) {
     let err = error.to_string();

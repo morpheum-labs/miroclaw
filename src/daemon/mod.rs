@@ -100,6 +100,7 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
             "gateway",
             initial_backoff,
             max_backoff,
+            true,
             move || {
                 let cfg = gateway_cfg.clone();
                 let host = gateway_host.clone();
@@ -128,6 +129,7 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
                 "channels",
                 initial_backoff,
                 max_backoff,
+                true,
                 move || {
                     let cfg = channels_cfg.clone();
                     async move { Box::pin(crate::channels::start_channels(cfg)).await }
@@ -145,6 +147,7 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
             "heartbeat",
             initial_backoff,
             max_backoff,
+            true,
             move || {
                 let cfg = heartbeat_cfg.clone();
                 async move { Box::pin(run_heartbeat_worker(cfg)).await }
@@ -158,6 +161,7 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
             "scheduler",
             initial_backoff,
             max_backoff,
+            true,
             move || {
                 let cfg = scheduler_cfg.clone();
                 async move { Box::pin(crate::cron::scheduler::run(cfg)).await }
@@ -179,6 +183,7 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
             "clawgotcha",
             initial_backoff,
             max_backoff,
+            false,
             move || {
                 let cfg = sync_cfg.clone();
                 let rx_slot = std::sync::Arc::clone(&cg_rx_cell);
@@ -261,6 +266,7 @@ fn spawn_component_supervisor<F, Fut>(
     name: &'static str,
     initial_backoff_secs: u64,
     max_backoff_secs: u64,
+    mark_ok_before_run: bool,
     mut run_component: F,
 ) -> JoinHandle<()>
 where
@@ -272,7 +278,11 @@ where
         let max_backoff = max_backoff_secs.max(backoff);
 
         loop {
-            crate::health::mark_component_ok(name);
+            if mark_ok_before_run {
+                crate::health::mark_component_ok(name);
+            } else {
+                crate::health::mark_component_starting(name);
+            }
             match run_component().await {
                 Ok(()) => {
                     crate::health::mark_component_error(name, "component exited unexpectedly");
@@ -865,7 +875,7 @@ mod tests {
 
     #[tokio::test]
     async fn supervisor_marks_error_and_restart_on_failure() {
-        let handle = spawn_component_supervisor("daemon-test-fail", 1, 1, || async {
+        let handle = spawn_component_supervisor("daemon-test-fail", 1, 1, true, || async {
             anyhow::bail!("boom")
         });
 
@@ -885,7 +895,8 @@ mod tests {
 
     #[tokio::test]
     async fn supervisor_marks_unexpected_exit_as_error() {
-        let handle = spawn_component_supervisor("daemon-test-exit", 1, 1, || async { Ok(()) });
+        let handle =
+            spawn_component_supervisor("daemon-test-exit", 1, 1, true, || async { Ok(()) });
 
         tokio::time::sleep(Duration::from_millis(50)).await;
         handle.abort();
