@@ -5,6 +5,7 @@ use serde_json::json;
 use tracing::warn;
 
 use super::traits::{Tool, ToolResult};
+use crate::config::Config;
 use crate::sop::types::{SopRunAction, SopStepResult, SopStepStatus};
 use crate::sop::{SopAuditLogger, SopEngine, SopMetricsCollector};
 
@@ -13,14 +14,22 @@ pub struct SopAdvanceTool {
     engine: Arc<Mutex<SopEngine>>,
     audit: Option<Arc<SopAuditLogger>>,
     collector: Option<Arc<SopMetricsCollector>>,
+    task_runtime: Option<Arc<crate::task::TaskRuntime>>,
+    config: Arc<Config>,
 }
 
 impl SopAdvanceTool {
-    pub fn new(engine: Arc<Mutex<SopEngine>>) -> Self {
+    pub fn new(
+        engine: Arc<Mutex<SopEngine>>,
+        task_runtime: Option<Arc<crate::task::TaskRuntime>>,
+        config: Arc<Config>,
+    ) -> Self {
         Self {
             engine,
             audit: None,
             collector: None,
+            task_runtime,
+            config,
         }
     }
 
@@ -156,6 +165,15 @@ impl Tool for SopAdvanceTool {
             }
         }
 
+        if let (Some(ref rt), Some(ref sr), Ok(_)) = (&self.task_runtime, &step_result_ok, &action)
+        {
+            if let Err(e) =
+                rt.on_sop_step(self.config.as_ref(), None, run_id, sr.step_number, output)
+            {
+                warn!("task runtime SOP step record failed: {e}");
+            }
+        }
+
         match action {
             Ok(action) => {
                 let result_output = match action {
@@ -214,7 +232,7 @@ use crate::sop::engine::now_iso8601;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SopConfig;
+    use crate::config::{Config, SopConfig};
     use crate::memory::Memory;
     use crate::sop::engine::SopEngine;
     use crate::sop::types::*;
@@ -276,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn advance_to_next_step() {
         let (engine, run_id) = engine_with_active_run();
-        let tool = SopAdvanceTool::new(engine);
+        let tool = SopAdvanceTool::new(engine, None, Arc::new(Config::default()));
         let result = tool
             .execute(json!({
                 "run_id": run_id,
@@ -293,7 +311,7 @@ mod tests {
     #[tokio::test]
     async fn advance_to_completion() {
         let (engine, run_id) = engine_with_active_run();
-        let tool = SopAdvanceTool::new(engine.clone());
+        let tool = SopAdvanceTool::new(engine.clone(), None, Arc::new(Config::default()));
 
         // Complete step 1
         tool.execute(json!({
@@ -320,7 +338,7 @@ mod tests {
     #[tokio::test]
     async fn advance_with_failure() {
         let (engine, run_id) = engine_with_active_run();
-        let tool = SopAdvanceTool::new(engine);
+        let tool = SopAdvanceTool::new(engine, None, Arc::new(Config::default()));
         let result = tool
             .execute(json!({
                 "run_id": run_id,
@@ -337,7 +355,7 @@ mod tests {
     #[tokio::test]
     async fn advance_invalid_status() {
         let (engine, run_id) = engine_with_active_run();
-        let tool = SopAdvanceTool::new(engine);
+        let tool = SopAdvanceTool::new(engine, None, Arc::new(Config::default()));
         let result = tool
             .execute(json!({
                 "run_id": run_id,
@@ -353,7 +371,7 @@ mod tests {
     #[tokio::test]
     async fn advance_unknown_run() {
         let engine = Arc::new(Mutex::new(SopEngine::new(SopConfig::default())));
-        let tool = SopAdvanceTool::new(engine);
+        let tool = SopAdvanceTool::new(engine, None, Arc::new(Config::default()));
         let result = tool
             .execute(json!({
                 "run_id": "nonexistent",
@@ -367,7 +385,7 @@ mod tests {
     #[test]
     fn name_and_schema() {
         let engine = Arc::new(Mutex::new(SopEngine::new(SopConfig::default())));
-        let tool = SopAdvanceTool::new(engine);
+        let tool = SopAdvanceTool::new(engine, None, Arc::new(Config::default()));
         assert_eq!(tool.name(), "sop_advance");
         let schema = tool.parameters_schema();
         assert!(schema["properties"]["run_id"].is_object());
@@ -387,7 +405,8 @@ mod tests {
             Arc::from(crate::memory::create_memory(&mem_cfg, tmp.path(), None).unwrap());
         let audit = Arc::new(SopAuditLogger::new(memory.clone()));
 
-        let tool = SopAdvanceTool::new(engine).with_audit(audit.clone());
+        let tool = SopAdvanceTool::new(engine, None, Arc::new(Config::default()))
+            .with_audit(audit.clone());
         let result = tool
             .execute(json!({
                 "run_id": "nonexistent",
@@ -418,7 +437,8 @@ mod tests {
             Arc::from(crate::memory::create_memory(&mem_cfg, tmp.path(), None).unwrap());
         let audit = Arc::new(SopAuditLogger::new(memory.clone()));
 
-        let tool = SopAdvanceTool::new(engine).with_audit(audit.clone());
+        let tool = SopAdvanceTool::new(engine, None, Arc::new(Config::default()))
+            .with_audit(audit.clone());
         let result = tool
             .execute(json!({
                 "run_id": run_id,

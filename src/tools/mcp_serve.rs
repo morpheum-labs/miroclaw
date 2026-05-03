@@ -197,6 +197,7 @@ impl McpServeRuntime {
             config,
             None,
             None,
+            None,
         );
 
         let loaded_skills = skills::load_skills_with_config(&config.workspace_dir, config);

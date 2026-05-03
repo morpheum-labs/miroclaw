@@ -5,6 +5,7 @@ use serde_json::json;
 use tracing::warn;
 
 use super::traits::{Tool, ToolResult};
+use crate::config::Config;
 use crate::sop::types::{SopEvent, SopRunAction, SopTriggerSource};
 use crate::sop::{SopAuditLogger, SopEngine};
 
@@ -12,13 +13,21 @@ use crate::sop::{SopAuditLogger, SopEngine};
 pub struct SopExecuteTool {
     engine: Arc<Mutex<SopEngine>>,
     audit: Option<Arc<SopAuditLogger>>,
+    task_runtime: Option<Arc<crate::task::TaskRuntime>>,
+    config: Arc<Config>,
 }
 
 impl SopExecuteTool {
-    pub fn new(engine: Arc<Mutex<SopEngine>>) -> Self {
+    pub fn new(
+        engine: Arc<Mutex<SopEngine>>,
+        task_runtime: Option<Arc<crate::task::TaskRuntime>>,
+        config: Arc<Config>,
+    ) -> Self {
         Self {
             engine,
             audit: None,
+            task_runtime,
+            config,
         }
     }
 
@@ -99,6 +108,13 @@ impl Tool for SopExecuteTool {
             }
         }
 
+        if let (Some(ref rt), Ok(_), Some(ref run)) = (&self.task_runtime, &action, &run_snapshot) {
+            if let Err(e) = rt.on_sop_run_started(self.config.as_ref(), &run.run_id, &run.sop_name)
+            {
+                warn!("task runtime SOP parent record failed: {e}");
+            }
+        }
+
         match action {
             Ok(action) => {
                 let output = match action {
@@ -163,7 +179,7 @@ use crate::sop::engine::now_iso8601;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SopConfig;
+    use crate::config::{Config, SopConfig};
     use crate::sop::engine::SopEngine;
     use crate::sop::types::*;
 
@@ -211,7 +227,7 @@ mod tests {
     #[tokio::test]
     async fn execute_auto_sop() {
         let engine = engine_with_sops(vec![test_sop("test-sop", SopExecutionMode::Auto)]);
-        let tool = SopExecuteTool::new(engine);
+        let tool = SopExecuteTool::new(engine, None, Arc::new(Config::default()));
         let result = tool.execute(json!({"name": "test-sop"})).await.unwrap();
         assert!(result.success);
         assert!(result.output.contains("run-"));
@@ -221,7 +237,7 @@ mod tests {
     #[tokio::test]
     async fn execute_supervised_sop() {
         let engine = engine_with_sops(vec![test_sop("test-sop", SopExecutionMode::Supervised)]);
-        let tool = SopExecuteTool::new(engine);
+        let tool = SopExecuteTool::new(engine, None, Arc::new(Config::default()));
         let result = tool.execute(json!({"name": "test-sop"})).await.unwrap();
         assert!(result.success);
         assert!(result.output.contains("waiting for approval"));
@@ -230,7 +246,7 @@ mod tests {
     #[tokio::test]
     async fn execute_unknown_sop() {
         let engine = engine_with_sops(vec![]);
-        let tool = SopExecuteTool::new(engine);
+        let tool = SopExecuteTool::new(engine, None, Arc::new(Config::default()));
         let result = tool.execute(json!({"name": "nonexistent"})).await.unwrap();
         assert!(!result.success);
         assert!(result.error.unwrap().contains("Failed to start SOP"));
@@ -239,7 +255,7 @@ mod tests {
     #[tokio::test]
     async fn execute_missing_name() {
         let engine = engine_with_sops(vec![]);
-        let tool = SopExecuteTool::new(engine);
+        let tool = SopExecuteTool::new(engine, None, Arc::new(Config::default()));
         let result = tool.execute(json!({})).await;
         assert!(result.is_err());
     }
@@ -247,7 +263,7 @@ mod tests {
     #[tokio::test]
     async fn execute_with_payload() {
         let engine = engine_with_sops(vec![test_sop("test-sop", SopExecutionMode::Auto)]);
-        let tool = SopExecuteTool::new(engine);
+        let tool = SopExecuteTool::new(engine, None, Arc::new(Config::default()));
         let result = tool
             .execute(json!({"name": "test-sop", "payload": "{\"value\": 87.3}"}))
             .await
@@ -259,7 +275,7 @@ mod tests {
     #[test]
     fn name_and_schema() {
         let engine = engine_with_sops(vec![]);
-        let tool = SopExecuteTool::new(engine);
+        let tool = SopExecuteTool::new(engine, None, Arc::new(Config::default()));
         assert_eq!(tool.name(), "sop_execute");
         assert!(tool.parameters_schema()["required"].is_array());
     }

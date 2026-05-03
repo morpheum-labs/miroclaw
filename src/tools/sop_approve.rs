@@ -5,6 +5,7 @@ use serde_json::json;
 use tracing::warn;
 
 use super::traits::{Tool, ToolResult};
+use crate::config::Config;
 use crate::sop::types::SopRunAction;
 use crate::sop::{SopAuditLogger, SopEngine, SopMetricsCollector};
 
@@ -13,14 +14,22 @@ pub struct SopApproveTool {
     engine: Arc<Mutex<SopEngine>>,
     audit: Option<Arc<SopAuditLogger>>,
     collector: Option<Arc<SopMetricsCollector>>,
+    task_runtime: Option<Arc<crate::task::TaskRuntime>>,
+    config: Arc<Config>,
 }
 
 impl SopApproveTool {
-    pub fn new(engine: Arc<Mutex<SopEngine>>) -> Self {
+    pub fn new(
+        engine: Arc<Mutex<SopEngine>>,
+        task_runtime: Option<Arc<crate::task::TaskRuntime>>,
+        config: Arc<Config>,
+    ) -> Self {
         Self {
             engine,
             audit: None,
             collector: None,
+            task_runtime,
+            config,
         }
     }
 
@@ -96,6 +105,18 @@ impl Tool for SopApproveTool {
             }
         }
 
+        if let (Some(ref rt), Some(ref run)) = (&self.task_runtime, &run_snapshot) {
+            if let Err(e) = rt.on_sop_step(
+                self.config.as_ref(),
+                None,
+                run_id,
+                run.current_step,
+                "checkpoint approved",
+            ) {
+                warn!("task runtime SOP approve step record failed: {e}");
+            }
+        }
+
         match result {
             Ok(action) => {
                 let output = match action {
@@ -124,7 +145,7 @@ impl Tool for SopApproveTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SopConfig;
+    use crate::config::{Config, SopConfig};
     use crate::memory::Memory;
     use crate::sop::engine::SopEngine;
     use crate::sop::types::*;
@@ -176,7 +197,7 @@ mod tests {
     #[tokio::test]
     async fn approve_waiting_run() {
         let (engine, run_id) = engine_with_run();
-        let tool = SopApproveTool::new(engine);
+        let tool = SopApproveTool::new(engine, None, Arc::new(Config::default()));
         let result = tool.execute(json!({"run_id": run_id})).await.unwrap();
         assert!(result.success);
         assert!(result.output.contains("Approved"));
@@ -186,7 +207,7 @@ mod tests {
     #[tokio::test]
     async fn approve_nonexistent_run() {
         let engine = Arc::new(Mutex::new(SopEngine::new(SopConfig::default())));
-        let tool = SopApproveTool::new(engine);
+        let tool = SopApproveTool::new(engine, None, Arc::new(Config::default()));
         let result = tool
             .execute(json!({"run_id": "nonexistent"}))
             .await
@@ -198,7 +219,7 @@ mod tests {
     #[tokio::test]
     async fn approve_missing_run_id() {
         let engine = Arc::new(Mutex::new(SopEngine::new(SopConfig::default())));
-        let tool = SopApproveTool::new(engine);
+        let tool = SopApproveTool::new(engine, None, Arc::new(Config::default()));
         let result = tool.execute(json!({})).await;
         assert!(result.is_err());
     }
@@ -206,7 +227,7 @@ mod tests {
     #[test]
     fn name_and_schema() {
         let engine = Arc::new(Mutex::new(SopEngine::new(SopConfig::default())));
-        let tool = SopApproveTool::new(engine);
+        let tool = SopApproveTool::new(engine, None, Arc::new(Config::default()));
         assert_eq!(tool.name(), "sop_approve");
         assert!(tool.parameters_schema()["required"].is_array());
     }
@@ -223,7 +244,8 @@ mod tests {
             Arc::from(crate::memory::create_memory(&mem_cfg, tmp.path(), None).unwrap());
         let audit = Arc::new(SopAuditLogger::new(memory.clone()));
 
-        let tool = SopApproveTool::new(engine).with_audit(audit.clone());
+        let tool = SopApproveTool::new(engine, None, Arc::new(Config::default()))
+            .with_audit(audit.clone());
         let result = tool.execute(json!({"run_id": &run_id})).await.unwrap();
         assert!(result.success);
 
@@ -257,7 +279,8 @@ mod tests {
             Arc::from(crate::memory::create_memory(&mem_cfg, tmp.path(), None).unwrap());
         let audit = Arc::new(SopAuditLogger::new(memory.clone()));
 
-        let tool = SopApproveTool::new(engine).with_audit(audit.clone());
+        let tool = SopApproveTool::new(engine, None, Arc::new(Config::default()))
+            .with_audit(audit.clone());
         let result = tool
             .execute(json!({"run_id": "nonexistent"}))
             .await

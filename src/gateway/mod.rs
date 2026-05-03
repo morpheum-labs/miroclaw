@@ -458,6 +458,8 @@ pub struct AppState {
     pub clawgotcha_webhook_tx: Option<tokio::sync::mpsc::Sender<ChangeEvent>>,
     /// Hex-encoded secret bytes for `X-Clawgotcha-Signature` (HMAC-SHA256 over raw body).
     pub clawgotcha_webhook_secret: Option<Arc<str>>,
+    /// Shared task runtime when started from the daemon (cron bridge + `/api/tasks`).
+    pub task_runtime: Option<Arc<crate::task::TaskRuntime>>,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -471,6 +473,7 @@ pub async fn run_gateway(
     delegate_agents_share: Option<
         Arc<parking_lot::RwLock<std::collections::HashMap<String, DelegateAgentConfig>>>,
     >,
+    task_runtime: Option<Arc<crate::task::TaskRuntime>>,
 ) -> Result<()> {
     // ── Security: refuse public bind without tunnel or explicit opt-in ──
     if is_public_bind(host) && config.tunnel.provider == "none" && !config.gateway.allow_public_bind
@@ -565,6 +568,7 @@ pub async fn run_gateway(
         &config,
         Some(canvas_store.clone()),
         delegate_agents_share,
+        task_runtime.clone(),
     );
 
     // ── Wire MCP tools into the gateway tool registry (non-fatal) ───
@@ -932,6 +936,7 @@ pub async fn run_gateway(
         gateway_mcp,
         clawgotcha_webhook_tx,
         clawgotcha_webhook_secret,
+        task_runtime,
     };
 
     // Config PUT needs larger body limit (1MB)
@@ -980,6 +985,10 @@ pub async fn run_gateway(
             delete(api::handle_api_cron_delete).patch(api::handle_api_cron_patch),
         )
         .route("/api/cron/{id}/runs", get(api::handle_api_cron_runs))
+        .route("/api/tasks", get(api::handle_api_tasks_list))
+        .route("/api/tasks/stream", get(api::handle_api_tasks_sse))
+        .route("/api/tasks/{id}", get(api::handle_api_tasks_get))
+        .route("/api/tasks/{id}/kill", post(api::handle_api_tasks_kill))
         .route("/api/integrations", get(api::handle_api_integrations))
         .route(
             "/api/integrations/settings",
@@ -2242,6 +2251,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2306,6 +2316,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2700,6 +2711,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -2778,6 +2790,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let headers = HeaderMap::new();
@@ -2868,6 +2881,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let response = handle_webhook(
@@ -2930,6 +2944,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -2997,6 +3012,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let mut headers = HeaderMap::new();
@@ -3069,6 +3085,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let response = Box::pin(handle_nextcloud_talk_webhook(
@@ -3137,6 +3154,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         };
 
         let mut headers = HeaderMap::new();

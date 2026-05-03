@@ -386,6 +386,7 @@ pub fn all_tools(
         root_config,
         canvas_store,
         None,
+        None,
     )
 }
 
@@ -411,6 +412,7 @@ pub fn all_tools_with_runtime(
     root_config: &crate::config::Config,
     canvas_store: Option<CanvasStore>,
     delegate_agents_share: Option<Arc<RwLock<HashMap<String, DelegateAgentConfig>>>>,
+    task_runtime: Option<Arc<crate::task::TaskRuntime>>,
 ) -> (
     Vec<Box<dyn Tool>>,
     Option<DelegateParentToolsHandle>,
@@ -793,9 +795,21 @@ pub fn all_tools_with_runtime(
             root_config.sop.clone(),
         )));
         tool_arcs.push(Arc::new(SopListTool::new(Arc::clone(&sop_engine))));
-        tool_arcs.push(Arc::new(SopExecuteTool::new(Arc::clone(&sop_engine))));
-        tool_arcs.push(Arc::new(SopAdvanceTool::new(Arc::clone(&sop_engine))));
-        tool_arcs.push(Arc::new(SopApproveTool::new(Arc::clone(&sop_engine))));
+        tool_arcs.push(Arc::new(SopExecuteTool::new(
+            Arc::clone(&sop_engine),
+            task_runtime.clone(),
+            Arc::clone(&config),
+        )));
+        tool_arcs.push(Arc::new(SopAdvanceTool::new(
+            Arc::clone(&sop_engine),
+            task_runtime.clone(),
+            Arc::clone(&config),
+        )));
+        tool_arcs.push(Arc::new(SopApproveTool::new(
+            Arc::clone(&sop_engine),
+            task_runtime.clone(),
+            Arc::clone(&config),
+        )));
         tool_arcs.push(Arc::new(SopStatusTool::new(Arc::clone(&sop_engine))));
     }
 
