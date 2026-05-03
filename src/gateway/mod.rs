@@ -452,6 +452,8 @@ pub struct AppState {
     >,
     /// Embedded or external `web/dist/` static dashboard.
     pub web_ui: web_ui::WebUiServeState,
+    /// Single MCP connection pool for this gateway process (WebSocket agents reuse it).
+    pub gateway_mcp: Option<Arc<tools::GatewayMcpBundle>>,
     /// Optional fan-in for Clawgotcha webhook pushes (same queue as polling).
     pub clawgotcha_webhook_tx: Option<tokio::sync::mpsc::Sender<ChangeEvent>>,
     /// Hex-encoded secret bytes for `X-Clawgotcha-Signature` (HMAC-SHA256 over raw body).
@@ -567,59 +569,22 @@ pub async fn run_gateway(
 
     // ── Wire MCP tools into the gateway tool registry (non-fatal) ───
     // Without this, the `/api/tools` endpoint misses MCP tools.
-    if config.mcp.enabled && !config.mcp.servers.is_empty() {
-        tracing::info!(
-            "Gateway: initializing MCP client — {} server(s) configured",
-            config.mcp.servers.len()
-        );
-        match tools::McpRegistry::connect_all(&config.mcp.servers).await {
-            Ok(registry) => {
-                let registry = std::sync::Arc::new(registry);
-                if config.mcp.deferred_loading {
-                    let deferred_set =
-                        tools::DeferredMcpToolSet::from_registry(std::sync::Arc::clone(&registry))
-                            .await;
-                    tracing::info!(
-                        "Gateway MCP deferred: {} tool stub(s) from {} server(s)",
-                        deferred_set.len(),
-                        registry.server_count()
-                    );
-                    let activated =
-                        std::sync::Arc::new(std::sync::Mutex::new(tools::ActivatedToolSet::new()));
-                    tools_registry_raw.push(Box::new(tools::ToolSearchTool::new(
-                        deferred_set,
-                        activated,
-                    )));
-                } else {
-                    let names = registry.tool_names();
-                    let mut registered = 0usize;
-                    for name in names {
-                        if let Some(def) = registry.get_tool_def(&name).await {
-                            let wrapper: std::sync::Arc<dyn tools::Tool> =
-                                std::sync::Arc::new(tools::McpToolWrapper::new(
-                                    name,
-                                    def,
-                                    std::sync::Arc::clone(&registry),
-                                ));
-                            if let Some(ref handle) = delegate_handle_gw {
-                                handle.write().push(std::sync::Arc::clone(&wrapper));
-                            }
-                            tools_registry_raw.push(Box::new(tools::ArcToolRef(wrapper)));
-                            registered += 1;
-                        }
-                    }
-                    tracing::info!(
-                        "Gateway MCP: {} tool(s) registered from {} server(s)",
-                        registered,
-                        registry.server_count()
-                    );
-                }
-            }
-            Err(e) => {
-                tracing::error!("Gateway MCP registry failed to initialize: {e:#}");
-            }
-        }
-    }
+    // One shared [`GatewayMcpBundle`] for WS agents to reuse (no duplicate connections).
+    let skill_mcp_hints: Vec<String> =
+        crate::skills::load_skills_with_config(&config.workspace_dir, &config)
+            .into_iter()
+            .flat_map(|s| s.mcp_servers)
+            .collect();
+    let gateway_mcp =
+        tools::GatewayMcpBundle::connect_if_enabled(&config.mcp, &skill_mcp_hints).await;
+    let _mcp_attach_outcome = tools::attach_mcp_tools(
+        &mut tools_registry_raw,
+        delegate_handle_gw.as_ref(),
+        &config.mcp,
+        &skill_mcp_hints,
+        gateway_mcp.as_ref(),
+    )
+    .await;
 
     let tools_registry: Arc<Vec<ToolSpec>> =
         Arc::new(tools_registry_raw.iter().map(|t| t.spec()).collect());
@@ -964,6 +929,7 @@ pub async fn run_gateway(
         canvas_store,
         gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
         web_ui,
+        gateway_mcp,
         clawgotcha_webhook_tx,
         clawgotcha_webhook_secret,
     };
@@ -2273,6 +2239,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };
@@ -2336,6 +2303,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };
@@ -2729,6 +2697,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };
@@ -2806,6 +2775,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };
@@ -2895,6 +2865,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };
@@ -2956,6 +2927,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };
@@ -3022,6 +2994,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };
@@ -3093,6 +3066,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };
@@ -3160,6 +3134,7 @@ mod tests {
             canvas_store: CanvasStore::new(),
             gateway_chat_routes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             web_ui: web_ui::WebUiServeState::for_tests(&Config::default()),
+            gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
         };

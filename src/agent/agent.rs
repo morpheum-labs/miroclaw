@@ -477,12 +477,15 @@ impl Agent {
     }
 
     pub async fn from_config(config: &Config) -> Result<Self> {
-        Self::from_config_with_hooks(config, None).await
+        Self::from_config_with_hooks(config, None, None).await
     }
 
+    /// Build an agent from config. When `gateway_mcp` is set (HTTP gateway), MCP
+    /// tools reuse that shared registry instead of opening a second connection set.
     pub async fn from_config_with_hooks(
         config: &Config,
         hooks: Option<Arc<HookRunner>>,
+        gateway_mcp: Option<Arc<tools::GatewayMcpBundle>>,
     ) -> Result<Self> {
         let observer: Arc<dyn Observer> =
             Arc::from(observability::create_observer(&config.observability));
@@ -537,65 +540,22 @@ impl Agent {
             None,
         );
 
+        let workspace_skills =
+            crate::skills::load_skills_with_config(&config.workspace_dir, config);
+        let mcp_skill_hints: Vec<String> = workspace_skills
+            .iter()
+            .flat_map(|s| s.mcp_servers.iter().cloned())
+            .collect();
+
         // ── Wire MCP tools (non-fatal) ─────────────────────────────
-        // Replicates the same MCP initialization logic used in the CLI
-        // and webhook paths (loop_.rs) so that the WebSocket/daemon UI
-        // path also has access to MCP tools.
-        if config.mcp.enabled && !config.mcp.servers.is_empty() {
-            tracing::info!(
-                "Initializing MCP client — {} server(s) configured",
-                config.mcp.servers.len()
-            );
-            match tools::McpRegistry::connect_all(&config.mcp.servers).await {
-                Ok(registry) => {
-                    let registry = std::sync::Arc::new(registry);
-                    if config.mcp.deferred_loading {
-                        let deferred_set = tools::DeferredMcpToolSet::from_registry(
-                            std::sync::Arc::clone(&registry),
-                        )
-                        .await;
-                        tracing::info!(
-                            "MCP deferred: {} tool stub(s) from {} server(s)",
-                            deferred_set.len(),
-                            registry.server_count()
-                        );
-                        let activated = std::sync::Arc::new(std::sync::Mutex::new(
-                            tools::ActivatedToolSet::new(),
-                        ));
-                        tools.push(Box::new(tools::ToolSearchTool::new(
-                            deferred_set,
-                            activated,
-                        )));
-                    } else {
-                        let names = registry.tool_names();
-                        let mut registered = 0usize;
-                        for name in names {
-                            if let Some(def) = registry.get_tool_def(&name).await {
-                                let wrapper: std::sync::Arc<dyn tools::Tool> =
-                                    std::sync::Arc::new(tools::McpToolWrapper::new(
-                                        name,
-                                        def,
-                                        std::sync::Arc::clone(&registry),
-                                    ));
-                                if let Some(ref handle) = delegate_handle {
-                                    handle.write().push(std::sync::Arc::clone(&wrapper));
-                                }
-                                tools.push(Box::new(tools::ArcToolRef(wrapper)));
-                                registered += 1;
-                            }
-                        }
-                        tracing::info!(
-                            "MCP: {} tool(s) registered from {} server(s)",
-                            registered,
-                            registry.server_count()
-                        );
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("MCP registry failed to initialize: {e:#}");
-                }
-            }
-        }
+        tools::attach_mcp_tools(
+            &mut tools,
+            delegate_handle.as_ref(),
+            &config.mcp,
+            &mcp_skill_hints,
+            gateway_mcp.as_ref(),
+        )
+        .await;
 
         let provider_name = config.default_provider.as_deref().unwrap_or("openrouter");
 
@@ -666,10 +626,7 @@ impl Agent {
             .available_hints(available_hints)
             .route_model_by_hint(route_model_by_hint)
             .identity_config(config.identity.clone())
-            .skills(crate::skills::load_skills_with_config(
-                &config.workspace_dir,
-                config,
-            ))
+            .skills(workspace_skills)
             .skills_prompt_mode(config.skills.prompt_injection_mode)
             .auto_save(config.memory.auto_save)
             .security_summary(Some(security.prompt_summary()))

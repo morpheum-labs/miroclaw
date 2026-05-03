@@ -15657,7 +15657,10 @@ require_otp_to_resume = true
     #[test]
     async fn mcp_config_default_enables_client_with_empty_servers() {
         let cfg = McpConfig::default();
-        assert!(cfg.enabled, "remote MCP client defaults to on; add [[mcp.servers]] to connect");
+        assert!(
+            cfg.enabled,
+            "remote MCP client defaults to on; add [[mcp.servers]] to connect"
+        );
         assert!(cfg.servers.is_empty());
     }
 

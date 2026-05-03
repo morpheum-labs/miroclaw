@@ -321,28 +321,33 @@ async fn handle_socket(
 
     // Build a persistent Agent for this connection so history is maintained across turns.
     let config = state.config.lock().clone();
-    let mut agent =
-        match crate::agent::Agent::from_config_with_hooks(&config, state.hooks.clone()).await {
-            Ok(a) => a,
-            Err(e) => {
-                tracing::error!(error = %e, "Agent initialization failed");
-                let err = serde_json::json!({
-                    "type": "error",
-                    "message": format!("Failed to initialise agent: {e}"),
-                    "code": "AGENT_INIT_FAILED"
-                });
-                let _ = sender.send(Message::Text(err.to_string().into())).await;
-                let _ = sender
-                    .send(Message::Close(Some(axum::extract::ws::CloseFrame {
-                        code: 1011,
-                        reason: axum::extract::ws::Utf8Bytes::from_static(
-                            "Agent initialization failed",
-                        ),
-                    })))
-                    .await;
-                return;
-            }
-        };
+    let mut agent = match crate::agent::Agent::from_config_with_hooks(
+        &config,
+        state.hooks.clone(),
+        state.gateway_mcp.clone(),
+    )
+    .await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::error!(error = %e, "Agent initialization failed");
+            let err = serde_json::json!({
+                "type": "error",
+                "message": format!("Failed to initialise agent: {e}"),
+                "code": "AGENT_INIT_FAILED"
+            });
+            let _ = sender.send(Message::Text(err.to_string().into())).await;
+            let _ = sender
+                .send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 1011,
+                    reason: axum::extract::ws::Utf8Bytes::from_static(
+                        "Agent initialization failed",
+                    ),
+                })))
+                .await;
+            return;
+        }
+    };
 
     // Hydrate agent from persisted session (if available)
     let mut session_key = crate::agent::session_record::gateway_backend_key(&session_id);

@@ -17,34 +17,21 @@ use crate::tools::traits::{Tool, ToolSpec};
 // ── DeferredMcpToolStub ──────────────────────────────────────────────────
 
 /// A lightweight stub representing a known-but-not-yet-loaded MCP tool.
-/// Contains only the prefixed name, a human-readable description, and enough
-/// information to construct the full [`McpToolWrapper`] on activation.
+/// Full parameter schemas live only in [`McpRegistry`] until activation.
 #[derive(Debug, Clone)]
 pub struct DeferredMcpToolStub {
     /// Prefixed name: `<server_name>__<tool_name>`.
     pub prefixed_name: String,
-    /// Human-readable description (extracted from the MCP tool definition).
+    /// Human-readable description (extracted once from the MCP `tools/list` payload).
     pub description: String,
-    /// The full tool definition — stored so we can construct a wrapper later.
-    def: McpToolDef,
 }
 
 impl DeferredMcpToolStub {
-    pub fn new(prefixed_name: String, def: McpToolDef) -> Self {
-        let description = def
-            .description
-            .clone()
-            .unwrap_or_else(|| "MCP tool".to_string());
+    pub fn new(prefixed_name: String, description: String) -> Self {
         Self {
             prefixed_name,
             description,
-            def,
         }
-    }
-
-    /// Materialize this stub into a live [`McpToolWrapper`].
-    pub fn activate(&self, registry: Arc<McpRegistry>) -> McpToolWrapper {
-        McpToolWrapper::new(self.prefixed_name.clone(), self.def.clone(), registry)
     }
 }
 
@@ -58,19 +45,34 @@ pub struct DeferredMcpToolSet {
     pub stubs: Vec<DeferredMcpToolStub>,
     /// Shared registry — exposed for test construction.
     pub registry: Arc<McpRegistry>,
+    /// MCP server names from workspace skills — boosts [`Self::search`] ranking.
+    pub mcp_server_hints: Vec<String>,
 }
 
 impl DeferredMcpToolSet {
-    /// Build the set from a connected [`McpRegistry`].
+    /// Build the set from a connected [`McpRegistry`] (no skill-based ranking hints).
     pub async fn from_registry(registry: Arc<McpRegistry>) -> Self {
+        Self::from_registry_with_hints(registry, &[]).await
+    }
+
+    /// Build stubs and attach optional skill-declared MCP server hints for `tool_search` ranking.
+    pub async fn from_registry_with_hints(registry: Arc<McpRegistry>, hints: &[String]) -> Self {
         let names = registry.tool_names();
         let mut stubs = Vec::with_capacity(names.len());
         for name in names {
             if let Some(def) = registry.get_tool_def(&name).await {
-                stubs.push(DeferredMcpToolStub::new(name, def));
+                let description = def
+                    .description
+                    .clone()
+                    .unwrap_or_else(|| "MCP tool".to_string());
+                stubs.push(DeferredMcpToolStub::new(name, description));
             }
         }
-        Self { stubs, registry }
+        Self {
+            stubs,
+            registry,
+            mcp_server_hints: hints.to_vec(),
+        }
     }
 
     /// All stub names (for rendering in the system prompt).
@@ -122,7 +124,18 @@ impl DeferredMcpToolSet {
                     .filter(|t| haystack.contains(t.as_str()))
                     .count();
                 if hits > 0 {
-                    Some((stub, hits))
+                    let hint_boost = stub
+                        .prefixed_name
+                        .split_once("__")
+                        .map(|(srv, _)| {
+                            if self.mcp_server_hints.iter().any(|hint| hint == srv) {
+                                1_000usize
+                            } else {
+                                0usize
+                            }
+                        })
+                        .unwrap_or(0);
+                    Some((stub, hits.saturating_add(hint_boost)))
                 } else {
                     None
                 }
@@ -138,19 +151,44 @@ impl DeferredMcpToolSet {
     }
 
     /// Activate a stub by name, returning a boxed [`Tool`].
-    pub fn activate(&self, name: &str) -> Option<Box<dyn Tool>> {
-        self.get_by_name(name).map(|stub| {
-            let wrapper = stub.activate(Arc::clone(&self.registry));
-            Box::new(wrapper) as Box<dyn Tool>
-        })
+    pub async fn activate_deferred_tool(&self, name: &str) -> Option<Box<dyn Tool>> {
+        let stub = self.get_by_name(name)?;
+        let def = if let Some(d) = self.registry.get_tool_def(name).await {
+            d
+        } else {
+            // Unit tests may use stubs without a live MCP server; synthesize a minimal def.
+            let orig = name
+                .split_once("__")
+                .map(|(_, n)| n.to_string())
+                .unwrap_or_else(|| name.to_string());
+            McpToolDef {
+                name: orig,
+                description: Some(stub.description.clone()),
+                input_schema: serde_json::json!({"type": "object", "properties": {}}),
+            }
+        };
+        let wrapper = McpToolWrapper::new(name.to_string(), def, Arc::clone(&self.registry));
+        Some(Box::new(wrapper) as Box<dyn Tool>)
     }
 
     /// Return the full [`ToolSpec`] for a stub (for inclusion in `tool_search` results).
-    pub fn tool_spec(&self, name: &str) -> Option<ToolSpec> {
-        self.get_by_name(name).map(|stub| {
-            let wrapper = stub.activate(Arc::clone(&self.registry));
-            wrapper.spec()
-        })
+    pub async fn deferred_tool_spec(&self, name: &str) -> Option<ToolSpec> {
+        let stub = self.get_by_name(name)?;
+        let def = if let Some(d) = self.registry.get_tool_def(name).await {
+            d
+        } else {
+            let orig = name
+                .split_once("__")
+                .map(|(_, n)| n.to_string())
+                .unwrap_or_else(|| name.to_string());
+            McpToolDef {
+                name: orig,
+                description: Some(stub.description.clone()),
+                input_schema: serde_json::json!({"type": "object", "properties": {}}),
+            }
+        };
+        let wrapper = McpToolWrapper::new(name.to_string(), def, Arc::clone(&self.registry));
+        Some(wrapper.spec())
     }
 }
 
@@ -264,29 +302,13 @@ mod tests {
     use super::*;
 
     fn make_stub(name: &str, desc: &str) -> DeferredMcpToolStub {
-        let def = McpToolDef {
-            name: name.to_string(),
-            description: Some(desc.to_string()),
-            input_schema: serde_json::json!({"type": "object", "properties": {}}),
-        };
-        DeferredMcpToolStub::new(name.to_string(), def)
+        DeferredMcpToolStub::new(name.to_string(), desc.to_string())
     }
 
     #[test]
-    fn stub_uses_description_from_def() {
+    fn stub_stores_description() {
         let stub = make_stub("fs__read", "Read a file");
         assert_eq!(stub.description, "Read a file");
-    }
-
-    #[test]
-    fn stub_defaults_description_when_none() {
-        let def = McpToolDef {
-            name: "mystery".into(),
-            description: None,
-            input_schema: serde_json::json!({}),
-        };
-        let stub = DeferredMcpToolStub::new("srv__mystery".into(), def);
-        assert_eq!(stub.description, "MCP tool");
     }
 
     #[test]
@@ -402,6 +424,7 @@ mod tests {
                     .block_on(McpRegistry::connect_all(&[]))
                     .unwrap(),
             ),
+            mcp_server_hints: vec![],
         };
         assert!(build_deferred_tools_section(&set).is_empty());
     }
@@ -420,6 +443,7 @@ mod tests {
                     .block_on(McpRegistry::connect_all(&[]))
                     .unwrap(),
             ),
+            mcp_server_hints: vec![],
         };
         let section = build_deferred_tools_section(&set);
         assert!(section.contains("<available-deferred-tools>"));
@@ -439,6 +463,7 @@ mod tests {
                     .block_on(McpRegistry::connect_all(&[]))
                     .unwrap(),
             ),
+            mcp_server_hints: vec![],
         };
         let section = build_deferred_tools_section(&set);
         assert!(
@@ -466,6 +491,7 @@ mod tests {
                     .block_on(McpRegistry::connect_all(&[]))
                     .unwrap(),
             ),
+            mcp_server_hints: vec![],
         };
         let section = build_deferred_tools_section(&set);
         assert!(section.contains("server_a__list"));
@@ -492,6 +518,7 @@ mod tests {
                     .block_on(McpRegistry::connect_all(&[]))
                     .unwrap(),
             ),
+            mcp_server_hints: vec![],
         };
 
         // "file read" should rank fs__read_file highest (2 hits vs 1)
@@ -514,6 +541,7 @@ mod tests {
                     .block_on(McpRegistry::connect_all(&[]))
                     .unwrap(),
             ),
+            mcp_server_hints: vec![],
         };
         assert!(set.get_by_name("a__one").is_some());
         assert!(set.get_by_name("nonexistent").is_none());
@@ -533,6 +561,7 @@ mod tests {
                     .block_on(McpRegistry::connect_all(&[]))
                     .unwrap(),
             ),
+            mcp_server_hints: vec![],
         };
 
         // "read" should match stubs from both servers
@@ -548,5 +577,26 @@ mod tests {
         let results = set.search("config database", 10);
         assert!(!results.is_empty());
         assert_eq!(results[0].prefixed_name, "server_b__read_config");
+    }
+
+    #[test]
+    fn search_prioritizes_skill_mcp_server_hints() {
+        let stubs = vec![
+            make_stub("other__tool", "Generic helper"),
+            make_stub("hinted__tool", "Hinted server capability"),
+        ];
+        let set = DeferredMcpToolSet {
+            stubs,
+            registry: std::sync::Arc::new(
+                tokio::runtime::Runtime::new()
+                    .unwrap()
+                    .block_on(McpRegistry::connect_all(&[]))
+                    .unwrap(),
+            ),
+            mcp_server_hints: vec!["hinted".to_string()],
+        };
+        // Both match "tool"; hinted server should rank first due to boost.
+        let results = set.search("tool", 5);
+        assert_eq!(results[0].prefixed_name, "hinted__tool");
     }
 }

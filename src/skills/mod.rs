@@ -42,6 +42,9 @@ pub struct Skill {
     pub user_invocable: bool,
     #[serde(default)]
     pub tools: Vec<SkillTool>,
+    /// MCP server `name` values from `[[mcp.servers]]` that this skill prefers for `tool_search` ranking.
+    #[serde(default, alias = "mcp-servers")]
+    pub mcp_servers: Vec<String>,
     #[serde(default)]
     pub prompts: Vec<String>,
     #[serde(skip)]
@@ -67,6 +70,8 @@ struct SkillManifest {
     skill: SkillMeta,
     #[serde(default)]
     tools: Vec<SkillTool>,
+    #[serde(default, alias = "mcp-servers")]
+    mcp_servers: Vec<String>,
     #[serde(default)]
     prompts: Vec<String>,
 }
@@ -551,6 +556,7 @@ fn load_skill_toml(path: &Path) -> Result<Skill> {
         tags: manifest.skill.tags,
         user_invocable: manifest.skill.user_invocable,
         tools: manifest.tools,
+        mcp_servers: manifest.mcp_servers,
         prompts: manifest.prompts,
         location: Some(path.to_path_buf()),
     })
@@ -578,6 +584,7 @@ fn load_skill_md(path: &Path, dir: &Path) -> Result<Skill> {
         tags: parsed.meta.tags,
         user_invocable: parsed.meta.user_invocable,
         tools: Vec::new(),
+        mcp_servers: Vec::new(),
         prompts: vec![parsed.body],
         location: Some(path.to_path_buf()),
     })
@@ -618,6 +625,7 @@ fn load_open_skill_md(path: &Path) -> Result<Skill> {
         tags: parsed.meta.tags,
         user_invocable: parsed.meta.user_invocable,
         tools: Vec::new(),
+        mcp_servers: Vec::new(),
         prompts: vec![parsed.body],
         location: Some(path.to_path_buf()),
     }))
@@ -1714,6 +1722,7 @@ user_invocable = true
             tags: vec![],
             user_invocable: false,
             tools: vec![],
+            mcp_servers: vec![],
             prompts: vec!["Do the thing.".to_string()],
             location: None,
         }];
@@ -1739,6 +1748,7 @@ user_invocable = true
                 command: "echo hi".to_string(),
                 args: HashMap::new(),
             }],
+            mcp_servers: vec![],
             prompts: vec!["Do the thing.".to_string()],
             location: Some(PathBuf::from("/tmp/workspace/skills/test/SKILL.md")),
         }];
@@ -1944,6 +1954,7 @@ description = "Bare minimum"
                 command: "curl wttr.in".to_string(),
                 args: HashMap::new(),
             }],
+            mcp_servers: vec![],
             prompts: vec![],
             location: None,
         }];
@@ -1966,6 +1977,7 @@ description = "Bare minimum"
             tags: vec![],
             user_invocable: false,
             tools: vec![],
+            mcp_servers: vec![],
             prompts: vec!["Use <tool> & check \"quotes\".".to_string()],
             location: None,
         }];

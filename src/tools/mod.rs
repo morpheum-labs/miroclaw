@@ -62,6 +62,7 @@ pub mod linkedin_client;
 pub mod llm_task;
 pub mod mcp_client;
 pub mod mcp_deferred;
+pub mod mcp_gateway_share;
 pub mod mcp_protocol;
 pub mod mcp_serve;
 pub mod mcp_tool;
@@ -155,9 +156,17 @@ pub use jira_tool::JiraTool;
 pub use knowledge_tool::KnowledgeTool;
 pub use linkedin::LinkedInTool;
 pub use llm_task::LlmTaskTool;
+#[allow(unused_imports)]
 pub use mcp_client::McpRegistry;
-pub use mcp_deferred::{ActivatedToolSet, DeferredMcpToolSet};
+pub use mcp_deferred::ActivatedToolSet;
+// Re-exported for embedders; in-crate callers use `mcp_deferred::DeferredMcpToolSet`.
+#[allow(unused_imports)]
+pub use mcp_deferred::DeferredMcpToolSet;
+#[allow(unused_imports)]
+pub use mcp_gateway_share::McpAttachOutcome;
+pub use mcp_gateway_share::{attach_mcp_tools, GatewayMcpBundle};
 pub use mcp_serve::{run_mcp_http_server, run_mcp_stdio_server};
+#[allow(unused_imports)]
 pub use mcp_tool::McpToolWrapper;
 pub use memory_forget::MemoryForgetTool;
 pub use memory_purge::MemoryPurgeTool;
@@ -195,6 +204,7 @@ pub use sop_list::SopListTool;
 pub use sop_status::SopStatusTool;
 pub use swarm::SwarmTool;
 pub use text_browser::TextBrowserTool;
+#[allow(unused_imports)]
 pub use tool_search::ToolSearchTool;
 pub use traits::Tool;
 #[allow(unused_imports)]

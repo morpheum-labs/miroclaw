@@ -175,10 +175,22 @@ fn glob_match(pattern: &str, name: &str) -> bool {
     }
 }
 
+/// True when `name` is subject to `[agent.tool_filter_groups]` (MCP-style tools).
+pub(crate) fn mcp_tool_name_matches_filter_target(
+    name: &str,
+    mcp_servers: &[crate::config::schema::McpServerConfig],
+) -> bool {
+    if name.starts_with("mcp_") {
+        return true;
+    }
+    name.split_once("__")
+        .is_some_and(|(srv, _)| mcp_servers.iter().any(|cfg| cfg.name == srv))
+}
+
 /// Returns the subset of `tool_specs` that should be sent to the LLM for this turn.
 ///
 /// Rules (mirrors NullClaw `filterToolSpecsForTurn`):
-/// - Built-in tools (names that do not start with `"mcp_"`) always pass through.
+/// - Built-in tools (not MCP-style per [`mcp_tool_name_matches_filter_target`]) always pass through.
 /// - When `groups` is empty, all tools pass through (backward compatible default).
 /// - An MCP tool is included if at least one group matches it:
 ///   - `always` group: included unconditionally if any pattern matches the tool name.
@@ -188,6 +200,7 @@ pub(crate) fn filter_tool_specs_for_turn(
     tool_specs: Vec<crate::tools::ToolSpec>,
     groups: &[crate::config::schema::ToolFilterGroup],
     user_message: &str,
+    mcp_servers: &[crate::config::schema::McpServerConfig],
 ) -> Vec<crate::tools::ToolSpec> {
     use crate::config::schema::ToolFilterGroupMode;
 
@@ -201,7 +214,7 @@ pub(crate) fn filter_tool_specs_for_turn(
         .into_iter()
         .filter(|spec| {
             // Built-in tools always pass through.
-            if !spec.name.starts_with("mcp_") {
+            if !mcp_tool_name_matches_filter_target(&spec.name, mcp_servers) {
                 return true;
             }
             // MCP tool: include if any active group matches.
@@ -248,6 +261,7 @@ pub(crate) fn compute_excluded_mcp_tools(
     tools_registry: &[Box<dyn Tool>],
     groups: &[crate::config::schema::ToolFilterGroup],
     user_message: &str,
+    mcp_servers: &[crate::config::schema::McpServerConfig],
 ) -> Vec<String> {
     if groups.is_empty() {
         return Vec::new();
@@ -256,11 +270,15 @@ pub(crate) fn compute_excluded_mcp_tools(
         tools_registry.iter().map(|t| t.spec()).collect(),
         groups,
         user_message,
+        mcp_servers,
     );
     let included: HashSet<&str> = filtered_specs.iter().map(|s| s.name.as_str()).collect();
     tools_registry
         .iter()
-        .filter(|t| t.name().starts_with("mcp_") && !included.contains(t.name()))
+        .filter(|t| {
+            mcp_tool_name_matches_filter_target(t.name(), mcp_servers)
+                && !included.contains(t.name())
+        })
         .map(|t| t.name().to_string())
         .collect()
 }
@@ -3915,6 +3933,14 @@ pub async fn run(
         );
     }
 
+    // ── Workspace skills (before MCP so skill MCP hints can rank `tool_search`) ──
+    let skills = crate::skills::load_skills_with_config(&config.workspace_dir, &config);
+    tools::register_skill_tools(&mut tools_registry, &skills, security.clone(), shell_engine);
+    let mcp_skill_hints: Vec<String> = skills
+        .iter()
+        .flat_map(|s| s.mcp_servers.iter().cloned())
+        .collect();
+
     // ── Wire MCP tools (non-fatal) — CLI path ────────────────────
     // NOTE: MCP tools are injected after built-in tool filtering
     // (filter_primary_agent_tools_or_fail / agent.allowed_tools / agent.denied_tools).
@@ -3925,70 +3951,16 @@ pub async fn run(
     // When `deferred_loading` is enabled, MCP tools are NOT added to the registry
     // eagerly. Instead, a `tool_search` built-in is registered so the LLM can
     // fetch schemas on demand. This reduces context window waste.
-    let mut deferred_section = String::new();
-    let mut activated_handle: Option<
-        std::sync::Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>,
-    > = None;
-    if config.mcp.enabled && !config.mcp.servers.is_empty() {
-        tracing::info!(
-            "Initializing MCP client — {} server(s) configured",
-            config.mcp.servers.len()
-        );
-        match crate::tools::McpRegistry::connect_all(&config.mcp.servers).await {
-            Ok(registry) => {
-                let registry = std::sync::Arc::new(registry);
-                if config.mcp.deferred_loading {
-                    // Deferred path: build stubs and register tool_search
-                    let deferred_set = crate::tools::DeferredMcpToolSet::from_registry(
-                        std::sync::Arc::clone(&registry),
-                    )
-                    .await;
-                    tracing::info!(
-                        "MCP deferred: {} tool stub(s) from {} server(s)",
-                        deferred_set.len(),
-                        registry.server_count()
-                    );
-                    deferred_section =
-                        crate::tools::mcp_deferred::build_deferred_tools_section(&deferred_set);
-                    let activated = std::sync::Arc::new(std::sync::Mutex::new(
-                        crate::tools::ActivatedToolSet::new(),
-                    ));
-                    activated_handle = Some(std::sync::Arc::clone(&activated));
-                    tools_registry.push(Box::new(crate::tools::ToolSearchTool::new(
-                        deferred_set,
-                        activated,
-                    )));
-                } else {
-                    // Eager path: register all MCP tools directly
-                    let names = registry.tool_names();
-                    let mut registered = 0usize;
-                    for name in names {
-                        if let Some(def) = registry.get_tool_def(&name).await {
-                            let wrapper: std::sync::Arc<dyn Tool> =
-                                std::sync::Arc::new(crate::tools::McpToolWrapper::new(
-                                    name,
-                                    def,
-                                    std::sync::Arc::clone(&registry),
-                                ));
-                            if let Some(ref handle) = delegate_handle {
-                                handle.write().push(std::sync::Arc::clone(&wrapper));
-                            }
-                            tools_registry.push(Box::new(crate::tools::ArcToolRef(wrapper)));
-                            registered += 1;
-                        }
-                    }
-                    tracing::info!(
-                        "MCP: {} tool(s) registered from {} server(s)",
-                        registered,
-                        registry.server_count()
-                    );
-                }
-            }
-            Err(e) => {
-                tracing::error!("MCP registry failed to initialize: {e:#}");
-            }
-        }
-    }
+    let mcp_attach = crate::tools::attach_mcp_tools(
+        &mut tools_registry,
+        delegate_handle.as_ref(),
+        &config.mcp,
+        &mcp_skill_hints,
+        None,
+    )
+    .await;
+    let deferred_section = mcp_attach.deferred_section;
+    let activated_handle = mcp_attach.activated_tools;
 
     // ── Resolve provider ─────────────────────────────────────────
     let mut provider_name = provider_override
@@ -4053,11 +4025,7 @@ pub async fn run(
     let i18n_descs = crate::i18n::ToolDescriptions::load(&i18n_locale, &i18n_search_dirs);
 
     // ── Build system prompt from workspace MD files (OpenClaw framework) ──
-    let skills = crate::skills::load_skills_with_config(&config.workspace_dir, &config);
-
-    // Register skill-defined tools as callable tool specs in the tool registry
-    // so the LLM can invoke them via native function calling, not just XML prompts.
-    tools::register_skill_tools(&mut tools_registry, &skills, security.clone(), shell_engine);
+    // (skills were loaded earlier for MCP `tool_search` ranking + skill tool registration)
 
     let mut tool_descs: Vec<(&str, &str)> = vec![
         (
@@ -4316,6 +4284,7 @@ pub async fn run(
             &tools_registry,
             &config.agent.tool_filter_groups,
             &effective_msg,
+            &config.mcp.servers,
         );
         let deferred_mcp =
             config.mcp.deferred_loading && config.mcp.enabled && !config.mcp.servers.is_empty();
@@ -4671,6 +4640,7 @@ pub async fn run(
                 &tools_registry,
                 &config.agent.tool_filter_groups,
                 &effective_input,
+                &config.mcp.servers,
             );
             let deferred_mcp =
                 config.mcp.deferred_loading && config.mcp.enabled && !config.mcp.servers.is_empty();
@@ -4961,72 +4931,27 @@ pub async fn process_message(
         crate::peripherals::create_peripheral_tools(&config.peripherals).await?;
     tools_registry.extend(peripheral_tools);
 
+    let skills = crate::skills::load_skills_with_config(&config.workspace_dir, &config);
+    tools::register_skill_tools(&mut tools_registry, &skills, security.clone(), shell_engine);
+    let mcp_skill_hints: Vec<String> = skills
+        .iter()
+        .flat_map(|s| s.mcp_servers.iter().cloned())
+        .collect();
+
     // ── Wire MCP tools (non-fatal) — process_message path ────────
     // NOTE: Same ordering contract as the CLI path above — MCP tools must be
     // injected after filter_primary_agent_tools_or_fail (or equivalent built-in
     // tool allow/deny filtering) to avoid MCP tools being silently dropped.
-    let mut deferred_section = String::new();
-    let mut activated_handle_pm: Option<
-        std::sync::Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>,
-    > = None;
-    if config.mcp.enabled && !config.mcp.servers.is_empty() {
-        tracing::info!(
-            "Initializing MCP client — {} server(s) configured",
-            config.mcp.servers.len()
-        );
-        match crate::tools::McpRegistry::connect_all(&config.mcp.servers).await {
-            Ok(registry) => {
-                let registry = std::sync::Arc::new(registry);
-                if config.mcp.deferred_loading {
-                    let deferred_set = crate::tools::DeferredMcpToolSet::from_registry(
-                        std::sync::Arc::clone(&registry),
-                    )
-                    .await;
-                    tracing::info!(
-                        "MCP deferred: {} tool stub(s) from {} server(s)",
-                        deferred_set.len(),
-                        registry.server_count()
-                    );
-                    deferred_section =
-                        crate::tools::mcp_deferred::build_deferred_tools_section(&deferred_set);
-                    let activated = std::sync::Arc::new(std::sync::Mutex::new(
-                        crate::tools::ActivatedToolSet::new(),
-                    ));
-                    activated_handle_pm = Some(std::sync::Arc::clone(&activated));
-                    tools_registry.push(Box::new(crate::tools::ToolSearchTool::new(
-                        deferred_set,
-                        activated,
-                    )));
-                } else {
-                    let names = registry.tool_names();
-                    let mut registered = 0usize;
-                    for name in names {
-                        if let Some(def) = registry.get_tool_def(&name).await {
-                            let wrapper: std::sync::Arc<dyn Tool> =
-                                std::sync::Arc::new(crate::tools::McpToolWrapper::new(
-                                    name,
-                                    def,
-                                    std::sync::Arc::clone(&registry),
-                                ));
-                            if let Some(ref handle) = delegate_handle_pm {
-                                handle.write().push(std::sync::Arc::clone(&wrapper));
-                            }
-                            tools_registry.push(Box::new(crate::tools::ArcToolRef(wrapper)));
-                            registered += 1;
-                        }
-                    }
-                    tracing::info!(
-                        "MCP: {} tool(s) registered from {} server(s)",
-                        registered,
-                        registry.server_count()
-                    );
-                }
-            }
-            Err(e) => {
-                tracing::error!("MCP registry failed to initialize: {e:#}");
-            }
-        }
-    }
+    let mcp_attach_pm = crate::tools::attach_mcp_tools(
+        &mut tools_registry,
+        delegate_handle_pm.as_ref(),
+        &config.mcp,
+        &mcp_skill_hints,
+        None,
+    )
+    .await;
+    let deferred_section = mcp_attach_pm.deferred_section;
+    let activated_handle_pm = mcp_attach_pm.activated_tools;
 
     let provider_name = config.default_provider.as_deref().unwrap_or("openrouter");
     let model_name = config
@@ -5068,11 +4993,6 @@ pub async fn process_message(
         .unwrap_or_else(crate::i18n::detect_locale);
     let i18n_search_dirs = crate::i18n::default_search_dirs(&config.workspace_dir);
     let i18n_descs = crate::i18n::ToolDescriptions::load(&i18n_locale, &i18n_search_dirs);
-
-    let skills = crate::skills::load_skills_with_config(&config.workspace_dir, &config);
-
-    // Register skill-defined tools as callable tool specs (process_message path).
-    tools::register_skill_tools(&mut tools_registry, &skills, security.clone(), shell_engine);
 
     let mut tool_descs: Vec<(&str, &str)> = vec![
         ("shell", "Execute terminal commands."),
@@ -5229,6 +5149,7 @@ pub async fn process_message(
         &tools_registry,
         &config.agent.tool_filter_groups,
         effective_msg_ref,
+        &config.mcp.servers,
     );
     if config.autonomy.level != AutonomyLevel::Full {
         base_excluded.extend(config.autonomy.non_cli_excluded_tools.iter().cloned());
@@ -8823,7 +8744,7 @@ Let me check the result."#;
             make_spec("mcp_browser_navigate"),
             make_spec("mcp_filesystem_read"),
         ];
-        let result = filter_tool_specs_for_turn(specs, &[], "hello");
+        let result = filter_tool_specs_for_turn(specs, &[], "hello", &[]);
         assert_eq!(result.len(), 3);
     }
 
@@ -8842,7 +8763,7 @@ Let me check the result."#;
             keywords: vec![],
             filter_builtins: false,
         }];
-        let result = filter_tool_specs_for_turn(specs, &groups, "anything");
+        let result = filter_tool_specs_for_turn(specs, &groups, "anything", &[]);
         let names: Vec<&str> = result.iter().map(|s| s.name.as_str()).collect();
         // Built-in passes through, matched MCP passes, unmatched MCP excluded.
         assert!(names.contains(&"shell_exec"));
@@ -8861,7 +8782,7 @@ Let me check the result."#;
             keywords: vec!["browse".into(), "website".into()],
             filter_builtins: false,
         }];
-        let result = filter_tool_specs_for_turn(specs, &groups, "please browse this page");
+        let result = filter_tool_specs_for_turn(specs, &groups, "please browse this page", &[]);
         let names: Vec<&str> = result.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"shell_exec"));
         assert!(names.contains(&"mcp_browser_navigate"));
@@ -8878,7 +8799,7 @@ Let me check the result."#;
             keywords: vec!["browse".into(), "website".into()],
             filter_builtins: false,
         }];
-        let result = filter_tool_specs_for_turn(specs, &groups, "read the file /etc/hosts");
+        let result = filter_tool_specs_for_turn(specs, &groups, "read the file /etc/hosts", &[]);
         let names: Vec<&str> = result.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"shell_exec"));
         assert!(!names.contains(&"mcp_browser_navigate"));
@@ -8895,8 +8816,29 @@ Let me check the result."#;
             keywords: vec!["Browse".into()],
             filter_builtins: false,
         }];
-        let result = filter_tool_specs_for_turn(specs, &groups, "BROWSE the site");
+        let result = filter_tool_specs_for_turn(specs, &groups, "BROWSE the site", &[]);
         assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn filter_tool_specs_applies_to_configured_mcp_server_prefix() {
+        use crate::config::schema::{McpServerConfig, ToolFilterGroup, ToolFilterGroupMode};
+
+        let mcp_servers = vec![McpServerConfig {
+            name: "github".into(),
+            ..Default::default()
+        }];
+        let specs = vec![make_spec("shell_exec"), make_spec("github__create_issue")];
+        let groups = vec![ToolFilterGroup {
+            mode: ToolFilterGroupMode::Dynamic,
+            tools: vec!["github__*".into()],
+            keywords: vec!["issue".into()],
+            filter_builtins: false,
+        }];
+        let result = filter_tool_specs_for_turn(specs, &groups, "open an issue", &mcp_servers);
+        let names: Vec<&str> = result.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"shell_exec"));
+        assert!(names.contains(&"github__create_issue"));
     }
 
     // ── Token-based compaction tests ──────────────────────────

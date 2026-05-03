@@ -2643,6 +2643,7 @@ async fn process_channel_message(
         ctx.tools_registry.as_ref(),
         &ctx.prompt_config.agent.tool_filter_groups,
         &msg.content,
+        &ctx.prompt_config.mcp.servers,
     ) {
         if !base_excluded.contains(&name) {
             base_excluded.push(name);
@@ -4356,76 +4357,28 @@ pub async fn start_channels(config: Config) -> Result<()> {
         None,
     );
 
+    // Workspace skills (before MCP so `mcp_servers` hints can rank deferred `tool_search`).
+    let skills = crate::skills::load_skills_with_config(&workspace, &config);
+    let mcp_skill_hints: Vec<String> = skills
+        .iter()
+        .flat_map(|s| s.mcp_servers.iter().cloned())
+        .collect();
+
     // Wire MCP tools into the registry before freezing — non-fatal.
     // When `deferred_loading` is enabled, MCP tools are NOT added eagerly.
     // Instead, a `tool_search` built-in is registered for on-demand loading.
-    let mut deferred_section = String::new();
-    let mut ch_activated_handle: Option<
-        std::sync::Arc<std::sync::Mutex<crate::tools::ActivatedToolSet>>,
-    > = None;
-    if config.mcp.enabled && !config.mcp.servers.is_empty() {
-        tracing::info!(
-            "Initializing MCP client — {} server(s) configured",
-            config.mcp.servers.len()
-        );
-        match crate::tools::McpRegistry::connect_all(&config.mcp.servers).await {
-            Ok(registry) => {
-                let registry = std::sync::Arc::new(registry);
-                if config.mcp.deferred_loading {
-                    let deferred_set = crate::tools::DeferredMcpToolSet::from_registry(
-                        std::sync::Arc::clone(&registry),
-                    )
-                    .await;
-                    tracing::info!(
-                        "MCP deferred: {} tool stub(s) from {} server(s)",
-                        deferred_set.len(),
-                        registry.server_count()
-                    );
-                    deferred_section =
-                        crate::tools::mcp_deferred::build_deferred_tools_section(&deferred_set);
-                    let activated = std::sync::Arc::new(std::sync::Mutex::new(
-                        crate::tools::ActivatedToolSet::new(),
-                    ));
-                    ch_activated_handle = Some(std::sync::Arc::clone(&activated));
-                    built_tools.push(Box::new(crate::tools::ToolSearchTool::new(
-                        deferred_set,
-                        activated,
-                    )));
-                } else {
-                    let names = registry.tool_names();
-                    let mut registered = 0usize;
-                    for name in names {
-                        if let Some(def) = registry.get_tool_def(&name).await {
-                            let wrapper: std::sync::Arc<dyn Tool> =
-                                std::sync::Arc::new(crate::tools::McpToolWrapper::new(
-                                    name,
-                                    def,
-                                    std::sync::Arc::clone(&registry),
-                                ));
-                            if let Some(ref handle) = delegate_handle_ch {
-                                handle.write().push(std::sync::Arc::clone(&wrapper));
-                            }
-                            built_tools.push(Box::new(crate::tools::ArcToolRef(wrapper)));
-                            registered += 1;
-                        }
-                    }
-                    tracing::info!(
-                        "MCP: {} tool(s) registered from {} server(s)",
-                        registered,
-                        registry.server_count()
-                    );
-                }
-            }
-            Err(e) => {
-                // Non-fatal — daemon continues with the tools registered above.
-                tracing::error!("MCP registry failed to initialize: {e:#}");
-            }
-        }
-    }
+    let mcp_out_ch = crate::tools::attach_mcp_tools(
+        &mut built_tools,
+        delegate_handle_ch.as_ref(),
+        &config.mcp,
+        &mcp_skill_hints,
+        None,
+    )
+    .await;
+    let deferred_section = mcp_out_ch.deferred_section;
+    let ch_activated_handle = mcp_out_ch.activated_tools;
 
     let tools_registry = Arc::new(built_tools);
-
-    let skills = crate::skills::load_skills_with_config(&workspace, &config);
 
     // ── Load locale-aware tool descriptions ────────────────────────
     let i18n_locale = config
@@ -7788,6 +7741,7 @@ BTC is currently around $65,000 based on latest tool output."#
                 command: "cargo clippy".into(),
                 args: HashMap::new(),
             }],
+            mcp_servers: vec![],
             prompts: vec!["Always run cargo test before final response.".into()],
             location: None,
         }];
@@ -7824,6 +7778,7 @@ BTC is currently around $65,000 based on latest tool output."#
                 command: "cargo clippy".into(),
                 args: HashMap::new(),
             }],
+            mcp_servers: vec![],
             prompts: vec!["Always run cargo test before final response.".into()],
             location: None,
         }];
@@ -7870,6 +7825,7 @@ BTC is currently around $65,000 based on latest tool output."#
                 command: "cargo clippy".into(),
                 args: HashMap::new(),
             }],
+            mcp_servers: vec![],
             prompts: vec!["Use <tool_call> and & keep output \"safe\"".into()],
             location: None,
         }];
