@@ -968,8 +968,11 @@ pub struct McpServerConfig {
 /// External MCP client configuration (`[mcp]` section).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct McpConfig {
-    /// Enable MCP tool loading.
-    #[serde(default)]
+    /// When true (the default), the agent is an MCP **client**: it connects to configured
+    /// `[[mcp.servers]]` (stdio, HTTP, or SSE) so external capabilities (GitHub, Slack, databases,
+    /// etc.) are reached through remote MCP rather than ad-hoc in-process integrations.
+    /// Set to `false` to disable MCP client loading entirely.
+    #[serde(default = "default_mcp_client_enabled")]
     pub enabled: bool,
     /// Load MCP tool schemas on-demand via `tool_search` instead of eagerly
     /// including them in the LLM context window. When `true` (the default),
@@ -986,10 +989,14 @@ fn default_deferred_loading() -> bool {
     true
 }
 
+fn default_mcp_client_enabled() -> bool {
+    true
+}
+
 impl Default for McpConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: default_mcp_client_enabled(),
             deferred_loading: default_deferred_loading(),
             servers: Vec::new(),
         }
@@ -15454,7 +15461,19 @@ require_otp_to_resume = true
     #[test]
     async fn validate_mcp_config_empty_servers_ok() {
         let cfg = McpConfig::default();
+        assert!(cfg.enabled);
         assert!(validate_mcp_config(&cfg).is_ok());
+    }
+
+    #[test]
+    async fn mcp_config_toml_omitted_enabled_enables_client() {
+        let raw = r#"
+        [mcp]
+        deferred_loading = true
+        servers = []
+        "#;
+        let cfg: McpConfig = toml::from_str(raw).unwrap();
+        assert!(cfg.enabled, "omitted [mcp].enabled should default to true");
     }
 
     #[test]
@@ -15636,9 +15655,9 @@ require_otp_to_resume = true
     }
 
     #[test]
-    async fn mcp_config_default_disabled_with_empty_servers() {
+    async fn mcp_config_default_enables_client_with_empty_servers() {
         let cfg = McpConfig::default();
-        assert!(!cfg.enabled);
+        assert!(cfg.enabled, "remote MCP client defaults to on; add [[mcp.servers]] to connect");
         assert!(cfg.servers.is_empty());
     }
 

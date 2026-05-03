@@ -170,7 +170,7 @@ Summary:
 
 ### MCP tools consumed by the agent (client side)
 
-External MCP servers attach tools with names you typically match via patterns (e.g. `mcp_vikunja_*`). Control which schemas reach the model per turn with **`[[agent.tool_filter_groups]]`** in [`config-reference.md`](../reference/api/config-reference.md).
+**`[mcp].enabled` defaults to `true`:** agents are MCP clients first for external capabilities—configure **`[[mcp.servers]]`** (stdio, HTTP, or SSE) for GitHub, Slack, databases, and other remote tool surfaces. Set **`[mcp].enabled = false`** only if you run without any MCP servers. External MCP servers attach tools with names you typically match via patterns (e.g. `mcp_vikunja_*`). Control which schemas reach the model per turn with **`[[agent.tool_filter_groups]]`** in [`config-reference.md`](../reference/api/config-reference.md).
 
 ---
 

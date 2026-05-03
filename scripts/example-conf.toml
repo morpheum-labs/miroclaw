@@ -677,19 +677,29 @@ default_voice = "alloy"
 default_format = "mp3"
 max_text_length = 4096
 
+# Remote MCP is the default integration path for external tools (GitHub, Slack, DBs, etc.):
+# keep `enabled = true` (default) and list servers under `[[mcp.servers]]`. Use `enabled = false`
+# only if you intentionally run without any MCP client.
 [mcp]
-enabled = false
+enabled = true
 deferred_loading = true
 servers = []
 
+# Example — remote MCP over HTTP (recommended for network-hosted tool servers):
+# [[mcp.servers]]
+# name = "github"
+# transport = "http"
+# url = "https://your-mcp-host.example/mcp"
+# headers = { Authorization = "Bearer <token>" }
+# tool_timeout_secs = 120
+
+# Example — stdio MCP (local process):
 # [[mcp.servers]]
 # name = "mcp-example"
 # transport = "stdio"
 # command = "npx"
 # args = ["-y", "@some/mcp-server"]
-# url = ""
 # env = {}
-# headers = {}
 # tool_timeout_secs = 60
 
 [mcp_serve]

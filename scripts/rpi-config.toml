@@ -625,7 +625,8 @@ db_path = "~/.zeroclaw/agents.db"
 staleness_secs = 300
 
 [mcp]
-enabled = false
+# Same default as global schema (`enabled = true`); no servers until you add `[[mcp.servers]]`.
+enabled = true
 servers = []
 
 [wasm]
