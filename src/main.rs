@@ -81,6 +81,10 @@ mod commands;
 mod rag {
     pub use zeroclaw::rag::*;
 }
+/// Re-export library task runtime for binary-only modules (`daemon`, `gateway`, …).
+mod task {
+    pub use zeroclaw::task::*;
+}
 mod config;
 mod context;
 mod cost;
@@ -1467,7 +1471,11 @@ async fn main() -> Result<()> {
         }
 
         Commands::Task { task_command } => {
-            Box::pin(zeroclaw::task::handle_command(task_command, &config)).await
+            let lib_cfg: zeroclaw::Config =
+                serde_json::from_value(serde_json::to_value(&config)?).context(
+                    "bridge config into library Config for task CLI",
+                )?;
+            Box::pin(zeroclaw::task::handle_command(task_command, &lib_cfg)).await
         }
 
         Commands::Memory { memory_command } => {

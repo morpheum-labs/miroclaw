@@ -206,6 +206,10 @@ pub struct Config {
     #[serde(default)]
     pub cron: CronConfig,
 
+    /// Task runtime: observability, guardrail gate, optional reflection log (`[tasks]`).
+    #[serde(default)]
+    pub tasks: TasksConfig,
+
     /// Clawgotcha control-plane integration (`[clawgotcha]`).
     #[serde(default)]
     pub clawgotcha: ClawgotchaConfig,
@@ -6078,6 +6082,42 @@ pub struct CronConfig {
     pub jobs: Vec<CronJobDecl>,
 }
 
+/// Task runtime configuration (`[tasks]` section).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TasksConfig {
+    /// Enable task runtime (recording, guardrail gate, APIs when wired). Default: `true`.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Record each cron scheduler execution as a task row. Default: `true`.
+    #[serde(default = "default_true")]
+    pub record_cron_runs: bool,
+    /// Reserved: internal housekeeping interval hint (seconds). Default: `1`.
+    #[serde(default = "default_task_poll_secs")]
+    pub poll_interval_secs: u64,
+    /// Optional JSONL path (relative to workspace unless absolute) appended on each terminal task.
+    #[serde(default)]
+    pub reflection_log_path: Option<PathBuf>,
+    /// Extension point for LP Guardian-style deterministic gates (no effect until implemented).
+    #[serde(default)]
+    pub lp_guardian_enabled: bool,
+}
+
+fn default_task_poll_secs() -> u64 {
+    1
+}
+
+impl Default for TasksConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            record_cron_runs: true,
+            poll_interval_secs: 1,
+            reflection_log_path: None,
+            lp_guardian_enabled: false,
+        }
+    }
+}
+
 /// A declarative cron job definition for the `[[cron.jobs]]` config array.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CronJobDecl {
@@ -8433,6 +8473,7 @@ impl Default for Config {
             embedding_routes: Vec::new(),
             heartbeat: HeartbeatConfig::default(),
             cron: CronConfig::default(),
+            tasks: TasksConfig::default(),
             clawgotcha: ClawgotchaConfig::default(),
             channels_config: ChannelsConfig::default(),
             memory: MemoryConfig::default(),
@@ -11882,6 +11923,7 @@ default_temperature = 0.7
                 ..HeartbeatConfig::default()
             },
             cron: CronConfig::default(),
+            tasks: TasksConfig::default(),
             clawgotcha: ClawgotchaConfig::default(),
             channels_config: ChannelsConfig {
                 cli: true,
@@ -12464,6 +12506,7 @@ default_temperature = 0.7
             query_classification: QueryClassificationConfig::default(),
             heartbeat: HeartbeatConfig::default(),
             cron: CronConfig::default(),
+            tasks: TasksConfig::default(),
             clawgotcha: ClawgotchaConfig::default(),
             channels_config: ChannelsConfig::default(),
             memory: MemoryConfig::default(),

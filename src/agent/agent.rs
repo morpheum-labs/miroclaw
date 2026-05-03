@@ -538,6 +538,7 @@ impl Agent {
             config,
             None,
             None,
+            None,
         );
 
         let workspace_skills =

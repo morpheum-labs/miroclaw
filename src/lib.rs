@@ -61,7 +61,6 @@ pub mod i18n;
 pub(crate) mod identity;
 pub(crate) mod integrations;
 pub mod memory;
-pub(crate) mod migration;
 pub(crate) mod multimodal;
 pub mod nodes;
 pub mod observability;
