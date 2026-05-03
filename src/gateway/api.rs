@@ -6,9 +6,15 @@ use super::AppState;
 use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
-    response::{IntoResponse, Json},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Json,
+    },
 };
 use serde::Deserialize;
+use std::convert::Infallible;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 
 const MASKED_SECRET: &str = "***MASKED***";
 
@@ -66,6 +72,16 @@ pub struct MemoryStoreBody {
 #[derive(Deserialize)]
 pub struct CronRunsQuery {
     pub limit: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct TasksListQuery {
+    #[serde(default = "default_tasks_list_limit")]
+    pub limit: u32,
+}
+
+fn default_tasks_list_limit() -> u32 {
+    50
 }
 
 #[derive(Deserialize)]
@@ -1429,6 +1445,144 @@ pub async fn handle_api_session_rename(
     }
 }
 
+/// GET /api/tasks — list recent tasks
+pub async fn handle_api_tasks_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<TasksListQuery>,
+) -> impl IntoResponse {
+    if let Err(e) = require_auth(&state, &headers) {
+        return e.into_response();
+    }
+    let Some(ref rt) = state.task_runtime else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "task runtime is not available in this process"})),
+        )
+            .into_response();
+    };
+    let config = state.config.lock().clone();
+    match rt.list_tasks(&config, q.limit) {
+        Ok(tasks) => Json(serde_json::json!({ "tasks": tasks })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Failed to list tasks: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/tasks/{id} — fetch one task
+pub async fn handle_api_tasks_get(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Err(e) = require_auth(&state, &headers) {
+        return e.into_response();
+    }
+    let Some(ref rt) = state.task_runtime else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "task runtime is not available in this process"})),
+        )
+            .into_response();
+    };
+    let config = state.config.lock().clone();
+    match rt.get_task(&config, &id) {
+        Ok(Some(task)) => Json(serde_json::json!({ "task": task })).into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": format!("task not found: {id}")})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Failed to load task: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /api/tasks/{id}/kill — mark task killed in the store
+pub async fn handle_api_tasks_kill(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Err(e) = require_auth(&state, &headers) {
+        return e.into_response();
+    }
+    let Some(ref rt) = state.task_runtime else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "task runtime is not available in this process"})),
+        )
+            .into_response();
+    };
+    let config = state.config.lock().clone();
+    match rt.kill_task(&config, &id).await {
+        Ok(()) => Json(serde_json::json!({ "ok": true, "id": id })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("Failed to kill task: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/tasks/stream — SSE stream of task lifecycle events
+pub async fn handle_api_tasks_sse(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let token = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|auth| auth.strip_prefix("Bearer "))
+            .unwrap_or("");
+
+        if !state.pairing.is_authenticated(token) {
+            return (
+                StatusCode::UNAUTHORIZED,
+                "Unauthorized — provide Authorization: Bearer <token>",
+            )
+                .into_response();
+        }
+    }
+
+    let Some(rx) = state
+        .task_runtime
+        .as_ref()
+        .and_then(|rt| rt.subscribe_events())
+    else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "task runtime is not available in this process"})),
+        )
+            .into_response();
+    };
+
+    let stream = BroadcastStream::new(rx).filter_map(
+        |result: Result<
+            serde_json::Value,
+            tokio_stream::wrappers::errors::BroadcastStreamRecvError,
+        >| {
+            match result {
+                Ok(value) => Some(Ok::<_, Infallible>(
+                    Event::default().data(value.to_string()),
+                )),
+                Err(_) => None,
+            }
+        },
+    );
+
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
+}
+
 // ── Claude Code hook endpoint ────────────────────────────────────
 
 /// POST /hooks/claude-code — receives HTTP hook events from Claude Code
@@ -1581,6 +1735,7 @@ mod tests {
             gateway_mcp: None,
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
+            task_runtime: None,
         }
     }
 
