@@ -1555,7 +1555,7 @@ pub async fn handle_api_tasks_sse(
     let Some(rx) = state
         .task_runtime
         .as_ref()
-        .and_then(|rt| rt.subscribe_events())
+        .and_then(|rt: &std::sync::Arc<crate::task::TaskRuntime>| rt.subscribe_events())
     else {
         return (
             StatusCode::NOT_FOUND,
