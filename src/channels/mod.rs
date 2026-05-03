@@ -4355,6 +4355,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
         &config,
         None,
         None,
+        None,
     );
 
     // Workspace skills (before MCP so `mcp_servers` hints can rank deferred `tool_search`).

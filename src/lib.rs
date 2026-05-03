@@ -75,6 +75,7 @@ pub(crate) mod service;
 pub mod shell;
 pub(crate) mod skills;
 pub mod sop;
+pub mod task;
 pub mod tools;
 pub use tools::{run_mcp_http_server, run_mcp_stdio_server};
 pub(crate) mod tunnel;
@@ -299,6 +300,23 @@ pub enum MigrateCommands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Ensure task runtime SQLite schema exists (no cron/SOP data rewrite)
+    Tasks,
+}
+
+/// Task runtime CLI (`miroclaw task …`).
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TaskCommands {
+    /// List recent tasks (newest first)
+    List {
+        /// Maximum rows (default 50, max 500)
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    /// Show one task by id
+    Show { id: String },
+    /// Mark a task killed in the task store
+    Kill { id: String },
 }
 
 /// Cron subcommands

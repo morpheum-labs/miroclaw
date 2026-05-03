@@ -126,7 +126,7 @@ use config::Config;
 pub use zeroclaw::{
     ChannelCommands, CronCommands, GatewayCommands, HandsCommands, HardwareCommands,
     IntegrationCommands, MigrateCommands, PeripheralCommands, ServiceCommands, SkillCommands,
-    SopCommands,
+    SopCommands, TaskCommands,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -402,6 +402,12 @@ Examples:
     Migrate {
         #[command(subcommand)]
         migrate_command: MigrateCommands,
+    },
+
+    /// Inspect and manage the task runtime (cron / SOP observability)
+    Task {
+        #[command(subcommand)]
+        task_command: TaskCommands,
     },
 
     /// Manage provider subscription authentication profiles
@@ -1098,7 +1104,10 @@ async fn main() -> Result<()> {
                     }
 
                     log_gateway_start(&host, port);
-                    Box::pin(gateway::run_gateway(&host, port, config, None, None, None)).await
+                    Box::pin(gateway::run_gateway(
+                        &host, port, config, None, None, None, None,
+                    ))
+                    .await
                 }
                 Some(zeroclaw::GatewayCommands::GetPaircode { new }) => {
                     let port = config.gateway.port;
@@ -1153,13 +1162,19 @@ async fn main() -> Result<()> {
                     apply_webui_cli_override(&mut config, webui_external_path);
                     let (port, host) = resolve_gateway_addr(&config, port, host);
                     log_gateway_start(&host, port);
-                    Box::pin(gateway::run_gateway(&host, port, config, None, None, None)).await
+                    Box::pin(gateway::run_gateway(
+                        &host, port, config, None, None, None, None,
+                    ))
+                    .await
                 }
                 None => {
                     let port = config.gateway.port;
                     let host = config.gateway.host.clone();
                     log_gateway_start(&host, port);
-                    Box::pin(gateway::run_gateway(&host, port, config, None, None, None)).await
+                    Box::pin(gateway::run_gateway(
+                        &host, port, config, None, None, None, None,
+                    ))
+                    .await
                 }
             }
         }
@@ -1449,6 +1464,10 @@ async fn main() -> Result<()> {
 
         Commands::Migrate { migrate_command } => {
             migration::handle_command(migrate_command, &config).await
+        }
+
+        Commands::Task { task_command } => {
+            Box::pin(zeroclaw::task::handle_command(task_command, &config)).await
         }
 
         Commands::Memory { memory_command } => {
