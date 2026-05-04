@@ -61,7 +61,20 @@ impl TaskRuntime {
         job: &CronJob,
         component: &str,
     ) -> (String, bool, String) {
-        if !config.tasks.enabled || !config.tasks.record_cron_runs {
+        if !config.tasks.enabled {
+            return execute_cron_core(config, security, job, component).await;
+        }
+
+        if let Err(gerr) = self
+            .inner
+            .guardrail
+            .evaluate_cron_job(security, config, job)
+        {
+            let msg = gerr.to_string();
+            return (job.id.clone(), false, msg);
+        }
+
+        if !config.tasks.record_cron_runs {
             return execute_cron_core(config, security, job, component).await;
         }
 
@@ -85,20 +98,6 @@ impl TaskRuntime {
         ) {
             tracing::warn!(error = %e, "task store insert failed; running cron without task row");
             return execute_cron_core(config, security, job, component).await;
-        }
-
-        if let Err(gerr) = self
-            .inner
-            .guardrail
-            .evaluate_cron_job(security, config, job)
-        {
-            let msg = gerr.to_string();
-            let _ = store::mark_finished(config, &task_id, TaskStatus::Failed, Some(&msg));
-            if let Ok(Some(rec)) = store::get(config, &task_id) {
-                self.emit_event(&rec);
-                memory_hook::on_task_terminal(config, &rec).await;
-            }
-            return (job.id.clone(), false, msg);
         }
 
         let out_dir = config

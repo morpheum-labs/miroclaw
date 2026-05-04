@@ -289,11 +289,14 @@ pub enum SkillCommands {
 /// Migration subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MigrateCommands {
-    /// Import memory from an `OpenClaw` workspace into this `ZeroClaw` workspace
+    /// Import memory from another workspace tree into this Miroclaw workspace (`workspace_dir`).
     Openclaw {
-        /// Optional path to `OpenClaw` workspace (defaults to ~/.openclaw/workspace)
-        #[arg(long)]
-        source: Option<std::path::PathBuf>,
+        /// Path to the **source** workspace directory to read from.
+        ///
+        /// Miroclaw stores its own data under `~/.miroclaw/` (see `miroclaw onboard`); this command
+        /// only reads the tree you pass here (for one-off imports).
+        #[arg(long, required = true)]
+        source: std::path::PathBuf,
 
         /// Validate and preview migration without writing any data
         #[arg(long)]

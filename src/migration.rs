@@ -1,7 +1,6 @@
 use crate::config::Config;
 use crate::memory::{self, Memory, MemoryCategory};
 use anyhow::{bail, Context, Result};
-use directories::UserDirs;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::collections::HashSet;
 use std::fs;
@@ -26,26 +25,26 @@ struct MigrationStats {
 pub async fn handle_command(command: crate::MigrateCommands, config: &Config) -> Result<()> {
     match command {
         crate::MigrateCommands::Openclaw { source, dry_run } => {
-            migrate_openclaw_memory(config, source, dry_run).await
+            migrate_openclaw_memory(config, &source, dry_run).await
         }
     }
 }
 
 async fn migrate_openclaw_memory(
     config: &Config,
-    source_workspace: Option<PathBuf>,
+    source_workspace: &Path,
     dry_run: bool,
 ) -> Result<()> {
-    let source_workspace = resolve_openclaw_workspace(source_workspace)?;
+    let source_workspace = source_workspace.to_path_buf();
     if !source_workspace.exists() {
         bail!(
-            "OpenClaw workspace not found at {}. Pass --source <path> if needed.",
+            "Import source workspace not found at {}.",
             source_workspace.display()
         );
     }
 
     if paths_equal(&source_workspace, &config.workspace_dir) {
-        bail!("Source workspace matches current ZeroClaw workspace; refusing self-migration");
+        bail!("Source workspace matches current Miroclaw workspace; refusing self-migration");
     }
 
     let mut stats = MigrationStats::default();
@@ -61,7 +60,7 @@ async fn migrate_openclaw_memory(
     }
 
     if dry_run {
-        println!("🔎 Dry run: OpenClaw migration preview");
+        println!("🔎 Dry run: external workspace memory import preview");
         println!("  Source: {}", source_workspace.display());
         println!("  Target: {}", config.workspace_dir.display());
         println!("  Candidates: {}", entries.len());
@@ -101,7 +100,7 @@ async fn migrate_openclaw_memory(
         stats.imported += 1;
     }
 
-    println!("✅ OpenClaw memory migration complete");
+    println!("✅ External workspace memory import complete");
     println!("  Source: {}", source_workspace.display());
     println!("  Target: {}", config.workspace_dir.display());
     println!("  Imported:         {}", stats.imported);
@@ -350,18 +349,6 @@ fn pick_column_expr(columns: &[String], candidates: &[&str], fallback: &str) -> 
     pick_optional_column_expr(columns, candidates).unwrap_or_else(|| fallback.to_string())
 }
 
-fn resolve_openclaw_workspace(source: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(src) = source {
-        return Ok(src);
-    }
-
-    let home = UserDirs::new()
-        .map(|u| u.home_dir().to_path_buf())
-        .context("Could not find home directory")?;
-
-    Ok(home.join(".openclaw").join("workspace"))
-}
-
 fn paths_equal(a: &Path, b: &Path) -> bool {
     match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(a), Ok(b)) => a == b,
@@ -374,7 +361,7 @@ fn backup_target_memory(workspace_dir: &Path) -> Result<Option<PathBuf>> {
     let backup_root = workspace_dir
         .join("memory")
         .join("migrations")
-        .join(format!("openclaw-{timestamp}"));
+        .join(format!("external-import-{timestamp}"));
 
     let mut copied_any = false;
     fs::create_dir_all(&backup_root)?;
@@ -508,7 +495,7 @@ mod tests {
         .unwrap();
 
         let config = test_config(target.path());
-        migrate_openclaw_memory(&config, Some(source.path().to_path_buf()), false)
+        migrate_openclaw_memory(&config, source.path(), false)
             .await
             .unwrap();
 
@@ -537,7 +524,7 @@ mod tests {
         .unwrap();
 
         let config = test_config(target.path());
-        migrate_openclaw_memory(&config, Some(source.path().to_path_buf()), true)
+        migrate_openclaw_memory(&config, source.path(), true)
             .await
             .unwrap();
 
@@ -646,8 +633,8 @@ mod tests {
         let backup_dir = result.unwrap();
         assert!(backup_dir.exists());
         assert!(
-            backup_dir.to_string_lossy().contains("openclaw-"),
-            "backup dir must contain openclaw- prefix"
+            backup_dir.to_string_lossy().contains("external-import-"),
+            "backup dir must contain external-import- prefix"
         );
     }
 
