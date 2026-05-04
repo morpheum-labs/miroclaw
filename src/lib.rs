@@ -299,8 +299,6 @@ pub enum MigrateCommands {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Ensure task runtime SQLite schema exists (no cron/SOP data rewrite)
-    Tasks,
 }
 
 /// Task runtime CLI (`miroclaw task …`).

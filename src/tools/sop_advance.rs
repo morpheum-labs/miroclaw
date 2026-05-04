@@ -167,10 +167,12 @@ impl Tool for SopAdvanceTool {
 
         if let (Some(ref rt), Some(ref sr), Ok(_)) = (&self.task_runtime, &step_result_ok, &action)
         {
-            if let Err(e) =
-                rt.on_sop_step(self.config.as_ref(), None, run_id, sr.step_number, output)
-            {
-                warn!("task runtime SOP step record failed: {e}");
+            if let Ok(z_cfg) = crate::task::config_for_task_runtime(self.config.as_ref()) {
+                if let Err(e) = rt.on_sop_step(&z_cfg, None, run_id, sr.step_number, output) {
+                    warn!("task runtime SOP step record failed: {e}");
+                }
+            } else {
+                warn!("task runtime SOP step record skipped: config bridge failed");
             }
         }
 

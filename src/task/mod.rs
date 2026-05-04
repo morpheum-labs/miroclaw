@@ -3,24 +3,22 @@
 //! Cron scheduler integration records each job execution when `[tasks]` is enabled.
 //! See the repository plan for phased rollout (SOP chains, gateway SSE, LP guardrails).
 
+mod coerce;
+pub mod global;
 mod guardrail;
 mod memory_hook;
 mod runtime;
 mod store;
 pub mod types;
 
+pub use coerce::{config_for_task_runtime, cron_job_for_task_runtime};
+pub use global::{init_daemon_task_runtime, try_run_cron_via_daemon_runtime};
 pub use guardrail::{DefaultTaskGuardrail, GuardrailError, TaskGuardrail};
 pub use runtime::TaskRuntime;
-pub use store::{ensure_db, migrate_placeholder};
 
 use anyhow::Result;
 
 use crate::config::Config;
-
-/// `miroclaw migrate tasks` — ensures schema only; does not rewrite cron or SOP definitions.
-pub fn migrate_tasks(config: &Config) -> Result<String> {
-    migrate_placeholder(config)
-}
 
 /// Handle `miroclaw task …` subcommands (CLI).
 pub async fn handle_command(command: crate::TaskCommands, config: &Config) -> Result<()> {

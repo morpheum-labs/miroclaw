@@ -82,7 +82,6 @@ impl TaskKind {
     pub fn from_db_str(s: &str) -> Self {
         match s {
             "cron_job" => Self::CronJobRun,
-            "manual" => Self::Manual,
             "bypass" => Self::Bypass {
                 reason: String::new(),
             },

@@ -106,14 +106,18 @@ impl Tool for SopApproveTool {
         }
 
         if let (Some(ref rt), Some(ref run)) = (&self.task_runtime, &run_snapshot) {
-            if let Err(e) = rt.on_sop_step(
-                self.config.as_ref(),
-                None,
-                run_id,
-                run.current_step,
-                "checkpoint approved",
-            ) {
-                warn!("task runtime SOP approve step record failed: {e}");
+            if let Ok(z_cfg) = crate::task::config_for_task_runtime(self.config.as_ref()) {
+                if let Err(e) = rt.on_sop_step(
+                    &z_cfg,
+                    None,
+                    run_id,
+                    run.current_step,
+                    "checkpoint approved",
+                ) {
+                    warn!("task runtime SOP approve step record failed: {e}");
+                }
+            } else {
+                warn!("task runtime SOP approve step record skipped: config bridge failed");
             }
         }
 

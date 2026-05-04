@@ -1471,10 +1471,8 @@ async fn main() -> Result<()> {
         }
 
         Commands::Task { task_command } => {
-            let lib_cfg: zeroclaw::Config =
-                serde_json::from_value(serde_json::to_value(&config)?).context(
-                    "bridge config into library Config for task CLI",
-                )?;
+            let lib_cfg: zeroclaw::Config = serde_json::from_value(serde_json::to_value(&config)?)
+                .context("bridge config into library Config for task CLI")?;
             Box::pin(zeroclaw::task::handle_command(task_command, &lib_cfg)).await
         }
 

@@ -1462,6 +1462,16 @@ pub async fn handle_api_tasks_list(
             .into_response();
     };
     let config = state.config.lock().clone();
+    let config = match crate::task::config_for_task_runtime(&config) {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("task config bridge failed: {e}")})),
+            )
+                .into_response();
+        }
+    };
     match rt.list_tasks(&config, q.limit) {
         Ok(tasks) => Json(serde_json::json!({ "tasks": tasks })).into_response(),
         Err(e) => (
@@ -1489,6 +1499,16 @@ pub async fn handle_api_tasks_get(
             .into_response();
     };
     let config = state.config.lock().clone();
+    let config = match crate::task::config_for_task_runtime(&config) {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("task config bridge failed: {e}")})),
+            )
+                .into_response();
+        }
+    };
     match rt.get_task(&config, &id) {
         Ok(Some(task)) => Json(serde_json::json!({ "task": task })).into_response(),
         Ok(None) => (
@@ -1521,6 +1541,16 @@ pub async fn handle_api_tasks_kill(
             .into_response();
     };
     let config = state.config.lock().clone();
+    let config = match crate::task::config_for_task_runtime(&config) {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("task config bridge failed: {e}")})),
+            )
+                .into_response();
+        }
+    };
     match rt.kill_task(&config, &id).await {
         Ok(()) => Json(serde_json::json!({ "ok": true, "id": id })).into_response(),
         Err(e) => (

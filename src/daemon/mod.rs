@@ -90,12 +90,19 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
         (None, None)
     };
 
+    let (task_events_tx, _) = tokio::sync::broadcast::channel::<serde_json::Value>(256);
+    let task_runtime = std::sync::Arc::new(crate::task::TaskRuntime::with_default_guardrail(Some(
+        task_events_tx,
+    )));
+    crate::task::init_daemon_task_runtime(task_runtime.clone());
+
     {
         let gateway_cfg = config.clone();
         let gateway_host = host.clone();
         let cg_tx = clawgotcha_tx.clone();
         let gw_shared = clawgotcha_shared_gateway_config.clone();
         let gw_delegate = delegate_agents_share.clone();
+        let task_rt = task_runtime.clone();
         handles.push(spawn_component_supervisor(
             "gateway",
             initial_backoff,
@@ -107,6 +114,7 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
                 let cg_tx = cg_tx.clone();
                 let gw_shared = gw_shared.clone();
                 let gw_delegate = gw_delegate.clone();
+                let task_rt = task_rt.clone();
                 async move {
                     Box::pin(crate::gateway::run_gateway(
                         &host,
@@ -115,6 +123,7 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
                         cg_tx,
                         gw_shared,
                         gw_delegate,
+                        Some(task_rt),
                     ))
                     .await
                 }

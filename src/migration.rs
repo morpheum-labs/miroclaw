@@ -28,12 +28,6 @@ pub async fn handle_command(command: crate::MigrateCommands, config: &Config) ->
         crate::MigrateCommands::Openclaw { source, dry_run } => {
             migrate_openclaw_memory(config, source, dry_run).await
         }
-        crate::MigrateCommands::Tasks => {
-            let lib_cfg: zeroclaw::Config = serde_json::from_value(serde_json::to_value(config)?)?;
-            let msg = zeroclaw::task::migrate_tasks(&lib_cfg)?;
-            println!("{msg}");
-            Ok(())
-        }
     }
 }
 

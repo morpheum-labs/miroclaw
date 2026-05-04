@@ -54,12 +54,6 @@ fn init_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Ensure database file exists (for `miroclaw migrate tasks`).
-pub fn ensure_db(config: &Config) -> Result<()> {
-    let _ = open(config)?;
-    Ok(())
-}
-
 pub fn insert_pending(
     config: &Config,
     id: &str,
@@ -120,7 +114,7 @@ pub fn mark_finished(
 
 pub fn list_recent(config: &Config, limit: u32) -> Result<Vec<TaskRecord>> {
     let conn = open(config)?;
-    let limit = i64::from(limit.max(1).min(500));
+    let limit = i64::from(limit.clamp(1, 500));
     let mut stmt = conn
         .prepare(
             "SELECT id, kind, status, parent_id, title, description, cron_job_id, sop_run_id,
@@ -209,14 +203,4 @@ pub fn find_task_id_by_sop_run(config: &Config, sop_run_id: &str) -> Result<Opti
 #[must_use]
 pub fn new_task_id() -> TaskId {
     Uuid::new_v4().to_string()
-}
-
-/// Backfill hook: stamp `tasks` DB schema only (no data rewrite).
-pub fn migrate_placeholder(config: &Config) -> Result<String> {
-    ensure_db(config)?;
-    let path = db_path(config);
-    Ok(format!(
-        "tasks store ready at {} (schema v1, no cron/SOP rows modified)",
-        path.display()
-    ))
 }

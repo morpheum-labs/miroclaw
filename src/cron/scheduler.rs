@@ -180,7 +180,8 @@ async fn process_due_jobs(
     }
 }
 
-async fn execute_and_persist_job(
+/// Core cron execution + persistence (no task-runtime instrumentation).
+pub(crate) async fn execute_cron_core(
     config: &Config,
     security: &SecurityPolicy,
     job: &CronJob,
@@ -203,6 +204,44 @@ async fn execute_and_persist_job(
     .await;
 
     (job.id.clone(), success, output)
+}
+
+/// Shared body for cron execution + persistence (optionally via [`crate::task::TaskRuntime`]).
+pub(crate) async fn execute_cron_job_for_tasks(
+    config: &Config,
+    security: &SecurityPolicy,
+    job: &CronJob,
+    component: &str,
+) -> (String, bool, String) {
+    execute_cron_core(config, security, job, component).await
+}
+
+async fn execute_and_persist_job(
+    config: &Config,
+    security: &SecurityPolicy,
+    job: &CronJob,
+    component: &str,
+) -> (String, bool, String) {
+    let cfg_json = serde_json::to_value(config);
+    let job_json = serde_json::to_value(job);
+    if let (Ok(cfg_json), Ok(job_json)) = (cfg_json, job_json) {
+        if let Some(result) =
+            crate::task::try_run_cron_via_daemon_runtime(cfg_json, job_json, component).await
+        {
+            match result {
+                Ok(tuple) => return tuple,
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        "task runtime cron delegation failed; falling back to direct execution"
+                    );
+                }
+            }
+        }
+    } else if crate::task::global::daemon_task_runtime().is_some() {
+        tracing::warn!("task bridge: failed to serialize config or job for task runtime");
+    }
+    execute_cron_core(config, security, job, component).await
 }
 
 async fn run_hand_job(config: &Config, security: &SecurityPolicy, job: &CronJob) -> (bool, String) {

@@ -109,9 +109,12 @@ impl Tool for SopExecuteTool {
         }
 
         if let (Some(ref rt), Ok(_), Some(ref run)) = (&self.task_runtime, &action, &run_snapshot) {
-            if let Err(e) = rt.on_sop_run_started(self.config.as_ref(), &run.run_id, &run.sop_name)
-            {
-                warn!("task runtime SOP parent record failed: {e}");
+            if let Ok(z_cfg) = crate::task::config_for_task_runtime(self.config.as_ref()) {
+                if let Err(e) = rt.on_sop_run_started(&z_cfg, &run.run_id, &run.sop_name) {
+                    warn!("task runtime SOP parent record failed: {e}");
+                }
+            } else {
+                warn!("task runtime SOP parent record skipped: config bridge failed");
             }
         }
 
