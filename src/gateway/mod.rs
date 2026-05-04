@@ -41,7 +41,7 @@ use clawgotcha::ChangeEvent;
 use axum::{
     body::Bytes,
     extract::{ConnectInfo, Query, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Json},
     routing::{delete, get, post, put},
     Router,
@@ -51,6 +51,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 use uuid::Uuid;
@@ -999,6 +1000,17 @@ pub async fn run_gateway(
         task_runtime,
     };
 
+    let pairing_browser_cors_origins =
+        parse_pairing_browser_origin_allowlist(&config.gateway.pairing_browser_origins);
+
+    // Pairing-related HTTP routes need CORS so browser apps (e.g. Agentswarm) can call them cross-origin.
+    // `/admin/shutdown` stays off this router — no CORS (avoid drive-by CSRF to localhost admin).
+    let pairing_http_browser = Router::new()
+        .route("/admin/paircode", get(handle_admin_paircode))
+        .route("/admin/paircode/new", post(handle_admin_paircode_new))
+        .route("/pair", post(handle_pair))
+        .layer(pairing_http_cors_layer(pairing_browser_cors_origins));
+
     // Config PUT needs larger body limit (1MB)
     let config_put_router = Router::new()
         .route("/api/config", put(api::handle_api_config_put))
@@ -1008,12 +1020,10 @@ pub async fn run_gateway(
     let inner = Router::new()
         // ── Admin routes (for CLI management) ──
         .route("/admin/shutdown", post(handle_admin_shutdown))
-        .route("/admin/paircode", get(handle_admin_paircode))
-        .route("/admin/paircode/new", post(handle_admin_paircode_new))
+        .merge(pairing_http_browser)
         // ── Existing routes ──
         .route("/health", get(handle_health))
         .route("/metrics", get(handle_metrics))
-        .route("/pair", post(handle_pair))
         .route("/webhook", post(handle_webhook))
         .route("/whatsapp", get(handle_whatsapp_verify))
         .route("/whatsapp", post(handle_whatsapp_message))
@@ -2103,6 +2113,57 @@ async fn handle_gmail_push_webhook(
 
     // Acknowledge immediately — Google Pub/Sub requires a 2xx within ~10s
     (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PAIRING HTTP CORS (browser ↔ gateway on another origin/port)
+// ══════════════════════════════════════════════════════════════════════════════
+
+fn pairing_origin_host_is_loopback(origin: &HeaderValue) -> bool {
+    let Ok(s) = origin.to_str() else {
+        return false;
+    };
+    let Ok(uri) = s.parse::<axum::http::Uri>() else {
+        return false;
+    };
+    let Some(host) = uri.host() else {
+        return false;
+    };
+    host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1"
+}
+
+fn parse_pairing_browser_origin_allowlist(entries: &[String]) -> Arc<[HeaderValue]> {
+    let mut out = Vec::new();
+    for raw in entries {
+        let t = raw.trim();
+        if t.is_empty() {
+            continue;
+        }
+        match HeaderValue::try_from(t) {
+            Ok(v) => out.push(v),
+            Err(e) => {
+                tracing::warn!("Ignoring invalid gateway.pairing_browser_origins entry `{t}`: {e}");
+            }
+        }
+    }
+    Arc::from(out.into_boxed_slice())
+}
+
+fn pairing_http_cors_layer(extra_origins: Arc<[HeaderValue]>) -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate({
+            let extras = Arc::clone(&extra_origins);
+            move |origin: &HeaderValue, _parts: &axum::http::request::Parts| {
+                pairing_origin_host_is_loopback(origin)
+                    || extras.iter().any(|allowed| allowed == origin)
+            }
+        }))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            HeaderName::from_static("x-pairing-code"),
+        ])
+        .max_age(Duration::from_secs(3600))
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

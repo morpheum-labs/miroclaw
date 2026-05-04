@@ -2176,6 +2176,12 @@ pub struct GatewayConfig {
     #[serde(default)]
     pub trust_forwarded_headers: bool,
 
+    /// Extra browser `Origin` header values allowed for CORS on pairing HTTP endpoints
+    /// (`GET /admin/paircode`, `POST /admin/paircode/new`, `POST /pair`).
+    /// Loopback origins (`http://localhost:*`, `http://127.0.0.1:*`, `http://[::1]:*`) are always permitted.
+    #[serde(default)]
+    pub pairing_browser_origins: Vec<String>,
+
     /// Optional URL path prefix for reverse-proxy deployments.
     /// When set, all gateway routes are served under this prefix.
     /// Must start with `/` and must not end with `/`.
@@ -2259,6 +2265,7 @@ impl Default for GatewayConfig {
             pair_rate_limit_per_minute: default_pair_rate_limit(),
             webhook_rate_limit_per_minute: default_webhook_rate_limit(),
             trust_forwarded_headers: false,
+            pairing_browser_origins: Vec::new(),
             path_prefix: None,
             rate_limit_max_keys: default_gateway_rate_limit_max_keys(),
             idempotency_ttl_secs: default_idempotency_ttl_secs(),
@@ -13430,6 +13437,7 @@ channel_id = "C123"
             pair_rate_limit_per_minute: 12,
             webhook_rate_limit_per_minute: 80,
             trust_forwarded_headers: true,
+            pairing_browser_origins: Vec::new(),
             path_prefix: Some("/zeroclaw".into()),
             rate_limit_max_keys: 2048,
             idempotency_ttl_secs: 600,
