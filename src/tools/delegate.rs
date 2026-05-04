@@ -1274,6 +1274,24 @@ impl DelegateTool {
         }
         history.push(ChatMessage::user(full_prompt.to_string()));
 
+        let exec_ctx = crate::tools::mcp_tool_context::tool_execution_context();
+        if let Some(ref ctx) = exec_ctx {
+            ctx.write().active_delegate = Some(agent_name.to_string());
+        }
+        struct ClearActiveDelegate {
+            ctx: Option<Arc<RwLock<crate::tools::mcp_tool_context::ToolExecutionContext>>>,
+        }
+        impl Drop for ClearActiveDelegate {
+            fn drop(&mut self) {
+                if let Some(ref c) = self.ctx {
+                    c.write().active_delegate = None;
+                }
+            }
+        }
+        let _clear_active_delegate = ClearActiveDelegate {
+            ctx: exec_ctx.clone(),
+        };
+
         let noop_observer = NoopObserver;
 
         let agentic_timeout_secs = agent_config

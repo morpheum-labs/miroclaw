@@ -6,10 +6,21 @@ pub mod mapping;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use parking_lot::{Mutex, RwLock};
 
 use crate::config::{Config, DelegateAgentConfig};
+
+fn read_optional_trimmed_secret_file(path: &str) -> Result<Option<String>> {
+    let p = path.trim();
+    if p.is_empty() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(p)
+        .with_context(|| format!("read clawgotcha.instance_api_secret_file ({p})"))?;
+    let t = raw.trim().to_string();
+    Ok((!t.is_empty()).then_some(t))
+}
 
 /// Build [`clawgotcha::config::ClawgotchaRuntimeConfig`] from loaded host config.
 pub fn runtime_config_from_host(
@@ -40,6 +51,25 @@ pub fn runtime_config_from_host(
         .map(|h| h.to_string_lossy().into_owned())
         .unwrap_or_else(|_| "unknown".to_string());
 
+    let mut instance_api_secret = config
+        .clawgotcha
+        .instance_api_secret
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if instance_api_secret.is_none() {
+        if let Some(ref fp) = config.clawgotcha.instance_api_secret_file {
+            instance_api_secret = read_optional_trimmed_secret_file(fp)?;
+        }
+    }
+
+    let control_plane_api_key = config
+        .clawgotcha
+        .api_key
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
     Ok(clawgotcha::config::ClawgotchaRuntimeConfig {
         base_url: url.to_string(),
         instance_name,
@@ -50,6 +80,8 @@ pub fn runtime_config_from_host(
         poll_interval_secs: config.clawgotcha.poll_interval_seconds,
         callback_public_base_url: config.clawgotcha.callback_public_base_url.clone(),
         webhook_hmac_secret: config.clawgotcha.webhook_hmac_secret.clone(),
+        control_plane_api_key,
+        instance_api_secret,
     })
 }
 

@@ -6238,6 +6238,15 @@ pub struct ClawgotchaConfig {
     /// Hex-encoded shared secret for verifying inbound webhook HMAC (optional).
     #[serde(default)]
     pub webhook_hmac_secret: Option<String>,
+    /// Optional control-plane API key (`Authorization: Bearer` / `X-API-Key`) when the server sets `CLAWGOTCHA_API_KEY`.
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Per-instance secret from registration (`instance_api_secret`). Prefer file-based storage via [`Self::instance_api_secret_file`].
+    #[serde(default)]
+    pub instance_api_secret: Option<String>,
+    /// Path to a file containing the instance API secret (trimmed); not merged into saved config workflows by host code.
+    #[serde(default)]
+    pub instance_api_secret_file: Option<String>,
     /// When `true` and Clawgotcha is enabled, skip merging `agents_list_path` / `agents_list_url`
     /// so remote definitions remain authoritative.
     #[serde(default)]
@@ -6267,6 +6276,9 @@ impl Default for ClawgotchaConfig {
             heartbeat_interval_seconds: default_clawgotcha_heartbeat_secs(),
             poll_interval_seconds: default_clawgotcha_poll_secs(),
             webhook_hmac_secret: None,
+            api_key: None,
+            instance_api_secret: None,
+            instance_api_secret_file: None,
             authoritative_over_external_lists: false,
         }
     }
@@ -10718,6 +10730,24 @@ impl Config {
         if let Ok(v) = std::env::var("MIROCLAW_CLAWGOTCHA_ENABLED") {
             let n = v.trim().to_ascii_lowercase();
             self.clawgotcha.enabled = matches!(n.as_str(), "1" | "true" | "yes" | "on");
+        }
+        if let Ok(k) = std::env::var("MIROCLAW_CLAWGOTCHA_API_KEY") {
+            let t = k.trim();
+            if !t.is_empty() {
+                self.clawgotcha.api_key = Some(t.to_string());
+            }
+        }
+        if let Ok(s) = std::env::var("MIROCLAW_CLAWGOTCHA_INSTANCE_SECRET") {
+            let t = s.trim();
+            if !t.is_empty() {
+                self.clawgotcha.instance_api_secret = Some(t.to_string());
+            }
+        }
+        if let Ok(p) = std::env::var("MIROCLAW_CLAWGOTCHA_INSTANCE_SECRET_FILE") {
+            let t = p.trim();
+            if !t.is_empty() {
+                self.clawgotcha.instance_api_secret_file = Some(t.to_string());
+            }
         }
 
         // Gateway host: MIROCLAW_GATEWAY_HOST or HOST

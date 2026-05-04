@@ -50,6 +50,8 @@ async fn wait_for_shutdown_signal() -> Result<()> {
 }
 
 pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
+    crate::tools::mcp_tool_context::init_tool_execution_context();
+
     let initial_backoff = config.reliability.channel_initial_backoff_secs.max(1);
     let max_backoff = config
         .reliability

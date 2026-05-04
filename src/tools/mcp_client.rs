@@ -9,16 +9,20 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 
 use anyhow::{anyhow, bail, Context, Result};
+use parking_lot::RwLock;
 use serde_json::json;
 use tokio::sync::Mutex;
 use tokio::time::{timeout, Duration};
 
 use crate::config::schema::McpServerConfig;
+use crate::tools::mcp_credentials::McpCredentialResolver;
 use crate::tools::mcp_protocol::{
     JsonRpcRequest, McpToolDef, McpToolsListResult, MCP_PROTOCOL_VERSION,
 };
+use crate::tools::mcp_tool_context::ToolExecutionContext;
 use crate::tools::mcp_transport::{create_transport, McpTransportConn};
 
 /// Timeout for receiving a response from an MCP server during init/list.
@@ -208,33 +212,73 @@ impl McpServer {
 
 // ── McpRegistry ───────────────────────────────────────────────────────────
 
-/// Registry of all connected MCP servers, with a flat tool index.
+struct ScopedConn {
+    server_name: String,
+    agent_name: String,
+    server: Arc<McpServer>,
+    last_touch: std::time::Instant,
+}
+
+struct McpRegistryInner {
+    configs_by_name: HashMap<String, McpServerConfig>,
+    global: HashMap<String, Arc<McpServer>>,
+    scoped: StdMutex<Vec<ScopedConn>>,
+    /// prefixed_name → (server_name, original_tool_name)
+    tool_index: HashMap<String, (String, String)>,
+    resolver: Option<Arc<McpCredentialResolver>>,
+    exec_ctx: Option<Arc<RwLock<ToolExecutionContext>>>,
+    scoped_pool_max: usize,
+}
+
+/// Registry of MCP servers: global connections plus optional per-delegate scoped transports.
 pub struct McpRegistry {
-    servers: Vec<McpServer>,
-    /// prefixed_name → (server_index, original_tool_name)
-    tool_index: HashMap<String, (usize, String)>,
+    inner: Arc<McpRegistryInner>,
+}
+
+/// Options for [`McpRegistry::connect_all_with_options`].
+pub struct McpConnectOptions {
+    pub resolver: Option<Arc<McpCredentialResolver>>,
+    pub exec_ctx: Option<Arc<RwLock<ToolExecutionContext>>>,
+    pub scoped_pool_max: usize,
+}
+
+impl Default for McpConnectOptions {
+    fn default() -> Self {
+        Self {
+            resolver: None,
+            exec_ctx: None,
+            scoped_pool_max: 64,
+        }
+    }
 }
 
 impl McpRegistry {
     /// Connect to all configured servers. Non-fatal: failures are logged and skipped.
     pub async fn connect_all(configs: &[McpServerConfig]) -> Result<Self> {
-        let mut servers = Vec::new();
+        Self::connect_all_with_options(configs, McpConnectOptions::default()).await
+    }
+
+    /// Like [`Self::connect_all`] with optional Clawgotcha-backed credential overlays for delegates.
+    pub async fn connect_all_with_options(
+        configs: &[McpServerConfig],
+        options: McpConnectOptions,
+    ) -> Result<Self> {
+        let mut configs_by_name = HashMap::with_capacity(configs.len());
+        let mut global = HashMap::new();
         let mut tool_index = HashMap::new();
 
         for config in configs {
+            configs_by_name.insert(config.name.clone(), config.clone());
             match McpServer::connect(config.clone()).await {
                 Ok(server) => {
-                    let server_idx = servers.len();
-                    // Collect tools while holding the lock once, then release
-                    let tools = server.tools().await;
+                    let arc_srv = Arc::new(server);
+                    let tools = arc_srv.tools().await;
                     for tool in &tools {
-                        // Prefix prevents name collisions across servers
                         let prefixed = format!("{}__{}", config.name, tool.name);
-                        tool_index.insert(prefixed, (server_idx, tool.name.clone()));
+                        tool_index.insert(prefixed, (config.name.clone(), tool.name.clone()));
                     }
-                    servers.push(server);
+                    global.insert(config.name.clone(), arc_srv);
                 }
-                // Non-fatal — log and continue with remaining servers
                 Err(e) => {
                     tracing::error!("Failed to connect to MCP server `{}`: {:#}", config.name, e);
                 }
@@ -242,20 +286,110 @@ impl McpRegistry {
         }
 
         Ok(Self {
-            servers,
-            tool_index,
+            inner: Arc::new(McpRegistryInner {
+                configs_by_name,
+                global,
+                scoped: StdMutex::new(Vec::new()),
+                tool_index,
+                resolver: options.resolver,
+                exec_ctx: options.exec_ctx,
+                scoped_pool_max: options.scoped_pool_max.max(1),
+            }),
         })
+    }
+
+    /// Drop cached delegate-scoped MCP transports (global pool unchanged).
+    pub fn evict_scoped_connections(&self) {
+        self.inner
+            .scoped
+            .lock()
+            .expect("scoped mutex poisoned")
+            .clear();
+    }
+
+    async fn resolve_server(&self, server_name: &str) -> Result<Arc<McpServer>> {
+        let delegate_opt = self
+            .inner
+            .exec_ctx
+            .as_ref()
+            .and_then(|cx| cx.read().active_delegate.clone());
+
+        if let (Some(agent), Some(resolver)) = (delegate_opt, self.inner.resolver.as_ref()) {
+            if let Some(auth) = resolver
+                .resolve_for_server(Some(agent.as_str()), server_name)
+                .await
+            {
+                let now = std::time::Instant::now();
+                {
+                    let mut guard = self.inner.scoped.lock().expect("scoped mutex poisoned");
+                    if let Some(i) = guard
+                        .iter()
+                        .position(|s| s.server_name == server_name && s.agent_name == agent)
+                    {
+                        guard[i].last_touch = now;
+                        return Ok(Arc::clone(&guard[i].server));
+                    }
+                }
+
+                let base = self
+                    .inner
+                    .configs_by_name
+                    .get(server_name)
+                    .ok_or_else(|| anyhow!("unknown MCP server `{server_name}`"))?
+                    .clone();
+                let mut merged = base;
+                merged.headers.extend(auth.headers);
+                merged.env.extend(auth.env);
+                let connected = Arc::new(McpServer::connect(merged).await?);
+
+                let mut guard = self.inner.scoped.lock().expect("scoped mutex poisoned");
+                let now = std::time::Instant::now();
+                if let Some(i) = guard
+                    .iter()
+                    .position(|s| s.server_name == server_name && s.agent_name == agent)
+                {
+                    guard[i].last_touch = now;
+                    return Ok(Arc::clone(&guard[i].server));
+                }
+                guard.push(ScopedConn {
+                    server_name: server_name.to_string(),
+                    agent_name: agent.clone(),
+                    server: Arc::clone(&connected),
+                    last_touch: now,
+                });
+                while guard.len() > self.inner.scoped_pool_max {
+                    if let Some(oldest_idx) = guard
+                        .iter()
+                        .enumerate()
+                        .min_by_key(|(_, s)| s.last_touch)
+                        .map(|(i, _)| i)
+                    {
+                        guard.remove(oldest_idx);
+                    } else {
+                        break;
+                    }
+                }
+                return Ok(connected);
+            }
+        }
+
+        self.inner
+            .global
+            .get(server_name)
+            .cloned()
+            .ok_or_else(|| anyhow!("unknown MCP server `{server_name}`"))
     }
 
     /// All prefixed tool names across all connected servers.
     pub fn tool_names(&self) -> Vec<String> {
-        self.tool_index.keys().cloned().collect()
+        self.inner.tool_index.keys().cloned().collect()
     }
 
-    /// Tool definition for a given prefixed name (cloned).
+    /// Tool definition for a given prefixed name (cloned). Uses the global connection's schema.
     pub async fn get_tool_def(&self, prefixed_name: &str) -> Option<McpToolDef> {
-        let (server_idx, original_name) = self.tool_index.get(prefixed_name)?;
-        let inner = self.servers[*server_idx].inner.lock().await;
+        let (server_name, original_name) = self.inner.tool_index.get(prefixed_name)?;
+        let srv = self.inner.global.get(server_name)?;
+        let inner = srv.inner.lock().await;
         inner
             .tools
             .iter()
@@ -269,27 +403,27 @@ impl McpRegistry {
         prefixed_name: &str,
         arguments: serde_json::Value,
     ) -> Result<String> {
-        let (server_idx, original_name) = self
+        let (server_name, original_name) = self
+            .inner
             .tool_index
             .get(prefixed_name)
             .ok_or_else(|| anyhow!("unknown MCP tool `{prefixed_name}`"))?;
-        let result = self.servers[*server_idx]
-            .call_tool(original_name, arguments)
-            .await?;
+        let server = self.resolve_server(server_name).await?;
+        let result = server.call_tool(original_name, arguments).await?;
         serde_json::to_string_pretty(&result)
             .with_context(|| format!("failed to serialize result of MCP tool `{prefixed_name}`"))
     }
 
     pub fn is_empty(&self) -> bool {
-        self.servers.is_empty()
+        self.inner.global.is_empty()
     }
 
     pub fn server_count(&self) -> usize {
-        self.servers.len()
+        self.inner.global.len()
     }
 
     pub fn tool_count(&self) -> usize {
-        self.tool_index.len()
+        self.inner.tool_index.len()
     }
 }
 

@@ -33,6 +33,7 @@ impl AgentRuntimeUpdater for HostAgents {
         if let Some(cell) = &self.delegate_agents {
             *cell.write() = snapshot.agents.clone();
         }
+        crate::tools::mcp_vault::invalidate_mcp_scoped_state();
         tracing::info!(agent = %def.name, revision = def.current_revision, "clawgotcha: upserted delegate agent");
         Ok(())
     }
@@ -50,6 +51,7 @@ impl AgentRuntimeUpdater for HostAgents {
         if let Some(cell) = &self.delegate_agents {
             *cell.write() = snapshot.agents.clone();
         }
+        crate::tools::mcp_vault::invalidate_mcp_scoped_state();
         tracing::info!(%name, "clawgotcha: removed delegate agent");
         Ok(())
     }

@@ -15,6 +15,10 @@ pub struct ClawgotchaRuntimeConfig {
     pub callback_public_base_url: Option<String>,
     /// Hex-encoded shared secret for inbound webhook HMAC (optional).
     pub webhook_hmac_secret: Option<String>,
+    /// Control-plane API key (`Authorization: Bearer` / `X-API-Key`) when the server sets `CLAWGOTCHA_API_KEY`.
+    pub control_plane_api_key: Option<String>,
+    /// Per-instance secret for `X-Instance-Secret` (MCP credential reveal and future instance-scoped routes).
+    pub instance_api_secret: Option<String>,
 }
 
 /// Sync strategy (polling, webhook push hints, or both).

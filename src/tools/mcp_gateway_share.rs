@@ -5,13 +5,22 @@ use std::sync::{Arc, Mutex};
 
 use crate::config::schema::McpConfig;
 
-use super::mcp_client::McpRegistry;
+use super::mcp_client::{McpConnectOptions, McpRegistry};
+use super::mcp_credentials::McpCredentialResolver;
 use super::mcp_deferred::{self, ActivatedToolSet, DeferredMcpToolSet};
 use super::mcp_tool::McpToolWrapper;
+use super::mcp_tool_context::ToolExecutionContext;
 use super::tool_search::ToolSearchTool;
 use super::traits::Tool;
 use super::ArcToolRef;
 use super::DelegateParentToolsHandle;
+use parking_lot::RwLock;
+
+/// Optional Clawgotcha-backed MCP credential resolver + shared delegate execution scope.
+pub struct McpClawgotchaVault {
+    pub resolver: Arc<McpCredentialResolver>,
+    pub exec_ctx: Arc<RwLock<ToolExecutionContext>>,
+}
 
 /// Result of [`attach_mcp_tools`] when wiring deferred MCP into a tool registry.
 pub struct McpAttachOutcome {
@@ -27,6 +36,8 @@ pub struct GatewayMcpBundle {
     pub registry: Arc<McpRegistry>,
     /// Present when the gateway was started with `mcp.deferred_loading = true`.
     pub deferred_set: Option<DeferredMcpToolSet>,
+    /// Present when `[clawgotcha]` instance API secret is configured for MCP overlays.
+    pub clawgotcha_vault: Option<Arc<McpClawgotchaVault>>,
 }
 
 impl GatewayMcpBundle {
@@ -38,6 +49,7 @@ impl GatewayMcpBundle {
     pub async fn connect_if_enabled(
         mcp: &McpConfig,
         skill_mcp_hints: &[String],
+        clawgotcha_vault: Option<Arc<McpClawgotchaVault>>,
     ) -> Option<Arc<Self>> {
         if !mcp.enabled || mcp.servers.is_empty() {
             return None;
@@ -46,7 +58,12 @@ impl GatewayMcpBundle {
             "Gateway MCP: connecting {} server(s) (shared pool)",
             mcp.servers.len()
         );
-        let registry = match McpRegistry::connect_all(&mcp.servers).await {
+        let options = McpConnectOptions {
+            resolver: clawgotcha_vault.as_ref().map(|v| Arc::clone(&v.resolver)),
+            exec_ctx: clawgotcha_vault.as_ref().map(|v| Arc::clone(&v.exec_ctx)),
+            scoped_pool_max: 64,
+        };
+        let registry = match McpRegistry::connect_all_with_options(&mcp.servers, options).await {
             Ok(r) => Arc::new(r),
             Err(e) => {
                 tracing::error!("Gateway MCP registry failed to initialize: {e:#}");
@@ -76,6 +93,7 @@ impl GatewayMcpBundle {
         Some(Arc::new(Self {
             registry,
             deferred_set,
+            clawgotcha_vault,
         }))
     }
 }

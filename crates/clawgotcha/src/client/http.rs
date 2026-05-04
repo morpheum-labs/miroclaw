@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use reqwest::header::{HeaderMap, HeaderValue, IF_NONE_MATCH};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, IF_NONE_MATCH};
 use reqwest::StatusCode;
 use urlencoding::encode;
 
@@ -33,6 +33,9 @@ async fn retry_backoff(attempt: u32) {
 pub struct ClawgotchaHttpAdapter {
     http: reqwest::Client,
     base: String,
+    instance_name: String,
+    control_plane_api_key: Option<String>,
+    instance_api_secret: Option<String>,
 }
 
 impl ClawgotchaHttpAdapter {
@@ -46,11 +49,60 @@ impl ClawgotchaHttpAdapter {
             .timeout(Duration::from_secs(120))
             .build()
             .map_err(|e| ClawgotchaError::Http(e.to_string()))?;
-        Ok(Self { http, base })
+        Ok(Self {
+            http,
+            base,
+            instance_name: cfg.instance_name.trim().to_string(),
+            control_plane_api_key: cfg
+                .control_plane_api_key
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            instance_api_secret: cfg
+                .instance_api_secret
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+        })
     }
 
     fn url(&self, path: &str) -> String {
         format!("{}{}", self.base, path)
+    }
+
+    fn apply_auth(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        let mut req = req;
+        if let Some(ref k) = self.control_plane_api_key {
+            if let Ok(v) = HeaderValue::from_str(&format!("Bearer {k}")) {
+                req = req.header(AUTHORIZATION, v);
+            }
+        }
+        if let Some(ref s) = self.instance_api_secret {
+            if let Ok(v) = HeaderValue::from_str(s.as_str()) {
+                req = req.header("X-Instance-Secret", v);
+            }
+        }
+        req
+    }
+
+    /// Decrypted MCP credential bindings for one agent (requires instance API secret on the wire).
+    pub async fn fetch_mcp_credentials_by_agent_name(
+        &self,
+        agent_name: &str,
+    ) -> Result<crate::models::wire::McpCredentialsRevealResponse, ClawgotchaError> {
+        let inst = encode(self.instance_name.trim());
+        let agent = encode(agent_name.trim());
+        let path = format!("/v1/instances/{inst}/agents/by-name/{agent}/mcp-credentials");
+        let (status, _, parsed) = self
+            .get_json_retry::<crate::models::wire::McpCredentialsRevealResponse>(&path, None)
+            .await?;
+        if !status.is_success() {
+            return Err(ClawgotchaError::HttpStatus {
+                status: status.as_u16(),
+                body: format!("mcp-credentials HTTP {status}"),
+            });
+        }
+        parsed.ok_or_else(|| ClawgotchaError::InvalidResponse("mcp-credentials body".into()))
     }
 
     fn watermark_from_summary(
@@ -73,7 +125,7 @@ impl ClawgotchaHttpAdapter {
     ) -> Result<(StatusCode, Option<String>, Option<T>), ClawgotchaError> {
         let mut attempt: u32 = 0;
         loop {
-            let mut req = self.http.get(self.url(path));
+            let mut req = self.apply_auth(self.http.get(self.url(path)));
             if let Some(tag) = etag {
                 let mut headers = HeaderMap::new();
                 if let Ok(v) = HeaderValue::from_str(tag) {
@@ -133,9 +185,11 @@ impl ClawgotchaHttpAdapter {
         let mut attempt: u32 = 0;
         loop {
             let send_result = self
-                .http
-                .post(self.url(path))
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .apply_auth(
+                    self.http
+                        .post(self.url(path))
+                        .header(reqwest::header::CONTENT_TYPE, "application/json"),
+                )
                 .body(body.to_vec())
                 .send()
                 .await;

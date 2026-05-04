@@ -579,8 +579,68 @@ pub async fn run_gateway(
             .into_iter()
             .flat_map(|s| s.mcp_servers)
             .collect();
-    let gateway_mcp =
-        tools::GatewayMcpBundle::connect_if_enabled(&config.mcp, &skill_mcp_hints).await;
+
+    crate::tools::mcp_tool_context::init_tool_execution_context();
+
+    let clawgotcha_mcp_vault: Option<Arc<tools::mcp_gateway_share::McpClawgotchaVault>> = if config
+        .clawgotcha
+        .enabled
+    {
+        match crate::clawgotcha_host::runtime_config_from_host(&config) {
+            Ok(rt) => {
+                if rt
+                    .instance_api_secret
+                    .as_ref()
+                    .is_some_and(|s| !s.trim().is_empty())
+                {
+                    match clawgotcha::client::ClawgotchaHttpAdapter::new(&rt) {
+                        Ok(ad) => {
+                            let client = Arc::new(ad);
+                            let resolver =
+                                Arc::new(tools::mcp_credentials::McpCredentialResolver::new(
+                                    Arc::clone(&client),
+                                ));
+                            let exec_ctx = crate::tools::mcp_tool_context::tool_execution_context()
+                                .unwrap_or_else(|| {
+                                    crate::tools::mcp_tool_context::init_tool_execution_context()
+                                });
+                            Some(Arc::new(tools::mcp_gateway_share::McpClawgotchaVault {
+                                resolver,
+                                exec_ctx,
+                            }))
+                        }
+                        Err(e) => {
+                            tracing::warn!("Clawgotcha MCP credential HTTP client: {e:#}");
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Clawgotcha runtime config (MCP vault): {e:#}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let gateway_mcp = tools::GatewayMcpBundle::connect_if_enabled(
+        &config.mcp,
+        &skill_mcp_hints,
+        clawgotcha_mcp_vault.clone(),
+    )
+    .await;
+    if let Some(ref bundle) = gateway_mcp {
+        crate::tools::mcp_vault::register_mcp_vault_for_invalidation(
+            clawgotcha_mcp_vault
+                .as_ref()
+                .map(|v| Arc::clone(&v.resolver)),
+            Arc::clone(&bundle.registry),
+        );
+    }
     let _mcp_attach_outcome = tools::attach_mcp_tools(
         &mut tools_registry_raw,
         delegate_handle_gw.as_ref(),

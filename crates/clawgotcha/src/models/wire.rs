@@ -296,3 +296,18 @@ impl From<WireSwarmDefaults> for SwarmDefaults {
         }
     }
 }
+
+/// Response from `GET /v1/instances/.../mcp-credentials` (decrypted MCP bindings).
+#[derive(Debug, Clone, Deserialize)]
+pub struct McpCredentialsRevealResponse {
+    pub agent_name: String,
+    pub mcp_bindings: Vec<McpBindingReveal>,
+    pub revision: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct McpBindingReveal {
+    pub mcp_server_name: String,
+    pub material_kind: String,
+    pub payload: serde_json::Value,
+}

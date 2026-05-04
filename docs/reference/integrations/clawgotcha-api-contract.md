@@ -17,11 +17,13 @@ The Miroclaw setting **`[clawgotcha].url`** is the **HTTP prefix** prepended to 
 
 ## Authentication
 
-When the server enables API keys, requests should send **`Authorization: Bearer <token>`** or **`X-API-Key: <key>`** on mutating routes; Miroclaw can be extended later to send these headers from config.
+When the server enables API keys, requests send **`Authorization: Bearer <token>`** or **`X-API-Key: <key>`** on **`/api/v1/*`**. Miroclaw fills this from **`[clawgotcha].api_key`** or **`MIROCLAW_CLAWGOTCHA_API_KEY`**.
+
+**Per-instance secret:** On first registration (or when a legacy row had no secret), **`POST /v1/instances/register`** returns **`instance_api_secret`** once. Store it outside **`config.toml`** (recommended: **`[clawgotcha].instance_api_secret_file`** or **`MIROCLAW_CLAWGOTCHA_INSTANCE_SECRET`**). The adapter sends it as **`X-Instance-Secret`** on every request when configured (required for **`GET …/mcp-credentials`**).
 
 ### What the Miroclaw client implements
 
-[`ClawgotchaHttpAdapter`](../../../crates/clawgotcha/src/client/http.rs) and [`ClawgotchaSyncRead`](../../../crates/clawgotcha/src/traits.rs) only drive **registration**, **heartbeat**, and pulls of **agents**, **cron jobs**, and **swarm config**. They do **not** call **`GET /v1/instances`** or **`GET /v1/instances/{instance_name}`**.
+[`ClawgotchaHttpAdapter`](../../../crates/clawgotcha/src/client/http.rs) drives **registration**, **heartbeat**, pulls of **agents**, **cron jobs**, **swarm config**, and optional **`GET /v1/instances/{instance}/agents/by-name/{agent}/mcp-credentials`** for delegate MCP credential overlays. It does **not** call **`GET /v1/instances`** or **`GET /v1/instances/{instance_name}`** for discovery.
 
 So **runtime-instance discovery** (listing every registered Miroclaw/zero-claw peer on the control plane) is **not** surfaced in this repo: that data is for **Clawgotcha’s own UI/API** (or other ops tools) that query the server directly. A running Miroclaw node only registers **itself** under `[clawgotcha].instance_name`; it never downloads the full instance catalog.
 
@@ -97,6 +99,14 @@ Agentbook registers webhook subscriptions during **`POST /v1/instances/register`
 ## Optional: `GET /api/v1/events` (SSE)
 
 Low-latency change notifications; payloads align with **`ChangeEvent`** where applicable. Not consumed by the Rust client by default.
+
+---
+
+## `GET /v1/instances/{instance}/agents/by-name/{agent}/mcp-credentials`
+
+Returns decrypted MCP credential payloads for bindings that set **`mcp_server_name`**, when **`X-Instance-Secret`** matches the instance API secret and (when enabled) the global API key is present. **`revision`** mirrors the agent’s **`current_revision`** (incremented on credential create/rotate/delete on agentbook).
+
+Miroclaw uses this only during **agentic delegate** tool loops to merge vault auth into scoped MCP transports; secrets are cached in memory and invalidated when Clawgotcha applies agent updates.
 
 ---
 
