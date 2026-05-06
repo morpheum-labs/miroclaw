@@ -514,7 +514,7 @@ fn check_config_semantics(config: &Config, items: &mut Vec<DiagItem>) {
 
     // Provider validity
     if let Some(ref provider) = config.default_provider {
-        if let Some(reason) = provider_validation_error(provider) {
+        if let Some(reason) = provider_validation_error(provider, config.api_url.as_deref()) {
             items.push(DiagItem::error(
                 cat,
                 format!("default provider \"{provider}\" is invalid: {reason}"),
@@ -583,7 +583,7 @@ fn check_config_semantics(config: &Config, items: &mut Vec<DiagItem>) {
 
     // Reliability: fallback providers
     for fb in &config.reliability.fallback_providers {
-        if let Some(reason) = provider_validation_error(fb) {
+        if let Some(reason) = provider_validation_error(fb, config.api_url.as_deref()) {
             items.push(DiagItem::warn(
                 cat,
                 format!("fallback provider \"{fb}\" is invalid: {reason}"),
@@ -596,7 +596,17 @@ fn check_config_semantics(config: &Config, items: &mut Vec<DiagItem>) {
         if route.hint.is_empty() {
             items.push(DiagItem::warn(cat, "model route with empty hint"));
         }
-        if let Some(reason) = provider_validation_error(&route.provider) {
+        let route_url = route
+            .api_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+            .or(config
+                .api_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|u| !u.is_empty()));
+        if let Some(reason) = provider_validation_error(&route.provider, route_url) {
             items.push(DiagItem::warn(
                 cat,
                 format!(
@@ -618,7 +628,20 @@ fn check_config_semantics(config: &Config, items: &mut Vec<DiagItem>) {
         if route.hint.trim().is_empty() {
             items.push(DiagItem::warn(cat, "embedding route with empty hint"));
         }
-        if let Some(reason) = embedding_provider_validation_error(&route.provider) {
+        let embed_url = route
+            .api_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+            .or_else(|| {
+                config
+                    .memory
+                    .embedding_api_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|u| !u.is_empty())
+            });
+        if let Some(reason) = embedding_provider_validation_error(&route.provider, embed_url) {
             items.push(DiagItem::warn(
                 cat,
                 format!(
@@ -683,7 +706,8 @@ fn check_config_semantics(config: &Config, items: &mut Vec<DiagItem>) {
     agent_names.sort();
     for name in agent_names {
         let agent = config.agents.get(name).unwrap();
-        if let Some(reason) = provider_validation_error(&agent.provider) {
+        if let Some(reason) = provider_validation_error(&agent.provider, config.api_url.as_deref())
+        {
             items.push(DiagItem::warn(
                 cat,
                 format!(
@@ -695,8 +719,8 @@ fn check_config_semantics(config: &Config, items: &mut Vec<DiagItem>) {
     }
 }
 
-fn provider_validation_error(name: &str) -> Option<String> {
-    match crate::providers::create_provider(name, None) {
+fn provider_validation_error(name: &str, api_url: Option<&str>) -> Option<String> {
+    match crate::providers::create_provider_with_url(name, None, api_url) {
         Ok(_) => None,
         Err(err) => Some(
             err.to_string()
@@ -708,28 +732,68 @@ fn provider_validation_error(name: &str) -> Option<String> {
     }
 }
 
-fn embedding_provider_validation_error(name: &str) -> Option<String> {
+fn embedding_provider_validation_error(
+    name: &str,
+    embedding_api_url: Option<&str>,
+) -> Option<String> {
     let normalized = name.trim();
-    if normalized.eq_ignore_ascii_case("none") || normalized.eq_ignore_ascii_case("openai") {
+    if normalized.eq_ignore_ascii_case("none")
+        || normalized.eq_ignore_ascii_case("openai")
+        || normalized.eq_ignore_ascii_case("openrouter")
+    {
         return None;
     }
 
-    let Some(url) = normalized.strip_prefix("custom:") else {
-        return Some("supported values: none, openai, custom:<url>".into());
-    };
-
-    let url = url.trim();
-    if url.is_empty() {
-        return Some("custom provider requires a non-empty URL after 'custom:'".into());
+    if normalized.eq_ignore_ascii_case("openai-custom") {
+        let has_url = embedding_api_url
+            .map(str::trim)
+            .is_some_and(|u| !u.is_empty())
+            || std::env::var("MIROCLAW_EMBEDDING_URL")
+                .ok()
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|u| !u.is_empty())
+            || std::env::var("MIROCLAW_PROVIDER_URL")
+                .ok()
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|u| !u.is_empty());
+        if !has_url {
+            return Some(
+                "openai-custom requires memory.embedding_api_url, embedding route api_url, MIROCLAW_EMBEDDING_URL, or MIROCLAW_PROVIDER_URL".into(),
+            );
+        }
+        let url_owned = embedding_api_url
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+            .map(ToString::to_string)
+            .or_else(|| {
+                std::env::var("MIROCLAW_EMBEDDING_URL")
+                    .ok()
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+            })
+            .or_else(|| {
+                std::env::var("MIROCLAW_PROVIDER_URL")
+                    .ok()
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+            });
+        let url = url_owned.as_ref()?;
+        return validate_http_url_string(url);
     }
 
+    Some(format!("unsupported embedding provider: {normalized}"))
+}
+
+fn validate_http_url_string(url: &str) -> Option<String> {
     match reqwest::Url::parse(url) {
         Ok(parsed) if matches!(parsed.scheme(), "http" | "https") => None,
         Ok(parsed) => Some(format!(
-            "custom provider URL must use http/https, got '{}'",
+            "embedding provider URL must use http/https, got '{}'",
             parsed.scheme()
         )),
-        Err(err) => Some(format!("invalid custom provider URL: {err}")),
+        Err(err) => Some(format!("invalid embedding provider URL: {err}")),
     }
 }
 
@@ -1101,15 +1165,24 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn provider_validation_checks_custom_url_shape() {
-        assert!(provider_validation_error("openrouter").is_none());
-        assert!(provider_validation_error("custom:https://example.com").is_none());
-        assert!(provider_validation_error("anthropic-custom:https://example.com").is_none());
+    fn provider_validation_checks_byo_providers() {
+        assert!(provider_validation_error("openrouter", None).is_none());
+        assert!(
+            provider_validation_error("openai-custom", Some("https://example.com/v1")).is_none()
+        );
+        assert!(provider_validation_error(
+            "anthropic-custom",
+            Some("https://example.com/anthropic")
+        )
+        .is_none());
 
-        let invalid_custom = provider_validation_error("custom:").unwrap_or_default();
-        assert!(invalid_custom.contains("requires a URL"));
+        let invalid_byo = provider_validation_error("openai-custom", None).unwrap_or_default();
+        assert!(
+            invalid_byo.contains("api_url") || invalid_byo.contains("MIROCLAW_PROVIDER_URL"),
+            "{invalid_byo}"
+        );
 
-        let invalid_unknown = provider_validation_error("totally-fake").unwrap_or_default();
+        let invalid_unknown = provider_validation_error("totally-fake", None).unwrap_or_default();
         assert!(invalid_unknown.contains("Unknown provider"));
     }
 
@@ -1185,24 +1258,25 @@ mod tests {
     }
 
     #[test]
-    fn config_validation_catches_malformed_custom_provider() {
+    fn config_validation_catches_openai_custom_without_api_url() {
         let mut config = Config::default();
-        config.default_provider = Some("custom:".into());
+        config.default_provider = Some("openai-custom".into());
         let mut items = Vec::new();
         check_config_semantics(&config, &mut items);
 
         let prov_item = items.iter().find(|item| {
             item.message
-                .contains("default provider \"custom:\" is invalid")
+                .contains("default provider \"openai-custom\" is invalid")
         });
         assert!(prov_item.is_some());
         assert_eq!(prov_item.unwrap().severity, Severity::Error);
     }
 
     #[test]
-    fn config_validation_accepts_custom_provider() {
+    fn config_validation_accepts_openai_custom_with_api_url() {
         let mut config = Config::default();
-        config.default_provider = Some("custom:https://my-api.com".into());
+        config.default_provider = Some("openai-custom".into());
+        config.api_url = Some("https://my-api.com/v1".into());
         let mut items = Vec::new();
         check_config_semantics(&config, &mut items);
         let prov_item = items.iter().find(|i| i.message.contains("is valid"));
@@ -1224,15 +1298,15 @@ mod tests {
     }
 
     #[test]
-    fn config_validation_warns_bad_custom_fallback() {
+    fn config_validation_warns_bad_openai_custom_fallback() {
         let mut config = Config::default();
-        config.reliability.fallback_providers = vec!["custom:".into()];
+        config.reliability.fallback_providers = vec!["openai-custom".into()];
         let mut items = Vec::new();
         check_config_semantics(&config, &mut items);
 
         let fb_item = items.iter().find(|item| {
             item.message
-                .contains("fallback provider \"custom:\" is invalid")
+                .contains("fallback provider \"openai-custom\" is invalid")
         });
         assert!(fb_item.is_some());
         assert_eq!(fb_item.unwrap().severity, Severity::Warn);
@@ -1246,6 +1320,7 @@ mod tests {
             provider: "groq".into(),
             model: String::new(),
             api_key: None,
+            api_url: None,
         }];
         let mut items = Vec::new();
         check_config_semantics(&config, &mut items);
@@ -1263,6 +1338,7 @@ mod tests {
             model: String::new(),
             dimensions: Some(1536),
             api_key: None,
+            api_url: None,
         }];
 
         let mut items = Vec::new();
@@ -1284,6 +1360,7 @@ mod tests {
             model: "text-embedding-3-small".into(),
             dimensions: None,
             api_key: None,
+            api_url: None,
         }];
 
         let mut items = Vec::new();

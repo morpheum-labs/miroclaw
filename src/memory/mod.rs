@@ -147,6 +147,8 @@ pub struct MemoryEmbeddingResolution {
     pub model: String,
     pub dimensions: usize,
     pub api_key: Option<String>,
+    /// Base URL when `provider` is `openai-custom`.
+    pub embedding_api_url: Option<String>,
 }
 
 /// Resolve embedding provider/model/key (including `hint:` routes).
@@ -162,6 +164,7 @@ pub fn resolve_memory_embedding(
         model: r.model,
         dimensions: r.dimensions,
         api_key: r.api_key,
+        embedding_api_url: r.embedding_api_url,
     }
 }
 
@@ -171,6 +174,7 @@ struct ResolvedEmbeddingConfig {
     model: String,
     dimensions: usize,
     api_key: Option<String>,
+    embedding_api_url: Option<String>,
 }
 
 impl std::fmt::Debug for ResolvedEmbeddingConfig {
@@ -188,7 +192,7 @@ impl std::fmt::Debug for ResolvedEmbeddingConfig {
 /// that the caller passes in. Returns `None` for unknown providers.
 fn embedding_provider_env_key(provider: &str) -> Option<String> {
     let env_var = match provider.trim() {
-        "openai" => "OPENAI_API_KEY",
+        "openai" | "openai-custom" => "OPENAI_API_KEY",
         "openrouter" => "OPENROUTER_API_KEY",
         "cohere" => "COHERE_API_KEY",
         _ => return None,
@@ -213,11 +217,18 @@ fn resolve_embedding_config(
     // provider (issue #3083: gemini key leaking to openai embeddings endpoint).
     let fallback_api_key =
         embedding_provider_env_key(config.embedding_provider.trim()).or(caller_api_key);
+    let fallback_embedding_url = config
+        .embedding_api_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(ToString::to_string);
     let fallback = ResolvedEmbeddingConfig {
         provider: config.embedding_provider.trim().to_string(),
         model: config.embedding_model.trim().to_string(),
         dimensions: config.embedding_dimensions,
         api_key: fallback_api_key.clone(),
+        embedding_api_url: fallback_embedding_url.clone(),
     };
 
     let Some(hint) = config
@@ -258,11 +269,20 @@ fn resolve_embedding_config(
         .filter(|value: &&str| !value.is_empty())
         .map(|value| value.to_string());
 
+    let routed_embedding_url = route
+        .api_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| fallback.embedding_api_url.clone());
+
     ResolvedEmbeddingConfig {
         provider: provider.to_string(),
         model: model.to_string(),
         dimensions,
         api_key: routed_api_key.or(fallback_api_key),
+        embedding_api_url: routed_embedding_url,
     }
 }
 
@@ -348,6 +368,7 @@ pub fn create_memory_with_storage_and_routes(
                 resolved_embedding.api_key.as_deref(),
                 &resolved_embedding.model,
                 resolved_embedding.dimensions,
+                resolved_embedding.embedding_api_url.as_deref(),
             ));
 
         #[allow(clippy::cast_possible_truncation)]
@@ -424,6 +445,7 @@ pub fn create_memory_with_storage_and_routes(
                 resolved_embedding.api_key.as_deref(),
                 &resolved_embedding.model,
                 resolved_embedding.dimensions,
+                resolved_embedding.embedding_api_url.as_deref(),
             ));
         tracing::info!(
             "📦 Qdrant memory backend configured (url: {}, collection: {})",
@@ -671,6 +693,7 @@ mod tests {
                 model: "text-embedding-3-small".into(),
                 dimensions: 1536,
                 api_key: Some("base-key".into()),
+                embedding_api_url: None,
             }
         );
     }
@@ -685,20 +708,22 @@ mod tests {
         };
         let routes = vec![EmbeddingRouteConfig {
             hint: "semantic".into(),
-            provider: "custom:https://api.example.com/v1".into(),
+            provider: "openai-custom".into(),
             model: "custom-embed-v2".into(),
             dimensions: Some(1024),
             api_key: Some("route-key".into()),
+            api_url: Some("https://api.example.com/v1".into()),
         }];
 
         let resolved = resolve_embedding_config(&cfg, &routes, Some("base-key"));
         assert_eq!(
             resolved,
             ResolvedEmbeddingConfig {
-                provider: "custom:https://api.example.com/v1".into(),
+                provider: "openai-custom".into(),
                 model: "custom-embed-v2".into(),
                 dimensions: 1024,
                 api_key: Some("route-key".into()),
+                embedding_api_url: Some("https://api.example.com/v1".into()),
             }
         );
     }
@@ -720,6 +745,7 @@ mod tests {
                 model: "hint:semantic".into(),
                 dimensions: 1536,
                 api_key: Some("base-key".into()),
+                embedding_api_url: None,
             }
         );
     }
@@ -738,6 +764,7 @@ mod tests {
             model: "text-embedding-3-small".into(),
             dimensions: Some(0),
             api_key: None,
+            api_url: None,
         }];
 
         let resolved = resolve_embedding_config(&cfg, &routes, Some("base-key"));
@@ -748,6 +775,7 @@ mod tests {
                 model: "hint:semantic".into(),
                 dimensions: 1536,
                 api_key: Some("base-key".into()),
+                embedding_api_url: None,
             }
         );
     }

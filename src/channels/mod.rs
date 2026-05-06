@@ -1300,7 +1300,10 @@ async fn get_or_create_provider(
     }
 
     let defaults = runtime_defaults_snapshot(ctx);
-    let api_url = if provider_name == defaults.default_provider.as_str() {
+    let api_url = if provider_name == defaults.default_provider.as_str()
+        || provider_name.eq_ignore_ascii_case("openai-custom")
+        || provider_name.eq_ignore_ascii_case("anthropic-custom")
+    {
         defaults.api_url.as_deref()
     } else {
         None
@@ -9523,6 +9526,7 @@ This is an example JSON object for profile settings."#;
             provider: "vision-provider".into(),
             model: "gpt-4-vision".into(),
             api_key: None,
+            api_url: None,
         }];
 
         let runtime_ctx = Arc::new(ChannelRuntimeContext {
@@ -9638,6 +9642,7 @@ This is an example JSON object for profile settings."#;
             provider: "vision-provider".into(),
             model: "gpt-4-vision".into(),
             api_key: None,
+            api_url: None,
         }];
 
         let runtime_ctx = Arc::new(ChannelRuntimeContext {
@@ -9745,6 +9750,7 @@ This is an example JSON object for profile settings."#;
             provider: "vision-provider".into(),
             model: "gpt-4-vision".into(),
             api_key: None,
+            api_url: None,
         }];
 
         let runtime_ctx = Arc::new(ChannelRuntimeContext {
@@ -9865,12 +9871,14 @@ This is an example JSON object for profile settings."#;
                 provider: "fast-provider".into(),
                 model: "fast-model".into(),
                 api_key: None,
+                api_url: None,
             },
             crate::config::ModelRouteConfig {
                 hint: "code".into(),
                 provider: "code-provider".into(),
                 model: "code-model".into(),
                 api_key: None,
+                api_url: None,
             },
         ];
 

@@ -697,9 +697,9 @@ pub struct ProviderRuntimeOptions {
     /// Custom API path suffix for OpenAI-compatible providers
     /// (e.g. "/v2/generate" instead of the default "/chat/completions").
     pub api_path: Option<String>,
-    /// When set, overrides native OpenAI-style tool calling for `custom:...` base URLs.
+    /// When set, overrides native OpenAI-style tool calling for `openai-custom` base URLs.
     /// `None` lets an optional `?native_tool_calling=` query flag apply; if neither is set,
-    /// custom endpoints default to prompt-guided tools (safer for imperfect proxies).
+    /// BYO OpenAI-compatible endpoints default to prompt-guided tools (safer for imperfect proxies).
     pub native_tool_calling: Option<bool>,
 }
 
@@ -852,11 +852,13 @@ fn resolve_provider_credential(name: &str, credential_override: Option<&str>) ->
             } else if name == "anthropic" || name == "openai" || name == "groq" {
                 // For well-known providers, prefer provider-specific env vars over the
                 // global api_key override, since the global key may belong to a different
-                // provider (e.g. a custom: gateway). This enables multi-provider setups
-                // where the primary uses a custom gateway and fallbacks use named providers.
+                // provider (e.g. an openai-custom gateway). This enables multi-provider setups
+                // where the primary uses a BYO gateway and fallbacks use named providers.
                 let env_candidates: &[&str] = match name {
-                    "anthropic" => &["ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
-                    "openai" => &["OPENAI_API_KEY"],
+                    "anthropic" | "anthropic-custom" => {
+                        &["ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"]
+                    }
+                    "openai" | "openai-custom" => &["OPENAI_API_KEY"],
                     "groq" => &["GROQ_API_KEY"],
                     _ => &[],
                 };
@@ -876,9 +878,9 @@ fn resolve_provider_credential(name: &str, credential_override: Option<&str>) ->
     }
 
     let provider_env_candidates: Vec<&str> = match name {
-        "anthropic" => vec!["ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
+        "anthropic" | "anthropic-custom" => vec!["ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
         "openrouter" => vec!["OPENROUTER_API_KEY"],
-        "openai" => vec!["OPENAI_API_KEY"],
+        "openai" | "openai-custom" => vec!["OPENAI_API_KEY"],
         "ollama" => vec!["OLLAMA_API_KEY"],
         "venice" => vec!["VENICE_API_KEY"],
         "groq" => vec!["GROQ_API_KEY"],
@@ -1039,8 +1041,8 @@ fn parse_custom_provider_url(
     }
 }
 
-/// Parse a `custom:https://...` URL, strip `native_tool_calling` from the query string (so it
-/// is not forwarded to the upstream API), and return the optional flag for runtime options.
+/// Parse an OpenAI-compatible BYO base URL from config/env, strip `native_tool_calling` from the
+/// query string (so it is not forwarded to the upstream API), and return the optional flag for runtime options.
 fn parse_openai_custom_provider_url(
     raw_url: &str,
     provider_label: &str,
@@ -1091,6 +1093,31 @@ fn parse_openai_custom_provider_url(
     }
 
     Ok((parsed.to_string(), native_from_query))
+}
+
+/// HTTP(S) base URL for `openai-custom` / `anthropic-custom`.
+///
+/// Non-empty `api_url` from config wins so values like `?native_tool_calling=true` are honored.
+/// Otherwise uses `MIROCLAW_PROVIDER_URL` (same escape hatch as remote [`ollama`](crate::providers::ollama)).
+pub(crate) fn resolve_byo_provider_http_base(api_url: Option<&str>) -> anyhow::Result<String> {
+    let from_config = api_url
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(ToString::to_string);
+    if let Some(url) = from_config {
+        return Ok(url);
+    }
+    let env_url = std::env::var("MIROCLAW_PROVIDER_URL").ok();
+    env_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "openai-custom and anthropic-custom require api_url in config or MIROCLAW_PROVIDER_URL"
+            )
+        })
 }
 
 fn parse_native_tool_query_value(raw: &str) -> bool {
@@ -1177,7 +1204,8 @@ fn create_provider_with_url_and_options(
 
     // Pre-flight: catch obvious API-key / provider mismatches early.
     if let Some(key_value) = key {
-        let is_custom = name.starts_with("custom:") || name.starts_with("anthropic-custom:");
+        let is_custom = name.eq_ignore_ascii_case("openai-custom")
+            || name.eq_ignore_ascii_case("anthropic-custom");
         let has_custom_url = api_url.map(str::trim).filter(|u| !u.is_empty()).is_some();
         if !is_custom && !has_custom_url {
             if let Some(likely_provider) = check_api_key_prefix(name, key_value) {
@@ -1594,13 +1622,13 @@ fn create_provider_with_url_and_options(
             key,
         ))),
 
-        // ── Bring Your Own Provider (custom URL) ───────────
-        // Format: "custom:https://your-api.com" or "custom:http://localhost:1234"
-        name if name.starts_with("custom:") => {
+        // ── Bring-your-own HTTP endpoints (same api_url / MIROCLAW_PROVIDER_URL as `ollama`) ──
+        "openai-custom" => {
+            let url_input = resolve_byo_provider_http_base(api_url)?;
             let (base_url, native_from_query) = parse_openai_custom_provider_url(
-                name.strip_prefix("custom:").unwrap_or(""),
-                "Custom provider",
-                "custom:https://your-api.com",
+                &url_input,
+                "openai-custom provider",
+                "Set api_url or MIROCLAW_PROVIDER_URL (optional ?native_tool_calling=true)",
             )?;
             let native_enabled = options
                 .native_tool_calling
@@ -1621,13 +1649,12 @@ fn create_provider_with_url_and_options(
             Ok(compat(provider))
         }
 
-        // ── Anthropic-compatible custom endpoints ───────────
-        // Format: "anthropic-custom:https://your-api.com"
-        name if name.starts_with("anthropic-custom:") => {
+        "anthropic-custom" => {
+            let url_input = resolve_byo_provider_http_base(api_url)?;
             let base_url = parse_custom_provider_url(
-                name.strip_prefix("anthropic-custom:").unwrap_or(""),
-                "Anthropic-custom provider",
-                "anthropic-custom:https://your-api.com",
+                &url_input,
+                "anthropic-custom provider",
+                "Set api_url or MIROCLAW_PROVIDER_URL",
             )?;
             Ok(Box::new(anthropic::AnthropicProvider::with_base_url(
                 key,
@@ -1637,8 +1664,8 @@ fn create_provider_with_url_and_options(
 
         _ => anyhow::bail!(
             "Unknown provider: {name}. Check README for supported providers or run `zeroclaw onboard` to reconfigure.\n\
-             Tip: Use \"custom:https://your-api.com\" for OpenAI-compatible endpoints.\n\
-             Tip: Use \"anthropic-custom:https://your-api.com\" for Anthropic-compatible endpoints."
+             Tip: Use \"openai-custom\" with `api_url` for OpenAI-compatible endpoints.\n\
+             Tip: Use \"anthropic-custom\" with `api_url` for Anthropic-compatible endpoints."
         ),
     }
 }
@@ -1646,17 +1673,40 @@ fn create_provider_with_url_and_options(
 /// Parse `"provider:profile"` syntax for fallback entries.
 ///
 /// Returns `(provider_name, Some(profile))` when the entry contains a colon-
-/// delimited profile, or `(original_str, None)` otherwise.  Entries starting
-/// with `custom:` or `anthropic-custom:` are left untouched because the colon
-/// is part of the URL scheme.
+/// delimited profile, or `(original_str, None)` otherwise.
 fn parse_provider_profile(s: &str) -> (&str, Option<&str>) {
-    if s.starts_with("custom:") || s.starts_with("anthropic-custom:") {
-        return (s, None);
-    }
     match s.split_once(':') {
         Some((provider, profile)) if !profile.is_empty() => (provider, Some(profile)),
         _ => (s, None),
     }
+}
+
+fn routed_provider_api_url(
+    name: &str,
+    primary_name: &str,
+    global_api_url: Option<&str>,
+    model_routes: &[crate::config::ModelRouteConfig],
+) -> Option<String> {
+    if name == primary_name {
+        return global_api_url.map(ToString::to_string);
+    }
+    if name.eq_ignore_ascii_case("openai-custom") || name.eq_ignore_ascii_case("anthropic-custom") {
+        if let Some(url) = model_routes
+            .iter()
+            .filter(|r| r.provider == name)
+            .find_map(|r| {
+                r.api_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|u| !u.is_empty())
+                    .map(ToString::to_string)
+            })
+        {
+            return Some(url);
+        }
+        return global_api_url.map(ToString::to_string);
+    }
+    None
 }
 
 /// Create provider chain with retry and fallback behavior.
@@ -1718,7 +1768,19 @@ pub fn create_resilient_provider_with_options(
             None => options.clone(),
         };
 
-        match create_provider_with_options(provider_name, None, &fallback_options) {
+        let created = match provider_name {
+            "openai-codex" | "openai_codex" | "codex" => {
+                create_provider_with_options(provider_name, None, &fallback_options)
+            }
+            _ => create_provider_with_url_and_options(
+                provider_name,
+                None,
+                api_url,
+                &fallback_options,
+            ),
+        };
+
+        match created {
             Ok(provider) => providers.push((fallback.clone(), provider)),
             Err(_error) => {
                 tracing::warn!(
@@ -1803,8 +1865,8 @@ pub fn create_routed_provider_with_options(
                 })
             });
         let key = routed_credential.or(api_key);
-        // Only use api_url for the primary provider
-        let url = if name == primary_name { api_url } else { None };
+        let url_holder = routed_provider_api_url(name, primary_name, api_url, model_routes);
+        let url = url_holder.as_deref();
         match create_resilient_provider_with_options(name, key, url, reliability, options) {
             Ok(provider) => providers.push((name.clone(), provider)),
             Err(e) => {
@@ -1900,6 +1962,18 @@ pub fn list_providers() -> Vec<ProviderInfo> {
             display_name: "Ollama",
             aliases: &[],
             local: true,
+        },
+        ProviderInfo {
+            name: "openai-custom",
+            display_name: "OpenAI-compatible (BYO URL)",
+            aliases: &[],
+            local: false,
+        },
+        ProviderInfo {
+            name: "anthropic-custom",
+            display_name: "Anthropic-compatible (BYO URL)",
+            aliases: &[],
+            local: false,
         },
         ProviderInfo {
             name: "gemini",
@@ -3001,158 +3075,185 @@ mod tests {
         assert_eq!(resolved, Some("dm-test-key".to_string()));
     }
 
-    // ── Custom / BYOP provider ─────────────────────────────
+    // ── BYO HTTP providers (openai-custom / anthropic-custom) ───
 
     #[test]
-    fn factory_custom_url() {
-        let p = create_provider("custom:https://my-llm.example.com", Some("key"));
+    fn factory_openai_custom_url() {
+        let p = create_provider_with_url(
+            "openai-custom",
+            Some("key"),
+            Some("https://my-llm.example.com"),
+        );
         assert!(p.is_ok());
     }
 
     #[test]
-    fn factory_custom_url_defaults_to_text_only_no_vision() {
-        let provider = create_provider("custom:https://my-llm.example.com", Some("key"))
-            .expect("custom provider should build");
+    fn factory_openai_custom_defaults_to_text_only_no_vision() {
+        let provider = create_provider_with_url(
+            "openai-custom",
+            Some("key"),
+            Some("https://my-llm.example.com"),
+        )
+        .expect("openai-custom provider should build");
         assert!(
             !provider.supports_vision(),
-            "custom: OpenAI-compatible endpoints default to text-only; multimodal requires mmproj / a vision-capable backend"
+            "openai-custom defaults to text-only; multimodal requires mmproj / a vision-capable backend"
         );
         assert!(
             !provider.capabilities().native_tool_calling,
-            "custom: endpoints default to prompt-guided tools; many proxies mishandle native tools"
+            "openai-custom defaults to prompt-guided tools; many proxies mishandle native tools"
         );
     }
 
     #[test]
-    fn factory_custom_url_native_tools_opt_in_via_runtime_options() {
+    fn factory_openai_custom_native_tools_opt_in_via_runtime_options() {
         let options = ProviderRuntimeOptions {
             native_tool_calling: Some(true),
             ..ProviderRuntimeOptions::default()
         };
         let provider = create_provider_with_url_and_options(
-            "custom:https://my-llm.example.com/v1",
+            "openai-custom",
             Some("key"),
-            None,
+            Some("https://my-llm.example.com/v1"),
             &options,
         )
-        .expect("custom provider should build");
+        .expect("openai-custom provider should build");
         assert!(provider.capabilities().native_tool_calling);
     }
 
     #[test]
-    fn factory_custom_url_strips_native_tool_query_and_enables_tools() {
+    fn factory_openai_custom_strips_native_tool_query_and_enables_tools() {
+        let _env_lock = env_lock();
+        let _url = EnvGuard::set("MIROCLAW_PROVIDER_URL", None);
         let options = ProviderRuntimeOptions::default();
         let provider = create_provider_with_url_and_options(
-            "custom:https://my-llm.example.com/v1?native_tool_calling=true",
+            "openai-custom",
             Some("key"),
-            None,
+            Some("https://my-llm.example.com/v1?native_tool_calling=true"),
             &options,
         )
-        .expect("custom provider should build");
+        .expect("openai-custom provider should build");
         assert!(provider.capabilities().native_tool_calling);
     }
 
     #[test]
-    fn factory_custom_localhost() {
-        let p = create_provider("custom:http://localhost:1234", Some("key"));
+    fn factory_openai_custom_localhost() {
+        let p =
+            create_provider_with_url("openai-custom", Some("key"), Some("http://localhost:1234"));
         assert!(p.is_ok());
     }
 
     #[test]
-    fn factory_custom_no_key() {
-        let p = create_provider("custom:https://my-llm.example.com", None);
+    fn factory_openai_custom_no_key() {
+        let p = create_provider_with_url("openai-custom", None, Some("https://my-llm.example.com"));
         assert!(p.is_ok());
     }
 
     #[test]
-    fn factory_custom_empty_url_errors() {
-        match create_provider("custom:", None) {
+    fn factory_openai_custom_missing_base_errors() {
+        let _env_lock = env_lock();
+        let _url = EnvGuard::set("MIROCLAW_PROVIDER_URL", None);
+        match create_provider("openai-custom", Some("key")) {
             Err(e) => assert!(
-                e.to_string().contains("requires a URL"),
-                "Expected 'requires a URL', got: {e}"
+                e.to_string().contains("MIROCLAW_PROVIDER_URL")
+                    || e.to_string().contains("api_url"),
+                "Expected BYO base URL error, got: {e}"
             ),
-            Ok(_) => panic!("Expected error for empty custom URL"),
+            Ok(_) => panic!("Expected error when api_url and env are unset"),
         }
     }
 
     #[test]
-    fn factory_custom_invalid_url_errors() {
-        match create_provider("custom:not-a-url", None) {
-            Err(e) => assert!(
-                e.to_string().contains("requires a valid URL"),
-                "Expected 'requires a valid URL', got: {e}"
-            ),
-            Ok(_) => panic!("Expected error for invalid custom URL"),
+    fn factory_openai_custom_invalid_url_errors() {
+        let _env_lock = env_lock();
+        let _url = EnvGuard::set("MIROCLAW_PROVIDER_URL", None);
+        match create_provider_with_url("openai-custom", None, Some("not-a-url")) {
+            Err(e) => assert!(e.to_string().contains("valid URL"), "got: {e}"),
+            Ok(_) => panic!("expected invalid URL error"),
         }
     }
 
     #[test]
-    fn factory_custom_unsupported_scheme_errors() {
-        match create_provider("custom:ftp://example.com", None) {
-            Err(e) => assert!(
-                e.to_string().contains("http:// or https://"),
-                "Expected scheme validation error, got: {e}"
-            ),
-            Ok(_) => panic!("Expected error for unsupported custom URL scheme"),
+    fn factory_openai_custom_unsupported_scheme_errors() {
+        let _env_lock = env_lock();
+        let _url = EnvGuard::set("MIROCLAW_PROVIDER_URL", None);
+        match create_provider_with_url("openai-custom", None, Some("ftp://example.com")) {
+            Err(e) => {
+                assert!(e.to_string().contains("http://") || e.to_string().contains("https://"));
+            }
+            Ok(_) => panic!("expected unsupported scheme error"),
         }
     }
 
     #[test]
-    fn factory_custom_trims_whitespace() {
-        let p = create_provider("custom:  https://my-llm.example.com  ", Some("key"));
+    fn factory_openai_custom_resolves_via_miroclaw_provider_url_env() {
+        let _env_lock = env_lock();
+        let _guard = EnvGuard::set("MIROCLAW_PROVIDER_URL", Some("https://my-llm.example.com"));
+        let p = create_provider("openai-custom", Some("key"));
         assert!(p.is_ok());
     }
 
-    // ── Anthropic-compatible custom endpoints ─────────────────
+    // ── Anthropic-compatible BYO ─────────────────────────────
 
     #[test]
     fn factory_anthropic_custom_url() {
-        let p = create_provider("anthropic-custom:https://api.example.com", Some("key"));
+        let p = create_provider_with_url(
+            "anthropic-custom",
+            Some("key"),
+            Some("https://api.example.com"),
+        );
         assert!(p.is_ok());
     }
 
     #[test]
     fn factory_anthropic_custom_trailing_slash() {
-        let p = create_provider("anthropic-custom:https://api.example.com/", Some("key"));
+        let p = create_provider_with_url(
+            "anthropic-custom",
+            Some("key"),
+            Some("https://api.example.com/"),
+        );
         assert!(p.is_ok());
     }
 
     #[test]
     fn factory_anthropic_custom_no_key() {
-        let p = create_provider("anthropic-custom:https://api.example.com", None);
+        let p = create_provider_with_url("anthropic-custom", None, Some("https://api.example.com"));
         assert!(p.is_ok());
     }
 
     #[test]
-    fn factory_anthropic_custom_empty_url_errors() {
-        match create_provider("anthropic-custom:", None) {
+    fn factory_anthropic_custom_missing_base_errors() {
+        let _env_lock = env_lock();
+        let _url = EnvGuard::set("MIROCLAW_PROVIDER_URL", None);
+        match create_provider("anthropic-custom", Some("key")) {
             Err(e) => assert!(
-                e.to_string().contains("requires a URL"),
-                "Expected 'requires a URL', got: {e}"
+                e.to_string().contains("MIROCLAW_PROVIDER_URL")
+                    || e.to_string().contains("api_url"),
+                "got: {e}"
             ),
-            Ok(_) => panic!("Expected error for empty anthropic-custom URL"),
+            Ok(_) => panic!("Expected error when api_url and env are unset"),
         }
     }
 
     #[test]
     fn factory_anthropic_custom_invalid_url_errors() {
-        match create_provider("anthropic-custom:not-a-url", None) {
-            Err(e) => assert!(
-                e.to_string().contains("requires a valid URL"),
-                "Expected 'requires a valid URL', got: {e}"
-            ),
-            Ok(_) => panic!("Expected error for invalid anthropic-custom URL"),
+        let _env_lock = env_lock();
+        let _url = EnvGuard::set("MIROCLAW_PROVIDER_URL", None);
+        match create_provider_with_url("anthropic-custom", None, Some("not-a-url")) {
+            Err(e) => assert!(e.to_string().contains("valid URL"), "got: {e}"),
+            Ok(_) => panic!("expected invalid URL error"),
         }
     }
 
     #[test]
     fn factory_anthropic_custom_unsupported_scheme_errors() {
-        match create_provider("anthropic-custom:ftp://example.com", None) {
-            Err(e) => assert!(
-                e.to_string().contains("http:// or https://"),
-                "Expected scheme validation error, got: {e}"
-            ),
-            Ok(_) => panic!("Expected error for unsupported anthropic-custom URL scheme"),
+        let _env_lock = env_lock();
+        let _url = EnvGuard::set("MIROCLAW_PROVIDER_URL", None);
+        match create_provider_with_url("anthropic-custom", None, Some("ftp://example.com")) {
+            Err(e) => {
+                assert!(e.to_string().contains("http://") || e.to_string().contains("https://"));
+            }
+            Ok(_) => panic!("expected unsupported scheme error"),
         }
     }
 
@@ -3236,14 +3337,18 @@ mod tests {
         assert!(provider.is_ok());
     }
 
-    /// `custom:` URL entries work as fallback providers, enabling arbitrary
-    /// OpenAI-compatible endpoints (e.g. local LM Studio on a Docker host).
+    /// `openai-custom` entries work as fallback providers when `MIROCLAW_PROVIDER_URL` is set.
     #[test]
-    fn resilient_fallback_supports_custom_url() {
+    fn resilient_fallback_supports_openai_custom_via_env_url() {
+        let _env_lock = env_lock();
+        let _miro = EnvGuard::set(
+            "MIROCLAW_PROVIDER_URL",
+            Some("http://host.docker.internal:1234/v1"),
+        );
         let reliability = crate::config::ReliabilityConfig {
             provider_retries: 1,
             provider_backoff_ms: 100,
-            fallback_providers: vec!["custom:http://host.docker.internal:1234/v1".into()],
+            fallback_providers: vec!["openai-custom".into()],
             api_keys: Vec::new(),
             model_fallbacks: std::collections::HashMap::new(),
             channel_initial_backoff_secs: 2,
@@ -3257,16 +3362,18 @@ mod tests {
         assert!(provider.is_ok());
     }
 
-    /// Mixed fallback chain: named providers, custom URLs, and invalid entries
+    /// Mixed fallback chain: named providers, BYO OpenAI-compatible, and invalid entries
     /// all coexist.  Invalid entries are silently ignored; valid ones initialize.
     #[test]
     fn resilient_fallback_mixed_chain() {
+        let _env_lock = env_lock();
+        let _miro = EnvGuard::set("MIROCLAW_PROVIDER_URL", Some("http://localhost:8080/v1"));
         let reliability = crate::config::ReliabilityConfig {
             provider_retries: 1,
             provider_backoff_ms: 100,
             fallback_providers: vec![
                 "deepseek".into(),
-                "custom:http://localhost:8080/v1".into(),
+                "openai-custom".into(),
                 "nonexistent-provider".into(),
                 "lmstudio".into(),
             ],
@@ -3410,16 +3517,28 @@ mod tests {
 
     #[test]
     fn listed_providers_and_aliases_are_constructible() {
+        let cred = Some("provider-test-credential");
+        let byo_test_base = "https://listed-provider-test.example/v1";
+        let construct = |name: &str| {
+            if name.eq_ignore_ascii_case("openai-custom")
+                || name.eq_ignore_ascii_case("anthropic-custom")
+            {
+                create_provider_with_url(name, cred, Some(byo_test_base))
+            } else {
+                create_provider(name, cred)
+            }
+        };
+
         for provider in list_providers() {
             assert!(
-                create_provider(provider.name, Some("provider-test-credential")).is_ok(),
+                construct(provider.name).is_ok(),
                 "Canonical provider id should be constructible: {}",
                 provider.name
             );
 
             for alias in provider.aliases {
                 assert!(
-                    create_provider(alias, Some("provider-test-credential")).is_ok(),
+                    construct(alias).is_ok(),
                     "Provider alias should be constructible: {} (for {})",
                     alias,
                     provider.name
@@ -3561,19 +3680,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_provider_profile_custom_url_not_split() {
-        let input = "custom:https://my-api.example.com/v1";
-        let (name, profile) = parse_provider_profile(input);
-        assert_eq!(name, input);
-        assert_eq!(profile, None);
+    fn parse_provider_profile_openai_custom_with_profile_splits() {
+        let (name, profile) = parse_provider_profile("openai-custom:workspace-a");
+        assert_eq!(name, "openai-custom");
+        assert_eq!(profile, Some("workspace-a"));
     }
 
     #[test]
-    fn parse_provider_profile_anthropic_custom_not_split() {
-        let input = "anthropic-custom:https://bedrock.example.com";
-        let (name, profile) = parse_provider_profile(input);
-        assert_eq!(name, input);
-        assert_eq!(profile, None);
+    fn parse_provider_profile_anthropic_custom_with_profile_splits() {
+        let (name, profile) = parse_provider_profile("anthropic-custom:workspace-b");
+        assert_eq!(name, "anthropic-custom");
+        assert_eq!(profile, Some("workspace-b"));
     }
 
     #[test]
@@ -3619,13 +3736,14 @@ mod tests {
     #[test]
     fn resilient_fallback_mixed_profiles_and_custom() {
         let _guard = env_lock();
+        let _miro = EnvGuard::set("MIROCLAW_PROVIDER_URL", Some("http://localhost:8080/v1"));
 
         let reliability = crate::config::ReliabilityConfig {
             provider_retries: 1,
             provider_backoff_ms: 100,
             fallback_providers: vec![
                 "openai-codex:second".into(),
-                "custom:http://localhost:8080/v1".into(),
+                "openai-custom".into(),
                 "lmstudio".into(),
                 "nonexistent-provider".into(),
             ],

@@ -161,8 +161,9 @@ pub fn create_embedding_provider(
     api_key: Option<&str>,
     model: &str,
     dims: usize,
+    embedding_api_url: Option<&str>,
 ) -> Box<dyn EmbeddingProvider> {
-    match provider {
+    match provider.trim() {
         "openai" => {
             let key = api_key.unwrap_or("");
             Box::new(OpenAiEmbedding::new(
@@ -181,10 +182,26 @@ pub fn create_embedding_provider(
                 dims,
             ))
         }
-        name if name.starts_with("custom:") => {
-            let base_url = name.strip_prefix("custom:").unwrap_or("");
+        "openai-custom" => {
             let key = api_key.unwrap_or("");
-            Box::new(OpenAiEmbedding::new(base_url, key, model, dims))
+            let base_url = embedding_api_url
+                .map(str::trim)
+                .filter(|u| !u.is_empty())
+                .map(ToString::to_string)
+                .or_else(|| {
+                    std::env::var("MIROCLAW_EMBEDDING_URL")
+                        .ok()
+                        .map(|v| v.trim().to_string())
+                        .filter(|v| !v.is_empty())
+                })
+                .or_else(|| {
+                    std::env::var("MIROCLAW_PROVIDER_URL")
+                        .ok()
+                        .map(|v| v.trim().to_string())
+                        .filter(|v| !v.is_empty())
+                })
+                .unwrap_or_default();
+            Box::new(OpenAiEmbedding::new(&base_url, key, model, dims))
         }
         _ => Box::new(NoopEmbedding),
     }
@@ -210,13 +227,14 @@ mod tests {
 
     #[test]
     fn factory_none() {
-        let p = create_embedding_provider("none", None, "model", 1536);
+        let p = create_embedding_provider("none", None, "model", 1536, None);
         assert_eq!(p.name(), "none");
     }
 
     #[test]
     fn factory_openai() {
-        let p = create_embedding_provider("openai", Some("key"), "text-embedding-3-small", 1536);
+        let p =
+            create_embedding_provider("openai", Some("key"), "text-embedding-3-small", 1536, None);
         assert_eq!(p.name(), "openai");
         assert_eq!(p.dimensions(), 1536);
     }
@@ -228,14 +246,21 @@ mod tests {
             Some("sk-or-test"),
             "openai/text-embedding-3-small",
             1536,
+            None,
         );
         assert_eq!(p.name(), "openai"); // uses OpenAiEmbedding internally
         assert_eq!(p.dimensions(), 1536);
     }
 
     #[test]
-    fn factory_custom_url() {
-        let p = create_embedding_provider("custom:http://localhost:1234", None, "model", 768);
+    fn factory_openai_custom_url() {
+        let p = create_embedding_provider(
+            "openai-custom",
+            None,
+            "model",
+            768,
+            Some("http://localhost:1234"),
+        );
         assert_eq!(p.name(), "openai"); // uses OpenAiEmbedding internally
         assert_eq!(p.dimensions(), 768);
     }
@@ -266,26 +291,25 @@ mod tests {
 
     #[test]
     fn factory_empty_string_returns_noop() {
-        let p = create_embedding_provider("", None, "model", 1536);
+        let p = create_embedding_provider("", None, "model", 1536, None);
         assert_eq!(p.name(), "none");
     }
 
     #[test]
     fn factory_unknown_provider_returns_noop() {
-        let p = create_embedding_provider("cohere", None, "model", 1536);
+        let p = create_embedding_provider("cohere", None, "model", 1536, None);
         assert_eq!(p.name(), "none");
     }
 
     #[test]
-    fn factory_custom_empty_url() {
-        // "custom:" with no URL — should still construct without panic
-        let p = create_embedding_provider("custom:", None, "model", 768);
+    fn factory_openai_custom_empty_base_still_constructs() {
+        let p = create_embedding_provider("openai-custom", None, "model", 768, None);
         assert_eq!(p.name(), "openai");
     }
 
     #[test]
     fn factory_openai_no_api_key() {
-        let p = create_embedding_provider("openai", None, "text-embedding-3-small", 1536);
+        let p = create_embedding_provider("openai", None, "text-embedding-3-small", 1536, None);
         assert_eq!(p.name(), "openai");
         assert_eq!(p.dimensions(), 1536);
     }

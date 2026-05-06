@@ -456,6 +456,7 @@ fn memory_config_defaults_for_backend(backend: &str) -> MemoryConfig {
         purge_after_days: if profile.uses_sqlite_hygiene { 30 } else { 0 },
         conversation_retention_days: 30,
         embedding_provider: "none".to_string(),
+        embedding_api_url: None,
         embedding_model: "text-embedding-3-small".to_string(),
         embedding_dimensions: 1536,
         vector_weight: 0.7,
@@ -1376,7 +1377,7 @@ fn curated_models_for_provider(provider_name: &str) -> Vec<(String, String)> {
 }
 
 fn supports_live_model_fetch(provider_name: &str) -> bool {
-    if provider_name.trim().starts_with("custom:") {
+    if provider_name.trim().eq_ignore_ascii_case("openai-custom") {
         return true;
     }
 
@@ -1674,15 +1675,18 @@ fn resolve_live_models_endpoint(
     provider_name: &str,
     provider_api_url: Option<&str>,
 ) -> Option<String> {
-    if let Some(raw_base) = provider_name.strip_prefix("custom:") {
-        let normalized = raw_base.trim().trim_end_matches('/');
-        if normalized.is_empty() {
-            return None;
+    if provider_name.trim().eq_ignore_ascii_case("openai-custom") {
+        if let Some(url) = provider_api_url
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+        {
+            let normalized = url.trim_end_matches('/');
+            if normalized.ends_with("/models") {
+                return Some(normalized.to_string());
+            }
+            return Some(format!("{normalized}/models"));
         }
-        if normalized.ends_with("/models") {
-            return Some(normalized.to_string());
-        }
-        return Some(format!("{normalized}/models"));
+        return None;
     }
 
     if matches!(
@@ -2496,7 +2500,7 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
             .default("default")
             .interact_text()?;
 
-        let provider_name = format!("custom:{base_url}");
+        let provider_name = "openai-custom".to_string();
 
         println!(
             "  {} Provider: {} | Model: {}",
@@ -2505,7 +2509,7 @@ async fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String,
             style(&model).green()
         );
 
-        return Ok((provider_name, api_key, model, None));
+        return Ok((provider_name, api_key, model, Some(base_url)));
     }
 
     let provider_labels: Vec<&str> = providers.iter().map(|(_, label)| *label).collect();
@@ -7281,13 +7285,16 @@ mod tests {
     }
 
     #[test]
-    fn resolve_live_models_endpoint_supports_custom_provider_urls() {
+    fn resolve_live_models_endpoint_supports_openai_custom_api_url() {
         assert_eq!(
-            resolve_live_models_endpoint("custom:https://proxy.example.com/v1", None),
+            resolve_live_models_endpoint("openai-custom", Some("https://proxy.example.com/v1"),),
             Some("https://proxy.example.com/v1/models".to_string())
         );
         assert_eq!(
-            resolve_live_models_endpoint("custom:https://proxy.example.com/v1/models", None),
+            resolve_live_models_endpoint(
+                "openai-custom",
+                Some("https://proxy.example.com/v1/models"),
+            ),
             Some("https://proxy.example.com/v1/models".to_string())
         );
     }

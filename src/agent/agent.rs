@@ -1881,7 +1881,8 @@ mod tests {
         config.workspace_dir = workspace_dir;
         config.config_path = tmp.path().join("config.toml");
         config.api_key = Some("test-key".to_string());
-        config.default_provider = Some(format!("custom:http://{addr}"));
+        config.default_provider = Some("openai-custom".into());
+        config.api_url = Some(format!("http://{addr}"));
         config.default_model = Some("test-model".to_string());
         config.memory.backend = "none".to_string();
         config.memory.auto_save = false;

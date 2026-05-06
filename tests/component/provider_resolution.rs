@@ -96,22 +96,30 @@ fn factory_zhipu_alias_resolves_to_glm() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Custom URL provider creation
+// BYO OpenAI / Anthropic HTTP providers
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
-fn factory_custom_http_url_resolves() {
-    assert_provider_ok("custom:http://localhost:8080", Some("test-key"), None);
+fn factory_openai_custom_http_url_resolves() {
+    assert_provider_ok(
+        "openai-custom",
+        Some("test-key"),
+        Some("http://localhost:8080"),
+    );
 }
 
 #[test]
-fn factory_custom_https_url_resolves() {
-    assert_provider_ok("custom:https://api.example.com/v1", Some("test-key"), None);
+fn factory_openai_custom_https_url_resolves() {
+    assert_provider_ok(
+        "openai-custom",
+        Some("test-key"),
+        Some("https://api.example.com/v1"),
+    );
 }
 
 #[test]
-fn factory_custom_ftp_url_rejected() {
-    let result = create_provider_with_url("custom:ftp://example.com", None, None);
+fn factory_openai_custom_ftp_url_rejected() {
+    let result = create_provider_with_url("openai-custom", None, Some("ftp://example.com"));
     assert!(result.is_err(), "ftp scheme should be rejected");
     let err_msg = result.err().unwrap().to_string();
     assert!(
@@ -121,9 +129,9 @@ fn factory_custom_ftp_url_rejected() {
 }
 
 #[test]
-fn factory_custom_empty_url_rejected() {
-    let result = create_provider_with_url("custom:", None, None);
-    assert!(result.is_err(), "empty custom URL should be rejected");
+fn factory_openai_custom_missing_base_rejected() {
+    let result = create_provider_with_url("openai-custom", Some("test-key"), None);
+    assert!(result.is_err(), "missing api_url/env should be rejected");
 }
 
 #[test]
@@ -472,8 +480,8 @@ fn factory_ovh_alias_resolves_to_ovhcloud() {
 #[test]
 fn factory_anthropic_custom_endpoint_resolves() {
     assert_provider_ok(
-        "anthropic-custom:https://api.example.com",
+        "anthropic-custom",
         Some("test-key"),
-        None,
+        Some("https://api.example.com"),
     );
 }

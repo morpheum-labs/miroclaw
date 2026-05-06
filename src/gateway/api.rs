@@ -1825,6 +1825,7 @@ mod tests {
             provider: "openrouter".to_string(),
             model: "anthropic/claude-sonnet-4.6".to_string(),
             api_key: Some("route-model-key".to_string()),
+            api_url: None,
         }];
         cfg.embedding_routes = vec![crate::config::schema::EmbeddingRouteConfig {
             hint: "semantic".to_string(),
@@ -1832,6 +1833,7 @@ mod tests {
             model: "text-embedding-3-small".to_string(),
             dimensions: Some(1536),
             api_key: Some("route-embed-key".to_string()),
+            api_url: None,
         }];
 
         let masked = mask_sensitive_fields(&cfg);
@@ -1962,12 +1964,14 @@ mod tests {
                 provider: "openrouter".to_string(),
                 model: "anthropic/claude-sonnet-4.6".to_string(),
                 api_key: Some("route-model-key-1".to_string()),
+                api_url: None,
             },
             crate::config::schema::ModelRouteConfig {
                 hint: "fast".to_string(),
                 provider: "openrouter".to_string(),
                 model: "openai/gpt-4.1-mini".to_string(),
                 api_key: Some("route-model-key-2".to_string()),
+                api_url: None,
             },
         ];
         current.embedding_routes = vec![
@@ -1977,13 +1981,15 @@ mod tests {
                 model: "text-embedding-3-small".to_string(),
                 dimensions: Some(1536),
                 api_key: Some("route-embed-key-1".to_string()),
+                api_url: None,
             },
             crate::config::schema::EmbeddingRouteConfig {
                 hint: "archive".to_string(),
-                provider: "custom:https://emb.example.com/v1".to_string(),
+                provider: "openai-custom".to_string(),
                 model: "bge-m3".to_string(),
                 dimensions: Some(1024),
                 api_key: Some("route-embed-key-2".to_string()),
+                api_url: Some("https://emb.example.com/v1".to_string()),
             },
         ];
 
@@ -2114,12 +2120,14 @@ mod tests {
                 provider: "openrouter".to_string(),
                 model: "anthropic/claude-sonnet-4.6".to_string(),
                 api_key: Some("route-model-key-1".to_string()),
+                api_url: None,
             },
             crate::config::schema::ModelRouteConfig {
                 hint: "fast".to_string(),
                 provider: "openrouter".to_string(),
                 model: "openai/gpt-4.1-mini".to_string(),
                 api_key: Some("route-model-key-2".to_string()),
+                api_url: None,
             },
         ];
         current.embedding_routes = vec![
@@ -2129,13 +2137,15 @@ mod tests {
                 model: "text-embedding-3-small".to_string(),
                 dimensions: Some(1536),
                 api_key: Some("route-embed-key-1".to_string()),
+                api_url: None,
             },
             crate::config::schema::EmbeddingRouteConfig {
                 hint: "archive".to_string(),
-                provider: "custom:https://emb.example.com/v1".to_string(),
+                provider: "openai-custom".to_string(),
                 model: "bge-m3".to_string(),
                 dimensions: Some(1024),
                 api_key: Some("route-embed-key-2".to_string()),
+                api_url: Some("https://emb.example.com/v1".to_string()),
             },
         ];
 
@@ -2149,15 +2159,17 @@ mod tests {
                 provider: "openai".to_string(),
                 model: "gpt-4.1".to_string(),
                 api_key: Some(MASKED_SECRET.to_string()),
+                api_url: None,
             });
         incoming
             .embedding_routes
             .push(crate::config::schema::EmbeddingRouteConfig {
                 hint: "new-embed".to_string(),
-                provider: "custom:https://emb2.example.com/v1".to_string(),
+                provider: "openai-custom".to_string(),
                 model: "bge-small".to_string(),
                 dimensions: Some(768),
                 api_key: Some(MASKED_SECRET.to_string()),
+                api_url: Some("https://emb2.example.com/v1".to_string()),
             });
 
         let hydrated = hydrate_config_for_save(incoming, &current);

@@ -86,9 +86,9 @@ pub struct Config {
     /// (e.g. "/v2/generate" instead of the default "/v1/chat/completions").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_path: Option<String>,
-    /// When `default_provider` is a `custom:https://...` OpenAI-compatible URL, opt into native
-    /// `tools` / `tool_choice` requests. Most self-hosted and proxy endpoints handle these poorly;
-    /// the default is off (prompt-guided tools). Omit or set `false` unless you verified support.
+    /// When `default_provider` is `openai-custom`, opt into native `tools` / `tool_choice` requests.
+    /// Most self-hosted and proxy endpoints handle these poorly; the default is off (prompt-guided tools).
+    /// Omit or set `false` unless you verified support.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_tool_calling: Option<bool>,
     /// Default provider ID or alias (e.g. `"openrouter"`, `"ollama"`, `"anthropic"`). Default: `"openrouter"`.
@@ -518,7 +518,7 @@ pub struct ModelProviderConfig {
     /// default "/v1/chat/completions"). Only used by OpenAI-compatible / custom providers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_path: Option<String>,
-    /// For profiles that map to `custom:...`, opt into native OpenAI-style tool calling when unset at top level.
+    /// For profiles that map to `openai-custom`, opt into native OpenAI-style tool calling when unset at top level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_tool_calling: Option<bool>,
     /// Provider protocol variant ("responses" or "chat_completions").
@@ -5122,9 +5122,12 @@ pub struct MemoryConfig {
     /// For sqlite backend: prune conversation rows older than this many days
     #[serde(default = "default_conversation_retention_days")]
     pub conversation_retention_days: u32,
-    /// Embedding provider: "none" | "openai" | "custom:URL"
+    /// Embedding provider: "none" | "openai" | "openai-custom"
     #[serde(default = "default_embedding_provider")]
     pub embedding_provider: String,
+    /// Base URL when `embedding_provider` is `openai-custom` (or override via env; see docs).
+    #[serde(default)]
+    pub embedding_api_url: Option<String>,
     /// Embedding model name (e.g. "text-embedding-3-small")
     #[serde(default = "default_embedding_model")]
     pub embedding_model: String,
@@ -5322,6 +5325,7 @@ impl Default for MemoryConfig {
             purge_after_days: default_purge_after_days(),
             conversation_retention_days: default_conversation_retention_days(),
             embedding_provider: default_embedding_provider(),
+            embedding_api_url: None,
             embedding_model: default_embedding_model(),
             embedding_dimensions: default_embedding_dims(),
             vector_weight: default_vector_weight(),
@@ -5888,6 +5892,9 @@ pub struct ModelRouteConfig {
     /// Optional API key override for this route's provider
     #[serde(default)]
     pub api_key: Option<String>,
+    /// Optional base URL for this route when `provider` is `openai-custom` or `anthropic-custom`.
+    #[serde(default)]
+    pub api_url: Option<String>,
 }
 
 // ── Embedding routing ───────────────────────────────────────────
@@ -5908,7 +5915,7 @@ pub struct ModelRouteConfig {
 pub struct EmbeddingRouteConfig {
     /// Route hint name (e.g. "semantic", "archive", "faq")
     pub hint: String,
-    /// Embedding provider (`none`, `openai`, or `custom:<url>`)
+    /// Embedding provider (`none`, `openai`, or `openai-custom`)
     pub provider: String,
     /// Embedding model to use with that provider
     pub model: String,
@@ -5918,6 +5925,9 @@ pub struct EmbeddingRouteConfig {
     /// Optional API key override for this route's provider
     #[serde(default)]
     pub api_key: Option<String>,
+    /// Optional base URL when `provider` is `openai-custom`.
+    #[serde(default)]
+    pub api_url: Option<String>,
 }
 
 // ── Query Classification ─────────────────────────────────────────
@@ -9933,7 +9943,12 @@ impl Config {
         }
 
         if let Some(base_url) = base_url {
-            self.default_provider = Some(format!("custom:{base_url}"));
+            let provider = if base_url.to_ascii_lowercase().contains("anthropic") {
+                "anthropic-custom"
+            } else {
+                "openai-custom"
+            };
+            self.default_provider = Some(provider.to_string());
         }
     }
 
@@ -10074,6 +10089,84 @@ impl Config {
             }
             if route.model.trim().is_empty() {
                 anyhow::bail!("embedding_routes[{i}].model must not be empty");
+            }
+            if route.provider.trim().eq_ignore_ascii_case("openai-custom") {
+                let has_route_url = route
+                    .api_url
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|u| !u.is_empty());
+                let has_memory_url = self
+                    .memory
+                    .embedding_api_url
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|u| !u.is_empty());
+                let has_env = std::env::var("MIROCLAW_EMBEDDING_URL")
+                    .ok()
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|u| !u.is_empty())
+                    || std::env::var("MIROCLAW_PROVIDER_URL")
+                        .ok()
+                        .as_deref()
+                        .map(str::trim)
+                        .is_some_and(|u| !u.is_empty());
+                if !has_route_url && !has_memory_url && !has_env {
+                    anyhow::bail!(
+                        "embedding_routes[{i}] uses openai-custom; set embedding_routes[{i}].api_url, memory.embedding_api_url, MIROCLAW_EMBEDDING_URL, or MIROCLAW_PROVIDER_URL"
+                    );
+                }
+            }
+        }
+
+        if self.default_provider.as_deref().is_some_and(|p| {
+            let t = p.trim();
+            t.eq_ignore_ascii_case("openai-custom") || t.eq_ignore_ascii_case("anthropic-custom")
+        }) {
+            let has_base = self
+                .api_url
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|u| !u.is_empty())
+                || std::env::var("MIROCLAW_PROVIDER_URL")
+                    .ok()
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|u| !u.is_empty());
+            if !has_base {
+                anyhow::bail!(
+                    "default_provider is openai-custom or anthropic-custom; set api_url or MIROCLAW_PROVIDER_URL"
+                );
+            }
+        }
+
+        if self
+            .memory
+            .embedding_provider
+            .trim()
+            .eq_ignore_ascii_case("openai-custom")
+        {
+            let has_base = self
+                .memory
+                .embedding_api_url
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|u| !u.is_empty())
+                || std::env::var("MIROCLAW_EMBEDDING_URL")
+                    .ok()
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|u| !u.is_empty())
+                || std::env::var("MIROCLAW_PROVIDER_URL")
+                    .ok()
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|u| !u.is_empty());
+            if !has_base {
+                anyhow::bail!(
+                    "memory.embedding_provider is openai-custom; set memory.embedding_api_url, MIROCLAW_EMBEDDING_URL, or MIROCLAW_PROVIDER_URL"
+                );
             }
         }
 
@@ -13858,16 +13951,18 @@ requires_openai_auth = true
     async fn env_override_provider_fallback_does_not_replace_non_default_provider() {
         let _env_guard = env_override_lock().await;
         let mut config = Config {
-            default_provider: Some("custom:https://proxy.example.com/v1".to_string()),
+            default_provider: Some("openai-custom".to_string()),
+            api_url: Some("https://proxy.example.com/v1".to_string()),
             ..Config::default()
         };
 
         std::env::remove_var("MIROCLAW_PROVIDER");
         std::env::set_var("PROVIDER", "openrouter");
         config.apply_env_overrides();
+        assert_eq!(config.default_provider.as_deref(), Some("openai-custom"));
         assert_eq!(
-            config.default_provider.as_deref(),
-            Some("custom:https://proxy.example.com/v1")
+            config.api_url.as_deref(),
+            Some("https://proxy.example.com/v1")
         );
 
         std::env::remove_var("PROVIDER");
@@ -13877,7 +13972,8 @@ requires_openai_auth = true
     async fn env_override_zero_claw_provider_overrides_non_default_provider() {
         let _env_guard = env_override_lock().await;
         let mut config = Config {
-            default_provider: Some("custom:https://proxy.example.com/v1".to_string()),
+            default_provider: Some("openai-custom".to_string()),
+            api_url: Some("https://proxy.example.com/v1".to_string()),
             ..Config::default()
         };
 
@@ -13955,10 +14051,7 @@ requires_openai_auth = true
         };
 
         config.apply_env_overrides();
-        assert_eq!(
-            config.default_provider.as_deref(),
-            Some("custom:https://api.tonsof.blue/v1")
-        );
+        assert_eq!(config.default_provider.as_deref(), Some("openai-custom"));
         assert_eq!(
             config.api_url.as_deref(),
             Some("https://api.tonsof.blue/v1")
@@ -13983,9 +14076,10 @@ requires_openai_auth = true
 
         config.apply_env_overrides();
         assert_eq!(config.native_tool_calling, Some(true));
+        assert_eq!(config.default_provider.as_deref(), Some("openai-custom"));
         assert_eq!(
-            config.default_provider.as_deref(),
-            Some("custom:https://api.example.com/v1")
+            config.api_url.as_deref(),
+            Some("https://api.example.com/v1")
         );
     }
 

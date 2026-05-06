@@ -1377,8 +1377,8 @@ async fn main() -> Result<()> {
                     p.name, p.display_name, local_tag, marker, aliases
                 );
             }
-            println!("\n  custom:<URL>   Any OpenAI-compatible endpoint");
-            println!("  anthropic-custom:<URL>  Any Anthropic-compatible endpoint");
+            println!("\n  openai-custom   Any OpenAI-compatible endpoint (set api_url)");
+            println!("  anthropic-custom   Any Anthropic-compatible endpoint (set api_url)");
             Ok(())
         }
 

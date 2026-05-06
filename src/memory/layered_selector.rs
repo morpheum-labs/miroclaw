@@ -179,6 +179,7 @@ pub async fn select_relevant(
             resolved.api_key.as_deref(),
             resolved.model.trim(),
             resolved.dimensions,
+            resolved.embedding_api_url.as_deref(),
         ));
 
     let q_vec = if embedder.dimensions() > 0 {

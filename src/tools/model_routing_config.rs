@@ -536,6 +536,7 @@ impl ModelRoutingConfigTool {
             provider: provider.clone(),
             model: model.clone(),
             api_key: None,
+            api_url: None,
         });
 
         next_route.hint = hint.clone();
