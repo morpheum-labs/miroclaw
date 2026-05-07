@@ -512,6 +512,12 @@ Notes:
 | `require_pairing` | `true` | require pairing before bearer auth |
 | `allow_public_bind` | `false` | block accidental public exposure |
 | `path_prefix` | _(none)_ | URL path prefix for reverse-proxy deployments (e.g. `"/zeroclaw"`) |
+| `session_persistence` | `true` | persist `/ws/chat` histories via the session backend |
+| `session_ttl_hours` | `0` | auto-archive stale gateway sessions (`0` = off) |
+| `web_chat_preserve_session_on_navigation` | `false` | keep the same gateway chat `session_id` across full dashboard reloads |
+| `ws_runner_idle_minutes` | `30` | evict idle `/ws/chat` session runners (no subscribers, no active turn); `0` disables |
+| `ws_runner_max_sessions` | `0` | cap concurrent session runners (`0` = unlimited) |
+| `ws_event_replay_cap` | `0` (use built-in **128**) | max streamed events buffered per session for reconnect replay (`0` = default cap) |
 
 When deploying behind a reverse proxy that maps ZeroClaw to a sub-path,
 set `path_prefix` to that sub-path (e.g. `"/zeroclaw"`). All gateway

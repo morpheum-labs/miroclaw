@@ -1416,6 +1416,7 @@ pub async fn handle_api_session_delete(
     };
 
     let session_key = crate::agent::session_record::gateway_backend_key(&id);
+    crate::gateway::session_runner::remove_session_runner(&state, &session_key).await;
     match backend.delete_session(&session_key) {
         Ok(true) => Json(serde_json::json!({"deleted": true, "session_id": id})).into_response(),
         Ok(false) => (
@@ -1802,6 +1803,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         }
     }
 

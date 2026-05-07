@@ -14,6 +14,7 @@ pub mod api_plugins;
 pub mod canvas;
 pub mod chat_slash;
 pub mod nodes;
+pub mod session_runner;
 pub mod sse;
 pub mod static_files;
 pub mod web_ui;
@@ -47,6 +48,7 @@ use axum::{
     Router,
 };
 use parking_lot::Mutex;
+use session_runner::GatewaySessionEntry;
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -461,6 +463,9 @@ pub struct AppState {
     pub clawgotcha_webhook_secret: Option<Arc<str>>,
     /// Shared task runtime when started from the daemon (cron bridge + `/api/tasks`).
     pub task_runtime: Option<Arc<crate::task::TaskRuntime>>,
+    /// Long-lived `/ws/chat` session workers (keyed by gateway backend session key).
+    pub gateway_sessions:
+        Arc<tokio::sync::Mutex<std::collections::HashMap<String, Arc<GatewaySessionEntry>>>>,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -962,6 +967,10 @@ pub async fn run_gateway(
         .filter(|s| !s.is_empty())
         .map(|s| Arc::from(s.to_string()) as Arc<str>);
 
+    let gateway_sessions: Arc<tokio::sync::Mutex<HashMap<String, Arc<GatewaySessionEntry>>>> =
+        Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+    let gateway_sessions_shutdown = Arc::clone(&gateway_sessions);
+
     let state = AppState {
         config: config_state,
         provider,
@@ -1000,7 +1009,19 @@ pub async fn run_gateway(
         clawgotcha_webhook_tx,
         clawgotcha_webhook_secret,
         task_runtime,
+        gateway_sessions: Arc::clone(&gateway_sessions),
     };
+
+    let gs_evict = Arc::clone(&state.gateway_sessions);
+    let cfg_evict = Arc::clone(&state.config);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            session_runner::gateway_sessions_eviction_tick(&gs_evict, &cfg_evict).await;
+        }
+    });
 
     let pairing_browser_cors_origins =
         parse_pairing_browser_origin_allowlist(&config.gateway.pairing_browser_origins);
@@ -1151,6 +1172,7 @@ pub async fn run_gateway(
     .with_graceful_shutdown(async move {
         let _ = shutdown_rx.changed().await;
         tracing::info!("🦀 ZeroClaw Gateway shutting down...");
+        session_runner::shutdown_all_gateway_sessions(&gateway_sessions_shutdown).await;
     })
     .await?;
 
@@ -2376,6 +2398,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2441,6 +2464,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -2836,6 +2860,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let mut headers = HeaderMap::new();
@@ -2915,6 +2940,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let headers = HeaderMap::new();
@@ -3006,6 +3032,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let response = handle_webhook(
@@ -3069,6 +3096,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let mut headers = HeaderMap::new();
@@ -3137,6 +3165,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let mut headers = HeaderMap::new();
@@ -3210,6 +3239,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let response = Box::pin(handle_nextcloud_talk_webhook(
@@ -3279,6 +3309,7 @@ mod tests {
             clawgotcha_webhook_tx: None,
             clawgotcha_webhook_secret: None,
             task_runtime: None,
+            gateway_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         };
 
         let mut headers = HeaderMap::new();

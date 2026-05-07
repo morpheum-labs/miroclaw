@@ -2219,9 +2219,26 @@ pub struct GatewayConfig {
     #[serde(default)]
     pub web_chat_preserve_session_on_navigation: bool,
 
+    /// Idle eviction for `/ws/chat` session runners: drop in-memory workers after this many minutes
+    /// with **no** attached WebSockets and **no** turn in progress. `0` disables eviction.
+    #[serde(default = "default_ws_runner_idle_minutes")]
+    pub ws_runner_idle_minutes: u32,
+
+    /// Max concurrent gateway WS session runners (`0` = unlimited).
+    #[serde(default)]
+    pub ws_runner_max_sessions: usize,
+
+    /// Max streamed events retained per session for reconnect replay (`0` uses built-in default).
+    #[serde(default)]
+    pub ws_event_replay_cap: usize,
+
     /// Pairing dashboard configuration
     #[serde(default)]
     pub pairing_dashboard: PairingDashboardConfig,
+}
+
+fn default_ws_runner_idle_minutes() -> u32 {
+    30
 }
 
 fn default_gateway_port() -> u16 {
@@ -2279,6 +2296,9 @@ impl Default for GatewayConfig {
             session_persistence: true,
             session_ttl_hours: 0,
             web_chat_preserve_session_on_navigation: false,
+            ws_runner_idle_minutes: default_ws_runner_idle_minutes(),
+            ws_runner_max_sessions: 0,
+            ws_event_replay_cap: 0,
             pairing_dashboard: PairingDashboardConfig::default(),
         }
     }
@@ -13643,6 +13663,9 @@ channel_id = "C123"
             session_persistence: true,
             session_ttl_hours: 0,
             web_chat_preserve_session_on_navigation: false,
+            ws_runner_idle_minutes: default_ws_runner_idle_minutes(),
+            ws_runner_max_sessions: 0,
+            ws_event_replay_cap: 0,
             pairing_dashboard: PairingDashboardConfig::default(),
         };
         let toml_str = toml::to_string(&g).unwrap();
