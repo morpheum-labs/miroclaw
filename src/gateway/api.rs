@@ -850,6 +850,42 @@ pub async fn handle_api_health(
     Json(serde_json::json!({"health": snapshot})).into_response()
 }
 
+/// GET /api/plan — current `plan_current.json` from workspace (if present)
+pub async fn handle_api_plan(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(e) = require_auth(&state, &headers) {
+        return e.into_response();
+    }
+
+    let config = state.config.lock().clone();
+    let path = config.workspace_dir.join("plan_current.json");
+    if !path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "no plan artifact"})),
+        )
+            .into_response();
+    }
+
+    match tokio::fs::read_to_string(&path).await {
+        Ok(raw) => match serde_json::from_str::<serde_json::Value>(&raw) {
+            Ok(v) => Json(v).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("invalid plan JSON: {e}")})),
+            )
+                .into_response(),
+        },
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
 // ── Helpers ─────────────────────────────────────────────────────
 
 fn is_masked_secret(value: &str) -> bool {

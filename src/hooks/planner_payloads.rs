@@ -1,10 +1,11 @@
 //! Payload types for unified planner lifecycle hooks (`planner.plan_requested` / `planner.plan_updated`).
 
 use crate::security::AutonomyLevel;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Agent planning level (strategic / tactical / operational).
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PlannerLevel {
     Strategic,

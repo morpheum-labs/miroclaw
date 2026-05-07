@@ -2709,8 +2709,17 @@ async fn process_channel_message(
                             ctx.prompt_config.memory.tool_call_memory_namespace(),
                             crate::agent::loop_::PlannerLoopInput::Active {
                                 cfg: &ctx.prompt_config.planner,
+                                workspace_dir: ctx.prompt_config.workspace_dir.as_path(),
                                 session_id: channel_session_key.as_str(),
                                 autonomy: ctx.prompt_config.autonomy.level,
+                                parent_plan_id: None,
+                                llm: Some(crate::planner::PlannerLlmRefs {
+                                    provider: active_provider.as_ref(),
+                                    provider_name: route.provider.as_str(),
+                                    model: route.model.as_str(),
+                                    temperature: runtime_defaults.temperature,
+                                    model_routes: ctx.model_routes.as_ref().as_slice(),
+                                }),
                             },
                         ),
                     ),
@@ -4687,6 +4696,8 @@ pub async fn start_channels(config: Config) -> Result<()> {
         hooks: crate::hooks::hook_runner_from_config(
             &config.hooks,
             config.memory.auto_save,
+            &config.planner,
+            &config.workspace_dir,
             Arc::clone(&provider),
             model.clone(),
             Arc::clone(&mem),

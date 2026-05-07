@@ -523,6 +523,8 @@ pub async fn run_gateway(
     let hooks = crate::hooks::hook_runner_from_config(
         &config.hooks,
         config.memory.auto_save,
+        &config.planner,
+        &config.workspace_dir,
         Arc::clone(&provider),
         model.clone(),
         Arc::clone(&mem),
@@ -1074,6 +1076,7 @@ pub async fn run_gateway(
         .route("/api/cost", get(api::handle_api_cost))
         .route("/api/cli-tools", get(api::handle_api_cli_tools))
         .route("/api/health", get(api::handle_api_health))
+        .route("/api/plan", get(api::handle_api_plan))
         .route("/api/sessions", get(api::handle_api_sessions_list))
         .route("/api/sessions/{id}", delete(api::handle_api_session_delete).put(api::handle_api_session_rename))
         // ── Pairing + Device management API ──

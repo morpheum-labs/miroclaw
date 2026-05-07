@@ -2709,13 +2709,17 @@ pub(crate) struct PostTurnMemoryBinding {
     pub auto_save: bool,
 }
 
-/// Planner wiring for [`run_tool_call_loop`] (phase-1: workspace stub + hooks).
+/// Planner wiring for [`run_tool_call_loop`].
 #[derive(Clone, Copy)]
 pub(crate) enum PlannerLoopInput<'a> {
     Active {
         cfg: &'a crate::config::PlannerConfig,
+        workspace_dir: &'a std::path::Path,
         session_id: &'a str,
         autonomy: crate::security::AutonomyLevel,
+        /// Nested delegation parent plan (`None` at top level).
+        parent_plan_id: Option<&'a str>,
+        llm: Option<crate::planner::PlannerLlmRefs<'a>>,
     },
     Inactive,
 }
@@ -2905,6 +2909,26 @@ pub(crate) async fn run_tool_call_loop_body(
                 }
             }
         }
+        let effective_tools: Vec<String> = {
+            let mut names: Vec<String> = tools_registry
+                .iter()
+                .filter(|tool| !excluded_tools.iter().any(|ex| ex == tool.name()))
+                .map(|t| t.name().to_string())
+                .collect();
+            if let Some(at) = activated_tools {
+                let guard = at.lock().unwrap();
+                for n in guard.tool_names() {
+                    if excluded_tools.iter().any(|ex| ex == n) {
+                        continue;
+                    }
+                    let own = n.to_string();
+                    if !names.iter().any(|x| x == &own) {
+                        names.push(own);
+                    }
+                }
+            }
+            names
+        };
         let use_native_tools = provider.supports_native_tools() && !tool_specs.is_empty();
 
         if let Some(refs) = system_prompt_refresh {
@@ -2972,17 +2996,23 @@ pub(crate) async fn run_tool_call_loop_body(
                     if iteration == 0 {
                         if let PlannerLoopInput::Active {
                             cfg,
+                            workspace_dir,
                             session_id,
                             autonomy,
+                            parent_plan_id,
+                            llm,
                         } = planner_input
                         {
-                            crate::planner::maybe_run_stub_turn(
+                            crate::planner::run_planner_turn_if_eligible(
                                 cfg,
-                                refs.workspace_dir,
+                                workspace_dir,
                                 hooks,
                                 turn_user_message,
                                 session_id,
                                 autonomy,
+                                parent_plan_id,
+                                llm,
+                                effective_tools.as_slice(),
                                 history,
                             )
                             .await;
@@ -4437,8 +4467,17 @@ pub async fn run(
                         config.memory.tool_call_memory_namespace(),
                         PlannerLoopInput::Active {
                             cfg: &config.planner,
+                            workspace_dir: config.workspace_dir.as_path(),
                             session_id: transcript_session_key.as_str(),
                             autonomy: config.autonomy.level,
+                            parent_plan_id: None,
+                            llm: Some(crate::planner::PlannerLlmRefs {
+                                provider: provider.as_ref(),
+                                provider_name: provider_name.as_str(),
+                                model: model_name.as_str(),
+                                temperature: effective_temperature,
+                                model_routes: config.model_routes.as_slice(),
+                            }),
                         },
                     ),
                 )
@@ -4796,8 +4835,17 @@ pub async fn run(
                             config.memory.tool_call_memory_namespace(),
                             PlannerLoopInput::Active {
                                 cfg: &config.planner,
+                                workspace_dir: config.workspace_dir.as_path(),
                                 session_id: transcript_session_key.as_str(),
                                 autonomy: config.autonomy.level,
+                                parent_plan_id: None,
+                                llm: Some(crate::planner::PlannerLlmRefs {
+                                    provider: provider.as_ref(),
+                                    provider_name: provider_name.as_str(),
+                                    model: model_name.as_str(),
+                                    temperature: turn_temperature,
+                                    model_routes: config.model_routes.as_slice(),
+                                }),
                             },
                         ),
                     )

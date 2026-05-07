@@ -605,6 +605,42 @@ extends = "autonomous"
 
 **Subprocess environment:** the shell tool clears the environment and copies a small **safe allowlist** plus any names listed in `[autonomy].shell_env_passthrough` (see [`src/shell/env.rs`](../../../src/shell/env.rs) for the built-in set).
 
+## `[planner]`
+
+Unified workspace planner: optional triggers after the system prompt is patched on **iteration 0** of the tool loop, Tier-1 validation before persistence, optional LLM generation + Tier-2 critique, and workspace artifacts (`GLOBAL_PLAN.md`, `plan_current.json`, `plan_history/*.json`, optional `plan_critiques/*.jsonl`). Failures are logged and the agent loop continues unchanged (**fail-open**).
+
+**Risk:** touches the agent loop, hooks, and gateway read API — review alongside `[autonomy]` / tool policy.
+
+| Key | Default | Purpose |
+|---|---|---|
+| `enabled` | `false` | Master switch for planner runs (still subject to `trigger_mode`). |
+| `trigger_mode` | `first_session_turn` | `first_session_turn`, `every_message`, `keyword`, or `directive`. |
+| `trigger_keywords` | `[]` | Substrings for `keyword` mode (case-insensitive). |
+| `directive_prefixes` | `/plan`, `plan for ` | Trimmed-message prefixes for `directive` mode. |
+| `new_goal_prefixes` | `[]` | User-message prefixes that force a **new** `plan_id` (UUID). |
+| `inject_into_history` | `true` | Append a short planner summary as a synthetic user message after a successful plan write. |
+| `llm_enabled` | `false` | Use the configured provider for JSON plan generation instead of the stub. |
+| `critique_enabled` | `false` | After generation, run a bounded critique/revision loop (`llm_enabled` required). |
+| `max_critique_revisions` | `2` | Max critique-driven regeneration rounds before giving up on auto-fixes. |
+| `model_hint` | unset | Optional `hint:<name>` resolved via `[[model_routes]]`; unset uses the main loop model. |
+| `operational_max_steps` | `5` | Tier-1 cap on milestone count when `level` is operational. |
+| `feedback_hook_enabled` | `false` | Register the builtin post-turn planner feedback hook (updates risks from turn summaries); builds a hook runner even when `[hooks].enabled` is `false` if this alone is on. |
+| `forced_level` | unset | `strategic`, `tactical`, or `operational` — overrides default level for payloads and generation. |
+| `max_plan_context_chars` | `8000` | Approximate character budget for planner/critique prompts (truncation). |
+| `persist_critiques` | `true` | Append critique records under `workspace/plan_critiques/` when critique runs. |
+
+**Dashboard / API:** authenticated gateway exposes `GET /api/plan` returning `workspace/plan_current.json` when present (`404` if no artifact).
+
+**Delegate / worker loops:** the `delegate` tool path keeps the planner **inactive** (no system-prompt refresh seam); nested planner linkage (`parent_plan_id` on hooks) applies to the primary agent session when enabled.
+
+```toml
+[planner]
+enabled = true
+trigger_mode = "directive"
+llm_enabled = false
+feedback_hook_enabled = true
+```
+
 ## `[memory]`
 
 | Key | Default | Purpose |

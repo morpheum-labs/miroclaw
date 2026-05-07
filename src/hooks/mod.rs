@@ -5,7 +5,8 @@ mod traits;
 
 use std::sync::Arc;
 
-use crate::config::HooksConfig;
+use crate::config::{HooksConfig, PlannerConfig};
+use std::path::Path;
 
 pub use runner::HookRunner;
 // HookHandler and HookResult are part of the crate's public hook API surface.
@@ -19,11 +20,13 @@ pub use traits::{HookHandler, HookResult};
 pub fn hook_runner_from_config(
     hooks_cfg: &HooksConfig,
     auto_save_memory: bool,
+    planner_cfg: &PlannerConfig,
+    workspace_dir: &Path,
     provider: Arc<dyn crate::providers::Provider>,
     model: String,
     memory: Arc<dyn crate::memory::Memory>,
 ) -> Option<Arc<HookRunner>> {
-    if !hooks_cfg.enabled && !auto_save_memory {
+    if !hooks_cfg.enabled && !auto_save_memory && !planner_cfg.feedback_hook_enabled {
         return None;
     }
     let mut runner = HookRunner::new();
@@ -36,6 +39,11 @@ pub fn hook_runner_from_config(
                 hooks_cfg.builtin.webhook_audit.clone(),
             )));
         }
+    }
+    if planner_cfg.feedback_hook_enabled {
+        runner.register(Box::new(builtin::PlannerFeedbackHook::new(
+            workspace_dir.to_path_buf(),
+        )));
     }
     if auto_save_memory {
         runner.register(Box::new(builtin::MemoryConsolidationHook::new(

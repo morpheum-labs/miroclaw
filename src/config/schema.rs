@@ -5498,14 +5498,94 @@ impl Default for WebhookAuditConfig {
 
 // ── Planner ────────────────────────────────────────────────────────
 
+/// When the unified planner runs relative to session and message content (`[planner].trigger_mode`).
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PlannerTriggerMode {
+    /// First user turn per `session_id` only (default when planner is enabled).
+    #[default]
+    FirstSessionTurn,
+    /// Every non-empty user message (high churn; use with care).
+    EveryMessage,
+    /// Any configured substring appears in the message (case-insensitive).
+    Keyword,
+    /// Message trim-start matches a directive prefix (e.g. `/plan`).
+    Directive,
+}
+
 /// Unified hierarchical planner (`[planner]` section).
-///
-/// Phase 1: workspace persistence stub plus lifecycle hooks at turn start (after system prompt assembly).
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
+#[allow(clippy::struct_excessive_bools)] // Config surface: independent feature toggles by design.
 pub struct PlannerConfig {
-    /// When true, run the planner stub at the start of each eligible tool-loop turn.
+    /// When true, the planner may run at turn start (subject to `trigger_mode` and other gates).
     pub enabled: bool,
+    /// How planner invocation is gated per session and message.
+    pub trigger_mode: PlannerTriggerMode,
+    /// Substrings for [`PlannerTriggerMode::Keyword`] (case-insensitive).
+    pub trigger_keywords: Vec<String>,
+    /// Line prefixes for [`PlannerTriggerMode::Directive`] (trimmed message, ASCII-lowercase prefix check for `/` commands).
+    pub directive_prefixes: Vec<String>,
+    /// When the trimmed user message starts with one of these prefixes, start a **new** plan id (stable id rolls forward).
+    pub new_goal_prefixes: Vec<String>,
+    /// Inject a short planner summary message into chat history for the model.
+    pub inject_into_history: bool,
+    /// Use LLM plan generation (`Provider`) instead of stub milestones when set with `enabled`.
+    pub llm_enabled: bool,
+    /// Run bounded Tier-2 model critique / revision after generation (requires `llm_enabled`).
+    pub critique_enabled: bool,
+    /// Max critique revision rounds (each round may add one provider call).
+    pub max_critique_revisions: u32,
+    /// Optional model hint (`hint:<name>`) routed via [`Config::model_routes`]; empty uses main loop model.
+    pub model_hint: Option<String>,
+    /// Hard cap on operational concrete steps (Tier-1 validation).
+    pub operational_max_steps: usize,
+    /// Enable builtin post-turn planner feedback hook registration (gateway wiring).
+    pub feedback_hook_enabled: bool,
+    /// Force planner level: `strategic`, `tactical`, or `operational` (unset = heuristic default).
+    pub forced_level: Option<String>,
+    /// Cap on assembled planner prompt context (approximate character budget).
+    pub max_plan_context_chars: usize,
+    /// Append structured critique lines under `workspace/plan_critiques/` when critique runs.
+    pub persist_critiques: bool,
+}
+
+fn default_planner_directive_prefixes() -> Vec<String> {
+    vec!["/plan".into(), "plan for ".into()]
+}
+
+fn default_planner_max_critique_revisions() -> u32 {
+    2
+}
+
+fn default_planner_operational_max_steps() -> usize {
+    5
+}
+
+fn default_planner_max_context_chars() -> usize {
+    8000
+}
+
+impl Default for PlannerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            trigger_mode: PlannerTriggerMode::default(),
+            trigger_keywords: Vec::new(),
+            directive_prefixes: default_planner_directive_prefixes(),
+            new_goal_prefixes: Vec::new(),
+            inject_into_history: true,
+            llm_enabled: false,
+            critique_enabled: false,
+            max_critique_revisions: default_planner_max_critique_revisions(),
+            model_hint: None,
+            operational_max_steps: default_planner_operational_max_steps(),
+            feedback_hook_enabled: false,
+            forced_level: None,
+            max_plan_context_chars: default_planner_max_context_chars(),
+            persist_critiques: true,
+        }
+    }
 }
 
 // ── Autonomy / Security ──────────────────────────────────────────
