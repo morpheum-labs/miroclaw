@@ -2720,6 +2720,9 @@ pub(crate) enum PlannerLoopInput<'a> {
         /// Nested delegation parent plan (`None` at top level).
         parent_plan_id: Option<&'a str>,
         llm: Option<crate::planner::PlannerLlmRefs<'a>>,
+        /// Per-call outer timeout for planner LLM (`0` = disabled). See [`crate::planner::resolve_planner_llm_call_timeout_secs`].
+        llm_call_timeout_secs: u64,
+        cancel: Option<&'a CancellationToken>,
     },
     Inactive,
 }
@@ -2931,6 +2934,7 @@ pub(crate) async fn run_tool_call_loop_body(
         };
         let use_native_tools = provider.supports_native_tools() && !tool_specs.is_empty();
 
+        let mut planner_eligible_iter0 = false;
         if let Some(refs) = system_prompt_refresh {
             let mut static_suffix = String::new();
             if !use_native_tools {
@@ -2994,32 +2998,47 @@ pub(crate) async fn run_tool_call_loop_body(
             ) {
                 Ok(()) => {
                     if iteration == 0 {
-                        if let PlannerLoopInput::Active {
-                            cfg,
-                            workspace_dir,
-                            session_id,
-                            autonomy,
-                            parent_plan_id,
-                            llm,
-                        } = planner_input
-                        {
-                            crate::planner::run_planner_turn_if_eligible(
-                                cfg,
-                                workspace_dir,
-                                hooks,
-                                turn_user_message,
-                                session_id,
-                                autonomy,
-                                parent_plan_id,
-                                llm,
-                                effective_tools.as_slice(),
-                                history,
-                            )
-                            .await;
-                        }
+                        planner_eligible_iter0 = true;
                     }
                 }
                 Err(e) => tracing::warn!(error = %e, "system prompt refresh skipped"),
+            }
+        } else if iteration == 0 {
+            // Channels / WS paths often assemble system prompts ahead of the loop and pass `None`
+            // here; still run the planner once tools for this turn are known (Tier-1 alignment).
+            planner_eligible_iter0 = true;
+            tracing::trace!(
+                "planner eligible on iter 0 without system_prompt_refresh (channel-style path)"
+            );
+        }
+
+        if planner_eligible_iter0 {
+            if let PlannerLoopInput::Active {
+                cfg,
+                workspace_dir,
+                session_id,
+                autonomy,
+                parent_plan_id,
+                llm,
+                llm_call_timeout_secs,
+                cancel,
+            } = planner_input
+            {
+                crate::planner::run_planner_turn_if_eligible(
+                    cfg,
+                    workspace_dir,
+                    hooks,
+                    turn_user_message,
+                    session_id,
+                    autonomy,
+                    parent_plan_id,
+                    llm,
+                    llm_call_timeout_secs,
+                    cancel,
+                    effective_tools.as_slice(),
+                    history,
+                )
+                .await;
             }
         }
 
@@ -4478,6 +4497,12 @@ pub async fn run(
                                 temperature: effective_temperature,
                                 model_routes: config.model_routes.as_slice(),
                             }),
+                            llm_call_timeout_secs:
+                                crate::planner::resolve_planner_llm_call_timeout_secs(
+                                    config.planner.llm_call_timeout_secs,
+                                    config.provider_timeout_secs,
+                                ),
+                            cancel: None,
                         },
                     ),
                 )
@@ -4846,6 +4871,12 @@ pub async fn run(
                                     temperature: turn_temperature,
                                     model_routes: config.model_routes.as_slice(),
                                 }),
+                                llm_call_timeout_secs:
+                                    crate::planner::resolve_planner_llm_call_timeout_secs(
+                                        config.planner.llm_call_timeout_secs,
+                                        config.provider_timeout_secs,
+                                    ),
+                                cancel: None,
                             },
                         ),
                     )

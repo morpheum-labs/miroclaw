@@ -66,10 +66,15 @@ pub fn resolve_planner_model_id(
 }
 
 fn truncate_ctx(s: &str, max_chars: usize) -> String {
-    if max_chars == 0 || s.len() <= max_chars {
+    if max_chars == 0 {
         return s.to_string();
     }
-    format!("{}…", &s[..max_chars])
+    let n = s.chars().count();
+    if n <= max_chars {
+        return s.to_string();
+    }
+    let keep = max_chars.saturating_sub(1);
+    format!("{}…", s.chars().take(keep).collect::<String>())
 }
 
 /// Ask the model for a JSON [`GlobalPlanDocument`] only (no markdown fences required but tolerated).

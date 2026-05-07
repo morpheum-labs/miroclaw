@@ -21,8 +21,72 @@ use crate::config::{PlannerConfig, PlannerTriggerMode};
 use crate::hooks::HookRunner;
 use crate::providers::Provider;
 use anyhow::Context;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+
+/// Minimum non-zero per-call planner LLM outer timeout (seconds).
+pub const PLANNER_LLM_TIMEOUT_MIN_SECS: u64 = 5;
+/// Maximum per-call planner LLM outer timeout (seconds).
+pub const PLANNER_LLM_TIMEOUT_MAX_SECS: u64 = 3600;
+
+/// Resolve `[planner].llm_call_timeout_secs`: inherit `provider_timeout_secs`, clamp, or `0` = disable outer timeout.
+#[must_use]
+pub fn resolve_planner_llm_call_timeout_secs(
+    planner_override: Option<u64>,
+    provider_timeout_secs: u64,
+) -> u64 {
+    let raw = planner_override.unwrap_or(provider_timeout_secs);
+    if raw == 0 {
+        return 0;
+    }
+    raw.clamp(PLANNER_LLM_TIMEOUT_MIN_SECS, PLANNER_LLM_TIMEOUT_MAX_SECS)
+}
+
+async fn run_with_planner_llm_timeout<T, F>(
+    timeout_secs: u64,
+    label: &'static str,
+    fut: F,
+) -> anyhow::Result<T>
+where
+    F: Future<Output = anyhow::Result<T>> + Send,
+    T: Send,
+{
+    if timeout_secs == 0 {
+        return fut.await;
+    }
+    match tokio::time::timeout(Duration::from_secs(timeout_secs), fut).await {
+        Ok(inner) => inner,
+        Err(_) => {
+            tracing::warn!(timeout_secs, label, "planner LLM call timed out");
+            anyhow::bail!("planner LLM {label} timed out after {timeout_secs}s")
+        }
+    }
+}
+
+/// Single path segment derived from `plan_id` (UUIDs pass through; strips separators).
+#[must_use]
+pub fn fs_safe_plan_segment(plan_id: &str) -> String {
+    const MAX: usize = 96;
+    let s: String = plan_id
+        .chars()
+        .filter(|c| {
+            !matches!(
+                c,
+                '/' | '\\' | ':' | '\0' | '<' | '>' | '|' | '"' | '*' | '?'
+            )
+        })
+        .take(MAX)
+        .collect();
+    let t = s.trim();
+    if t.is_empty() {
+        "plan".to_string()
+    } else {
+        t.to_string()
+    }
+}
 
 /// References for optional LLM planner calls (same process provider as the tool loop).
 #[derive(Clone, Copy)]
@@ -87,7 +151,8 @@ async fn persist_plan_workspace(
         .with_context(|| format!("mkdir {}", plan_dir.display()))?;
 
     let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
-    let hist_path = plan_dir.join(format!("{}_{}.json", stamp, doc.plan_id));
+    let safe_id = fs_safe_plan_segment(&doc.plan_id);
+    let hist_path = plan_dir.join(format!("{stamp}_{safe_id}.json"));
     let json = serde_json::to_string_pretty(doc)?;
     tokio::fs::write(&hist_path, &json)
         .await
@@ -126,7 +191,8 @@ async fn append_critique_log(
     let dir = workspace_dir.join("plan_critiques");
     tokio::fs::create_dir_all(&dir).await?;
     let day = chrono::Local::now().format("%Y-%m-%d");
-    let path = dir.join(format!("{day}_{plan_id}.jsonl"));
+    let safe_id = fs_safe_plan_segment(plan_id);
+    let path = dir.join(format!("{day}_{safe_id}.jsonl"));
     let line = serde_json::to_string(report)?;
     let mut opts = tokio::fs::OpenOptions::new();
     opts.create(true).append(true);
@@ -193,11 +259,17 @@ pub async fn run_planner_turn_if_eligible(
     autonomy: crate::security::AutonomyLevel,
     parent_plan_id: Option<&str>,
     llm: Option<PlannerLlmRefs<'_>>,
+    llm_call_timeout_secs: u64,
+    cancel: Option<&CancellationToken>,
     effective_tools: &[String],
     history: &mut Vec<crate::providers::ChatMessage>,
 ) {
     log_transition(PlannerState::Idle, None);
     if !cfg.enabled {
+        return;
+    }
+    if cancel.is_some_and(|c| c.is_cancelled()) {
+        tracing::trace!("planner skipped: cancelled before start");
         return;
     }
     let Some(goal_raw) = turn_user_message.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -279,19 +351,23 @@ pub async fn run_planner_turn_if_eligible(
                     .map(|d| d.summary)
                     .unwrap_or_default();
                 let prior_ref = (!prior.trim().is_empty()).then_some(prior.as_str());
-                match llm::generate_plan_document(
-                    llmrefs.provider,
-                    pm.as_str(),
-                    llmrefs.temperature,
-                    cfg,
-                    level,
-                    &goal,
-                    session_id,
-                    &plan_id,
-                    version,
-                    prior_ref,
-                    effective_tools,
-                    None,
+                match run_with_planner_llm_timeout(
+                    llm_call_timeout_secs,
+                    "plan_generation",
+                    llm::generate_plan_document(
+                        llmrefs.provider,
+                        pm.as_str(),
+                        llmrefs.temperature,
+                        cfg,
+                        level,
+                        &goal,
+                        session_id,
+                        &plan_id,
+                        version,
+                        prior_ref,
+                        effective_tools,
+                        None,
+                    ),
                 )
                 .await
                 {
@@ -333,6 +409,10 @@ pub async fn run_planner_turn_if_eligible(
             log_transition(PlannerState::CritiqueRevision, Some("critique"));
             let mut revision_round: u32 = 0;
             loop {
+                if cancel.is_some_and(|c| c.is_cancelled()) {
+                    tracing::trace!("planner critique loop stopped: cancelled");
+                    break;
+                }
                 let plan_json = match serde_json::to_string(&doc) {
                     Ok(s) => s,
                     Err(e) => {
@@ -340,12 +420,16 @@ pub async fn run_planner_turn_if_eligible(
                         break;
                     }
                 };
-                let report = match llm::run_critique(
-                    llmrefs.provider,
-                    pm.as_str(),
-                    llmrefs.temperature,
-                    cfg,
-                    &plan_json,
+                let report = match run_with_planner_llm_timeout(
+                    llm_call_timeout_secs,
+                    "critique",
+                    llm::run_critique(
+                        llmrefs.provider,
+                        pm.as_str(),
+                        llmrefs.temperature,
+                        cfg,
+                        &plan_json,
+                    ),
                 )
                 .await
                 {
@@ -370,19 +454,27 @@ pub async fn run_planner_turn_if_eligible(
                     break;
                 }
                 revision_round += 1;
-                match llm::generate_plan_document(
-                    llmrefs.provider,
-                    pm.as_str(),
-                    llmrefs.temperature,
-                    cfg,
-                    level,
-                    &goal,
-                    session_id,
-                    &plan_id,
-                    version,
-                    Some(doc.summary.as_str()),
-                    effective_tools,
-                    Some(report.revision_suggestions.as_str()),
+                if cancel.is_some_and(|c| c.is_cancelled()) {
+                    tracing::trace!("planner revision skipped: cancelled");
+                    break;
+                }
+                match run_with_planner_llm_timeout(
+                    llm_call_timeout_secs,
+                    "plan_revision",
+                    llm::generate_plan_document(
+                        llmrefs.provider,
+                        pm.as_str(),
+                        llmrefs.temperature,
+                        cfg,
+                        level,
+                        &goal,
+                        session_id,
+                        &plan_id,
+                        version,
+                        Some(doc.summary.as_str()),
+                        effective_tools,
+                        Some(report.revision_suggestions.as_str()),
+                    ),
                 )
                 .await
                 {
@@ -450,6 +542,39 @@ pub fn plan_path_within_workspace(workspace_root: &Path, candidate: &Path) -> Op
 mod tests {
     use super::*;
     use crate::config::PlannerTriggerMode;
+
+    #[test]
+    fn resolve_planner_timeout_inherits_clamps_and_zero_disables() {
+        assert_eq!(resolve_planner_llm_call_timeout_secs(None, 120), 120);
+        assert_eq!(resolve_planner_llm_call_timeout_secs(Some(0), 999), 0);
+        assert_eq!(
+            resolve_planner_llm_call_timeout_secs(Some(3), 120),
+            PLANNER_LLM_TIMEOUT_MIN_SECS
+        );
+        assert_eq!(
+            resolve_planner_llm_call_timeout_secs(Some(5000), 120),
+            PLANNER_LLM_TIMEOUT_MAX_SECS
+        );
+    }
+
+    #[tokio::test]
+    async fn planner_llm_timeout_wrapper_errors_fast() {
+        let fut = async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            Ok::<String, anyhow::Error>("x".into())
+        };
+        let r = super::run_with_planner_llm_timeout(1, "test", fut).await;
+        assert!(r.is_err());
+        assert!(r.unwrap_err().to_string().contains("timed out"));
+    }
+
+    #[tokio::test]
+    async fn planner_llm_timeout_zero_passes_through() {
+        let r =
+            super::run_with_planner_llm_timeout(0, "noop", async { Ok::<(), anyhow::Error>(()) })
+                .await;
+        assert!(r.is_ok());
+    }
 
     #[test]
     fn workspace_relative_ok_rejects_dotdot() {
@@ -550,6 +675,12 @@ mod tests {
         let v = validate::validate_document(&doc, &tmp, &[], 5);
         assert!(!v.ok);
         assert!(v.reasons.iter().any(|r| r.contains("cycle")));
+    }
+
+    #[test]
+    fn fs_safe_plan_segment_strips_path_chars() {
+        assert_eq!(fs_safe_plan_segment("abc/def:g\\h"), "abcdefgh");
+        assert_eq!(fs_safe_plan_segment("   "), "plan");
     }
 
     #[test]

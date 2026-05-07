@@ -607,7 +607,7 @@ extends = "autonomous"
 
 ## `[planner]`
 
-Unified workspace planner: optional triggers after the system prompt is patched on **iteration 0** of the tool loop, Tier-1 validation before persistence, optional LLM generation + Tier-2 critique, and workspace artifacts (`GLOBAL_PLAN.md`, `plan_current.json`, `plan_history/*.json`, optional `plan_critiques/*.jsonl`). Failures are logged and the agent loop continues unchanged (**fail-open**).
+Unified workspace planner: optional triggers on **iteration 0** of the tool loop once effective tools for the turn are known — after a successful in-loop system prompt patch when `system_prompt_refresh` is provided (CLI / transcript paths), or immediately on channel-style runs that preassemble the system prompt and pass `None` here. Tier-1 validation runs before persistence; optional LLM generation + Tier-2 critique; artifacts (`GLOBAL_PLAN.md`, `plan_current.json`, `plan_history/*.json`, optional `plan_critiques/*.jsonl`). Failures are logged and the agent loop continues unchanged (**fail-open**).
 
 **Risk:** touches the agent loop, hooks, and gateway read API — review alongside `[autonomy]` / tool policy.
 
@@ -628,6 +628,7 @@ Unified workspace planner: optional triggers after the system prompt is patched 
 | `forced_level` | unset | `strategic`, `tactical`, or `operational` — overrides default level for payloads and generation. |
 | `max_plan_context_chars` | `8000` | Approximate character budget for planner/critique prompts (truncation). |
 | `persist_critiques` | `true` | Append critique records under `workspace/plan_critiques/` when critique runs. |
+| `llm_call_timeout_secs` | unset (`None`) | Per-call **outer** timeout (seconds) for each planner LLM request: initial plan generation, each Tier-2 critique, and each revision. Inherits root `provider_timeout_secs` when unset; clamped to **5–3600** when non-zero. Set to **`0`** to disable only this outer timeout (provider HTTP limits still apply). Channel turns also honor cooperative cancellation: further planner calls are not started after the turn token is cancelled. |
 
 **Dashboard / API:** authenticated gateway exposes `GET /api/plan` returning `workspace/plan_current.json` when present (`404` if no artifact).
 

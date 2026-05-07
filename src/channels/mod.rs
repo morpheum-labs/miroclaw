@@ -2720,6 +2720,12 @@ async fn process_channel_message(
                                     temperature: runtime_defaults.temperature,
                                     model_routes: ctx.model_routes.as_ref().as_slice(),
                                 }),
+                                llm_call_timeout_secs:
+                                    crate::planner::resolve_planner_llm_call_timeout_secs(
+                                        ctx.prompt_config.planner.llm_call_timeout_secs,
+                                        ctx.prompt_config.provider_timeout_secs,
+                                    ),
+                                cancel: Some(&cancellation_token),
                             },
                         ),
                     ),

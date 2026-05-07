@@ -5548,6 +5548,9 @@ pub struct PlannerConfig {
     pub max_plan_context_chars: usize,
     /// Append structured critique lines under `workspace/plan_critiques/` when critique runs.
     pub persist_critiques: bool,
+    /// Per-call outer timeout for planner LLM requests (generation + critique + each revision).
+    /// `None` uses root `provider_timeout_secs`. `Some(0)` disables this outer timeout (HTTP client limits still apply).
+    pub llm_call_timeout_secs: Option<u64>,
 }
 
 fn default_planner_directive_prefixes() -> Vec<String> {
@@ -5584,6 +5587,7 @@ impl Default for PlannerConfig {
             forced_level: None,
             max_plan_context_chars: default_planner_max_context_chars(),
             persist_critiques: true,
+            llm_call_timeout_secs: None,
         }
     }
 }
