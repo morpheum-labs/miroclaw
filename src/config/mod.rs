@@ -25,7 +25,7 @@ pub use schema::{
     MultimodalConfig, NextcloudTalkConfig, NodeTransportConfig, NodesConfig, NotionConfig,
     ObservabilityConfig, OpenAiSttConfig, OpenAiTtsConfig, OpenCodeCliConfig, OpenVpnTunnelConfig,
     OtpConfig, OtpMethod, PacingConfig, PeripheralBoardConfig, PeripheralsConfig, PiperTtsConfig,
-    PluginsConfig, ProjectIntelConfig, ProxyConfig, ProxyScope, QdrantConfig,
+    PlannerConfig, PluginsConfig, ProjectIntelConfig, ProxyConfig, ProxyScope, QdrantConfig,
     QueryClassificationConfig, ReliabilityConfig, ResourceLimitsConfig, RuntimeConfig,
     SandboxBackend, SandboxConfig, SchedulerConfig, SecretsConfig, SecurityConfig,
     SecurityOpsConfig, SessionTranscriptConfig, ShellAutonomousProfileConfig,

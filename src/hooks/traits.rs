@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::time::Duration;
 
+use super::planner_payloads::{PlanRequestedPayload, PlanUpdatedPayload};
 use crate::channels::traits::ChannelMessage;
 use crate::providers::traits::{ChatMessage, ChatResponse};
 use crate::tools::traits::ToolResult;
@@ -47,6 +48,12 @@ pub trait HookHandler: Send + Sync {
         _assistant_summary: &str,
     ) {
     }
+
+    /// Void hook: unified planner is about to run for this turn.
+    async fn on_planner_plan_requested(&self, _payload: &PlanRequestedPayload) {}
+
+    /// Void hook: unified planner wrote or revised workspace plan artifacts.
+    async fn on_planner_plan_updated(&self, _payload: &PlanUpdatedPayload) {}
 
     /// Blocking-style post-turn hook; first `Cancel` wins (sequential by priority).
     async fn after_turn_completed_blocking(

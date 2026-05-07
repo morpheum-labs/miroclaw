@@ -357,6 +357,10 @@ pub struct Config {
     #[serde(default)]
     pub hooks: HooksConfig,
 
+    /// Unified hierarchical planner (`[planner]` section).
+    #[serde(default)]
+    pub planner: PlannerConfig,
+
     /// Hardware configuration (wizard-driven physical world setup).
     #[serde(default)]
     pub hardware: HardwareConfig,
@@ -5492,6 +5496,18 @@ impl Default for WebhookAuditConfig {
     }
 }
 
+// ── Planner ────────────────────────────────────────────────────────
+
+/// Unified hierarchical planner (`[planner]` section).
+///
+/// Phase 1: workspace persistence stub plus lifecycle hooks at turn start (after system prompt assembly).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct PlannerConfig {
+    /// When true, run the planner stub at the start of each eligible tool-loop turn.
+    pub enabled: bool,
+}
+
 // ── Autonomy / Security ──────────────────────────────────────────
 
 /// Autonomy and security policy configuration (`[autonomy]` section).
@@ -8502,6 +8518,7 @@ impl Default for Config {
             skills: SkillsConfig::default(),
             model_routes: Vec::new(),
             embedding_routes: Vec::new(),
+            query_classification: QueryClassificationConfig::default(),
             heartbeat: HeartbeatConfig::default(),
             cron: CronConfig::default(),
             tasks: TasksConfig::default(),
@@ -8536,8 +8553,8 @@ impl Default for Config {
             agents_list_url: None,
             swarms: HashMap::new(),
             hooks: HooksConfig::default(),
+            planner: PlannerConfig::default(),
             hardware: HardwareConfig::default(),
-            query_classification: QueryClassificationConfig::default(),
             transcription: TranscriptionConfig::default(),
             tts: TtsConfig::default(),
             mcp: McpConfig::default(),
@@ -12138,6 +12155,7 @@ default_temperature = 0.7
             agents_list_url: None,
             swarms: HashMap::new(),
             hooks: HooksConfig::default(),
+            planner: PlannerConfig::default(),
             hardware: HardwareConfig::default(),
             transcription: TranscriptionConfig::default(),
             tts: TtsConfig::default(),
@@ -12672,6 +12690,7 @@ default_temperature = 0.7
             agents_list_url: None,
             swarms: HashMap::new(),
             hooks: HooksConfig::default(),
+            planner: PlannerConfig::default(),
             hardware: HardwareConfig::default(),
             transcription: TranscriptionConfig::default(),
             tts: TtsConfig::default(),

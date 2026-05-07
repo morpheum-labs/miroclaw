@@ -282,6 +282,7 @@ pub(crate) async fn run_query_loop(
     system_prompt_refresh: Option<&super::system_prompt::SystemPromptAssemblyRefs<'_>>,
     post_turn_memory: super::loop_::PostTurnMemoryBinding,
     memory_tool_namespace: String,
+    planner_input: super::loop_::PlannerLoopInput<'_>,
 ) -> Result<String> {
     state.last_transition = Some(TransitionReason::BeginTurn);
     record_transition(TransitionReason::BeginTurn, None);
@@ -311,7 +312,9 @@ pub(crate) async fn run_query_loop(
                 pacing,
                 tool_result_offload,
                 history_pruning,
+                turn_user_message,
                 system_prompt_refresh,
+                planner_input,
             )
             .await;
 
@@ -499,6 +502,7 @@ pub async fn run_worker_fork(
         None,
         post_turn,
         cfg.memory.tool_call_memory_namespace(),
+        super::loop_::PlannerLoopInput::Inactive,
     )
     .await;
 

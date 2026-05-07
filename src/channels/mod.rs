@@ -2628,9 +2628,10 @@ async fn process_channel_message(
     #[allow(clippy::cast_possible_truncation)]
     let elapsed_before_llm_ms = started_at.elapsed().as_millis() as u64;
     tracing::info!(elapsed_before_llm_ms, "⏱ Starting LLM call");
+    let channel_session_key = conversation_history_key(&msg);
     crate::agent::session_transcript::commit_user_turn(
         &ctx.prompt_config.agent.session_transcript,
-        &conversation_history_key(&msg),
+        &channel_session_key,
         msg.channel.as_str(),
         route.provider.as_str(),
         route.model.as_str(),
@@ -2671,7 +2672,7 @@ async fn process_channel_message(
                 crate::agent::session_transcript::SESSION_TRANSCRIPT_CONTEXT.scope(
                     Some(crate::agent::session_transcript::SessionTranscriptScope {
                         cfg: ctx.prompt_config.agent.session_transcript.clone(),
-                        session_key: conversation_history_key(&msg),
+                        session_key: channel_session_key.clone(),
                     }),
                     crate::agent::loop_::TOOL_LOOP_COST_TRACKING_CONTEXT.scope(
                         cost_tracking_context.clone(),
@@ -2706,6 +2707,11 @@ async fn process_channel_message(
                                 auto_save: ctx.auto_save_memory,
                             },
                             ctx.prompt_config.memory.tool_call_memory_namespace(),
+                            crate::agent::loop_::PlannerLoopInput::Active {
+                                cfg: &ctx.prompt_config.planner,
+                                session_id: channel_session_key.as_str(),
+                                autonomy: ctx.prompt_config.autonomy.level,
+                            },
                         ),
                     ),
                 ),

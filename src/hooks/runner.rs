@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::panic::AssertUnwindSafe;
 use tracing::info;
 
+use super::planner_payloads::{PlanRequestedPayload, PlanUpdatedPayload};
 use crate::channels::traits::ChannelMessage;
 use crate::providers::traits::{ChatMessage, ChatResponse};
 use crate::tools::traits::ToolResult;
@@ -323,6 +324,24 @@ impl HookRunner {
             .handlers
             .iter()
             .map(|h| h.on_after_turn_completed(channel, user_message, assistant_summary))
+            .collect();
+        join_all(futs).await;
+    }
+
+    pub async fn fire_planner_plan_requested(&self, payload: &PlanRequestedPayload) {
+        let futs: Vec<_> = self
+            .handlers
+            .iter()
+            .map(|h| h.on_planner_plan_requested(payload))
+            .collect();
+        join_all(futs).await;
+    }
+
+    pub async fn fire_planner_plan_updated(&self, payload: &PlanUpdatedPayload) {
+        let futs: Vec<_> = self
+            .handlers
+            .iter()
+            .map(|h| h.on_planner_plan_updated(payload))
             .collect();
         join_all(futs).await;
     }

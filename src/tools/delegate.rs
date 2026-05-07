@@ -1438,6 +1438,7 @@ impl DelegateTool {
                 None,
                 self.post_turn_memory.clone(),
                 agent_config.effective_memory_tool_namespace(agent_name),
+                crate::agent::loop_::PlannerLoopInput::Inactive,
             ),
         )
         .await;

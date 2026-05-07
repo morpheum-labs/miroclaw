@@ -2416,6 +2416,7 @@ pub(crate) async fn agent_turn(
         None,
         PostTurnMemoryBinding::default(),
         crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+        PlannerLoopInput::Inactive,
     )
     .await
 }
@@ -2708,6 +2709,17 @@ pub(crate) struct PostTurnMemoryBinding {
     pub auto_save: bool,
 }
 
+/// Planner wiring for [`run_tool_call_loop`] (phase-1: workspace stub + hooks).
+#[derive(Clone, Copy)]
+pub(crate) enum PlannerLoopInput<'a> {
+    Active {
+        cfg: &'a crate::config::PlannerConfig,
+        session_id: &'a str,
+        autonomy: crate::security::AutonomyLevel,
+    },
+    Inactive,
+}
+
 /// Public entry for the tool-call loop: QueryEngine diagnostics + [`run_tool_call_loop_body`].
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_tool_call_loop(
@@ -2738,6 +2750,7 @@ pub(crate) async fn run_tool_call_loop(
     system_prompt_refresh: Option<&crate::agent::system_prompt::SystemPromptAssemblyRefs<'_>>,
     post_turn_memory: PostTurnMemoryBinding,
     memory_tool_namespace: String,
+    planner_input: PlannerLoopInput<'_>,
 ) -> Result<String> {
     let mut engine_state = crate::agent::state::EngineState::default();
     crate::agent::query_engine::run_query_loop(
@@ -2769,6 +2782,7 @@ pub(crate) async fn run_tool_call_loop(
         system_prompt_refresh,
         post_turn_memory,
         memory_tool_namespace,
+        planner_input,
     )
     .await
 }
@@ -2799,7 +2813,9 @@ pub(crate) async fn run_tool_call_loop_body(
     pacing: &crate::config::PacingConfig,
     tool_result_offload: &crate::config::ToolResultOffloadConfig,
     history_pruning: &crate::agent::history_pruner::HistoryPrunerConfig,
+    turn_user_message: Option<&str>,
     system_prompt_refresh: Option<&crate::agent::system_prompt::SystemPromptAssemblyRefs<'_>>,
+    planner_input: PlannerLoopInput<'_>,
 ) -> Result<String> {
     let max_iterations = if max_tool_iterations == 0 {
         DEFAULT_MAX_TOOL_ITERATIONS
@@ -2944,7 +2960,7 @@ pub(crate) async fn run_tool_call_loop_body(
                 }
             };
             let layered_for_prompt = merged_layered.as_deref();
-            if let Err(e) = crate::agent::system_prompt::patch_history_system_prompt(
+            match crate::agent::system_prompt::patch_history_system_prompt(
                 &mut system_prompt_assembly_memo,
                 refs,
                 use_native_tools,
@@ -2952,7 +2968,28 @@ pub(crate) async fn run_tool_call_loop_body(
                 layered_for_prompt,
                 history,
             ) {
-                tracing::warn!(error = %e, "system prompt refresh skipped");
+                Ok(()) => {
+                    if iteration == 0 {
+                        if let PlannerLoopInput::Active {
+                            cfg,
+                            session_id,
+                            autonomy,
+                        } = planner_input
+                        {
+                            crate::planner::maybe_run_stub_turn(
+                                cfg,
+                                refs.workspace_dir,
+                                hooks,
+                                turn_user_message,
+                                session_id,
+                                autonomy,
+                                history,
+                            )
+                            .await;
+                        }
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "system prompt refresh skipped"),
             }
         }
 
@@ -4398,6 +4435,11 @@ pub async fn run(
                             auto_save: config.memory.auto_save,
                         },
                         config.memory.tool_call_memory_namespace(),
+                        PlannerLoopInput::Active {
+                            cfg: &config.planner,
+                            session_id: transcript_session_key.as_str(),
+                            autonomy: config.autonomy.level,
+                        },
                     ),
                 )
                 .await
@@ -4752,6 +4794,11 @@ pub async fn run(
                                 auto_save: config.memory.auto_save,
                             },
                             config.memory.tool_call_memory_namespace(),
+                            PlannerLoopInput::Active {
+                                cfg: &config.planner,
+                                session_id: transcript_session_key.as_str(),
+                                autonomy: config.autonomy.level,
+                            },
                         ),
                     )
                     .await
@@ -5719,6 +5766,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect_err("provider without vision support should fail");
@@ -5777,6 +5825,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect_err("oversized payload must fail");
@@ -5828,6 +5877,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("valid multimodal payload should pass");
@@ -5879,6 +5929,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect_err("should fail without vision_provider config");
@@ -5937,6 +5988,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect_err("should fail when vision provider cannot be created");
@@ -5995,6 +6047,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("text-only messages should succeed with default provider");
@@ -6054,6 +6107,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect_err("should fail due to nonexistent vision provider");
@@ -6111,6 +6165,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("empty image markers should not trigger vision routing");
@@ -6168,6 +6223,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect_err("should attempt vision provider creation for multiple images");
@@ -6308,6 +6364,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("parallel execution should complete");
@@ -6385,6 +6442,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("cron_add delivery defaults should be injected");
@@ -6454,6 +6512,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("explicit delivery mode should be preserved");
@@ -6518,6 +6577,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("loop should finish after deduplicating repeated calls");
@@ -6594,6 +6654,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("non-interactive shell should succeed for low-risk command");
@@ -6661,6 +6722,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("loop should finish with exempt tool executing twice");
@@ -6748,6 +6810,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("loop should complete");
@@ -6812,6 +6875,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("native fallback id flow should complete");
@@ -6900,6 +6964,7 @@ mod tests {
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("native tool-call text should be relayed through turn_event_sink");
@@ -8919,6 +8984,7 @@ Let me check the result."#;
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("tool loop should complete");
@@ -9075,6 +9141,7 @@ Let me check the result."#;
                     None,
                     PostTurnMemoryBinding::default(),
                     crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+                    PlannerLoopInput::Inactive,
                 ),
             )
             .await
@@ -9160,6 +9227,7 @@ Let me check the result."#;
                     None,
                     PostTurnMemoryBinding::default(),
                     crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+                    PlannerLoopInput::Inactive,
                 ),
             )
             .await
@@ -9221,6 +9289,7 @@ Let me check the result."#;
             None,
             PostTurnMemoryBinding::default(),
             crate::config::MemoryConfig::default().tool_call_memory_namespace(),
+            PlannerLoopInput::Inactive,
         )
         .await
         .expect("should succeed without cost scope");
