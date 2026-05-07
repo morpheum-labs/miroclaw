@@ -24,6 +24,75 @@ impl Drop for ClearLayeredPendingOnDrop {
     }
 }
 
+/// Primary-agent routing inputs copied from [`crate::config::Config`] for delegate / swarm tools.
+#[derive(Clone)]
+pub struct DelegateRoutingDefaults {
+    pub default_provider: String,
+    pub default_model: String,
+    pub api_url: Option<String>,
+    pub reliability: crate::config::ReliabilityConfig,
+    pub model_routes: Vec<crate::config::ModelRouteConfig>,
+}
+
+impl Default for DelegateRoutingDefaults {
+    fn default() -> Self {
+        Self {
+            default_provider: "openrouter".to_string(),
+            default_model: "anthropic/claude-sonnet-4".to_string(),
+            api_url: None,
+            reliability: crate::config::ReliabilityConfig::default(),
+            model_routes: Vec::new(),
+        }
+    }
+}
+
+impl DelegateRoutingDefaults {
+    pub fn from_config(cfg: &crate::config::Config) -> Self {
+        Self {
+            default_provider: cfg
+                .default_provider
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("openrouter")
+                .to_string(),
+            default_model: cfg
+                .default_model
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("anthropic/claude-sonnet-4")
+                .to_string(),
+            api_url: cfg.api_url.clone(),
+            reliability: cfg.reliability.clone(),
+            model_routes: cfg.model_routes.clone(),
+        }
+    }
+}
+
+pub(crate) fn resolve_delegate_provider_model(
+    agent: &DelegateAgentConfig,
+    defaults: &DelegateRoutingDefaults,
+) -> (String, String) {
+    let provider = {
+        let t = agent.provider.trim();
+        if t.is_empty() {
+            defaults.default_provider.clone()
+        } else {
+            agent.provider.clone()
+        }
+    };
+    let model = {
+        let t = agent.model.trim();
+        if t.is_empty() {
+            defaults.default_model.clone()
+        } else {
+            agent.model.clone()
+        }
+    };
+    (provider, model)
+}
+
 /// Serializable result of a background delegate task.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BackgroundDelegateResult {
@@ -65,6 +134,8 @@ pub struct DelegateTool {
     security: Arc<SecurityPolicy>,
     /// Global credential fallback (from config.api_key)
     fallback_credential: Option<String>,
+    /// Default provider/model, `api_url`, and routing tables (same source as the primary agent).
+    routing_defaults: DelegateRoutingDefaults,
     /// Provider runtime options inherited from root config.
     provider_runtime_options: providers::ProviderRuntimeOptions,
     /// Depth at which this tool instance lives in the delegation chain.
@@ -129,6 +200,7 @@ impl DelegateTool {
             agents,
             security,
             fallback_credential,
+            routing_defaults: DelegateRoutingDefaults::default(),
             provider_runtime_options,
             depth: 0,
             parent_tools: Arc::new(RwLock::new(Vec::new())),
@@ -172,6 +244,7 @@ impl DelegateTool {
             agents: Arc::new(RwLock::new(agents)),
             security,
             fallback_credential,
+            routing_defaults: DelegateRoutingDefaults::default(),
             provider_runtime_options,
             depth,
             parent_tools: Arc::new(RwLock::new(Vec::new())),
@@ -205,6 +278,14 @@ impl DelegateTool {
     /// Attach parent tools used to build sub-agent allowlist registries.
     pub fn with_parent_tools(mut self, parent_tools: Arc<RwLock<Vec<Arc<dyn Tool>>>>) -> Self {
         self.parent_tools = parent_tools;
+        self
+    }
+
+    pub(crate) fn with_routing_defaults(
+        mut self,
+        routing_defaults: DelegateRoutingDefaults,
+    ) -> Self {
+        self.routing_defaults = routing_defaults;
         self
     }
 
@@ -408,6 +489,38 @@ impl Tool for DelegateTool {
 }
 
 impl DelegateTool {
+    fn create_routed_provider_for_delegate_agent(
+        &self,
+        agent_config: &DelegateAgentConfig,
+        provider_name: &str,
+        model_name: &str,
+        agent_name: &str,
+    ) -> Result<Box<dyn Provider>, ToolResult> {
+        let provider_credential_owned = agent_config
+            .api_key
+            .clone()
+            .or_else(|| self.fallback_credential.clone());
+        #[allow(clippy::option_as_ref_deref)]
+        let provider_credential = provider_credential_owned.as_ref().map(String::as_str);
+
+        providers::create_routed_provider_with_options(
+            provider_name,
+            provider_credential,
+            self.routing_defaults.api_url.as_deref(),
+            &self.routing_defaults.reliability,
+            &self.routing_defaults.model_routes,
+            model_name,
+            &self.provider_runtime_options,
+        )
+        .map_err(|e| ToolResult {
+            success: false,
+            output: String::new(),
+            error: Some(format!(
+                "Failed to create provider '{provider_name}' for agent '{agent_name}': {e}",
+            )),
+        })
+    }
+
     /// Original synchronous delegation path (extracted for reuse).
     async fn execute_sync(
         &self,
@@ -470,30 +583,17 @@ impl DelegateTool {
             });
         }
 
-        // Create provider for this agent
-        let provider_credential_owned = agent_config
-            .api_key
-            .clone()
-            .or_else(|| self.fallback_credential.clone());
-        #[allow(clippy::option_as_ref_deref)]
-        let provider_credential = provider_credential_owned.as_ref().map(String::as_str);
+        let (provider_name, model_name) =
+            resolve_delegate_provider_model(&agent_config, &self.routing_defaults);
 
-        let provider: Box<dyn Provider> = match providers::create_provider_with_options(
-            &agent_config.provider,
-            provider_credential,
-            &self.provider_runtime_options,
+        let provider: Box<dyn Provider> = match self.create_routed_provider_for_delegate_agent(
+            &agent_config,
+            &provider_name,
+            &model_name,
+            agent_name,
         ) {
             Ok(p) => p,
-            Err(e) => {
-                return Ok(ToolResult {
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!(
-                        "Failed to create provider '{}' for agent '{agent_name}': {e}",
-                        agent_config.provider
-                    )),
-                });
-            }
+            Err(tool_result) => return Ok(tool_result),
         };
 
         // Build the message
@@ -514,6 +614,8 @@ impl DelegateTool {
                     &*provider,
                     &full_prompt,
                     temperature,
+                    &provider_name,
+                    &model_name,
                 )
                 .await;
         }
@@ -544,6 +646,7 @@ impl DelegateTool {
             &[],
             &self.workspace_dir,
             layered_block.as_deref(),
+            model_name.as_str(),
         );
         let system_prompt_ref = enriched_system_prompt.as_deref();
 
@@ -556,7 +659,7 @@ impl DelegateTool {
             provider.chat_with_system(
                 system_prompt_ref,
                 &full_prompt,
-                &agent_config.model,
+                model_name.as_str(),
                 temperature,
             ),
         )
@@ -586,8 +689,8 @@ impl DelegateTool {
                     success: true,
                     output: format!(
                         "[Agent '{agent_name}' ({provider}/{model})]\n{rendered}",
-                        provider = agent_config.provider,
-                        model = agent_config.model
+                        provider = provider_name,
+                        model = model_name
                     ),
                     error: None,
                 })
@@ -707,6 +810,7 @@ impl DelegateTool {
         let root_memory = self.root_memory.clone();
         let embedding_api_key = self.embedding_api_key.clone();
         let embedding_routes = self.embedding_routes.clone();
+        let routing_defaults = self.routing_defaults.clone();
 
         tokio::spawn(async move {
             // Build an inner DelegateTool for the spawned context
@@ -714,6 +818,7 @@ impl DelegateTool {
                 agents,
                 security,
                 fallback_credential,
+                routing_defaults,
                 provider_runtime_options,
                 depth,
                 parent_tools,
@@ -873,6 +978,7 @@ impl DelegateTool {
             let root_memory = self.root_memory.clone();
             let embedding_api_key = self.embedding_api_key.clone();
             let embedding_routes = self.embedding_routes.clone();
+            let routing_defaults = self.routing_defaults.clone();
             let agent_name = agent_name.clone();
             let prompt = prompt.to_string();
             let args_clone = args.clone();
@@ -882,6 +988,7 @@ impl DelegateTool {
                     agents,
                     security,
                     fallback_credential,
+                    routing_defaults,
                     provider_runtime_options,
                     depth,
                     parent_tools,
@@ -1103,6 +1210,7 @@ impl DelegateTool {
         sub_tools: &[Box<dyn Tool>],
         workspace_dir: &Path,
         layered_memory_block: Option<&str>,
+        effective_model: &str,
     ) -> Option<String> {
         // Resolve skills directory: scoped if configured, otherwise workspace default.
         let skills_dir = agent_config
@@ -1130,7 +1238,7 @@ impl DelegateTool {
         // Build structured operational context using SystemPromptBuilder sections.
         let ctx = PromptContext {
             workspace_dir,
-            model_name: &agent_config.model,
+            model_name: effective_model,
             tools: sub_tools,
             skills: &skills,
             skills_prompt_mode: crate::config::SkillsPromptInjectionMode::Full,
@@ -1183,6 +1291,8 @@ impl DelegateTool {
         provider: &dyn Provider,
         full_prompt: &str,
         temperature: f64,
+        provider_name: &str,
+        model_name: &str,
     ) -> anyhow::Result<ToolResult> {
         if agent_config.allowed_tools.is_empty() {
             return Ok(ToolResult {
@@ -1266,6 +1376,7 @@ impl DelegateTool {
             &sub_tools,
             &self.workspace_dir,
             layered_block.as_deref(),
+            model_name,
         );
 
         let mut history = Vec::new();
@@ -1304,8 +1415,8 @@ impl DelegateTool {
                 &mut history,
                 &sub_tools,
                 &noop_observer,
-                &agent_config.provider,
-                &agent_config.model,
+                provider_name,
+                model_name,
                 temperature,
                 true,
                 None,
@@ -1343,8 +1454,8 @@ impl DelegateTool {
                     success: true,
                     output: format!(
                         "[Agent '{agent_name}' ({provider}/{model}, agentic)]\n{rendered}",
-                        provider = agent_config.provider,
-                        model = agent_config.model
+                        provider = provider_name,
+                        model = model_name
                     ),
                     error: None,
                 })
@@ -1600,6 +1711,35 @@ mod tests {
         ) -> anyhow::Result<ChatResponse> {
             Err(anyhow!("provider boom"))
         }
+    }
+
+    #[test]
+    fn resolve_delegate_provider_model_empty_inherits_defaults() {
+        let defaults = DelegateRoutingDefaults {
+            default_provider: "openai-custom".into(),
+            default_model: "gpt-default".into(),
+            api_url: Some("https://example.com/v1".into()),
+            reliability: crate::config::ReliabilityConfig::default(),
+            model_routes: Vec::new(),
+        };
+        let agent = DelegateAgentConfig {
+            provider: "   ".into(),
+            model: String::new(),
+            system_prompt: None,
+            api_key: None,
+            temperature: None,
+            max_depth: 3,
+            agentic: false,
+            allowed_tools: Vec::new(),
+            max_iterations: 10,
+            timeout_secs: None,
+            agentic_timeout_secs: None,
+            skills_directory: None,
+            memory_namespace: None,
+        };
+        let (p, m) = resolve_delegate_provider_model(&agent, &defaults);
+        assert_eq!(p, "openai-custom");
+        assert_eq!(m, "gpt-default");
     }
 
     fn agentic_config(allowed_tools: Vec<String>, max_iterations: usize) -> DelegateAgentConfig {
@@ -1973,7 +2113,15 @@ mod tests {
 
         let provider = OneToolThenFinalProvider;
         let result = tool
-            .execute_agentic("agentic", &config, &provider, "run", 0.2)
+            .execute_agentic(
+                "agentic",
+                &config,
+                &provider,
+                "run",
+                0.2,
+                "openrouter",
+                "model-test",
+            )
             .await
             .unwrap();
 
@@ -1995,7 +2143,15 @@ mod tests {
 
         let provider = OneToolThenFinalProvider;
         let result = tool
-            .execute_agentic("agentic", &config, &provider, "run", 0.2)
+            .execute_agentic(
+                "agentic",
+                &config,
+                &provider,
+                "run",
+                0.2,
+                "openrouter",
+                "model-test",
+            )
             .await
             .unwrap();
 
@@ -2015,7 +2171,15 @@ mod tests {
 
         let provider = InfiniteToolCallProvider;
         let result = tool
-            .execute_agentic("agentic", &config, &provider, "run", 0.2)
+            .execute_agentic(
+                "agentic",
+                &config,
+                &provider,
+                "run",
+                0.2,
+                "openrouter",
+                "model-test",
+            )
             .await
             .unwrap();
 
@@ -2035,7 +2199,15 @@ mod tests {
 
         let provider = FailingProvider;
         let result = tool
-            .execute_agentic("agentic", &config, &provider, "run", 0.2)
+            .execute_agentic(
+                "agentic",
+                &config,
+                &provider,
+                "run",
+                0.2,
+                "openrouter",
+                "model-test",
+            )
             .await
             .unwrap();
 
@@ -2131,7 +2303,15 @@ mod tests {
 
         let provider = McpToolThenFinalProvider;
         let result = tool
-            .execute_agentic("agentic", &config, &provider, "run mcp", 0.2)
+            .execute_agentic(
+                "agentic",
+                &config,
+                &provider,
+                "run mcp",
+                0.2,
+                "openrouter",
+                "model-test",
+            )
             .await
             .unwrap();
 
@@ -2172,7 +2352,7 @@ mod tests {
             .with_workspace_dir(workspace.clone());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace, None)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None, "test-model")
             .unwrap();
 
         assert!(prompt.contains("## Tools"), "should contain tools section");
@@ -2243,7 +2423,7 @@ mod tests {
             .with_workspace_dir(workspace.to_path_buf());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace, None)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None, "test-model")
             .unwrap();
 
         assert!(
@@ -2322,7 +2502,7 @@ mod tests {
             .with_workspace_dir(workspace.to_path_buf());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace, None)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None, "test-model")
             .unwrap();
 
         assert!(
@@ -2580,7 +2760,7 @@ mod tests {
             .with_workspace_dir(workspace.clone());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace, None)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None, "test-model")
             .unwrap();
 
         assert!(
@@ -2627,7 +2807,7 @@ mod tests {
             .with_workspace_dir(workspace.clone());
 
         let prompt = tool
-            .build_enriched_system_prompt(&config, &tools, &workspace, None)
+            .build_enriched_system_prompt(&config, &tools, &workspace, None, "test-model")
             .unwrap();
 
         assert!(
@@ -2864,6 +3044,22 @@ mod tests {
         assert!(tool.cancellation_token().is_cancelled());
     }
 
+    async fn read_background_result_when_terminal(
+        path: &std::path::Path,
+    ) -> BackgroundDelegateResult {
+        for _ in 0..600 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if let Ok(content) = std::fs::read_to_string(path) {
+                if let Ok(r) = serde_json::from_str::<BackgroundDelegateResult>(&content) {
+                    if r.status != BackgroundTaskStatus::Running {
+                        return r;
+                    }
+                }
+            }
+        }
+        panic!("timed out waiting for terminal delegate background status at {path:?}");
+    }
+
     #[tokio::test]
     async fn background_task_result_persisted_to_disk() {
         let workspace = std::env::temp_dir().join(format!(
@@ -2895,9 +3091,6 @@ mod tests {
             .trim_start_matches("task_id: ")
             .trim();
 
-        // Wait for the background task to finish
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Check that the result file exists
         let result_path = workspace
             .join("delegate_results")
@@ -2907,9 +3100,7 @@ mod tests {
             "Result file should exist at {result_path:?}"
         );
 
-        // Read and parse the result
-        let content = std::fs::read_to_string(&result_path).unwrap();
-        let bg_result: BackgroundDelegateResult = serde_json::from_str(&content).unwrap();
+        let bg_result = read_background_result_when_terminal(&result_path).await;
         assert_eq!(bg_result.task_id, task_id);
         assert_eq!(bg_result.agent, "researcher");
         // The task will have failed because ollama isn't running, but it should be persisted
@@ -2952,8 +3143,10 @@ mod tests {
             .trim()
             .to_string();
 
-        // Wait for background task
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        let result_path = workspace
+            .join("delegate_results")
+            .join(format!("{task_id}.json"));
+        let _ = read_background_result_when_terminal(&result_path).await;
 
         // Check result
         let check = tool
@@ -2993,8 +3186,17 @@ mod tests {
             .unwrap();
         assert!(result.success);
 
-        // Wait for task to complete
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        let task_id = result
+            .output
+            .lines()
+            .find(|l| l.starts_with("task_id:"))
+            .unwrap()
+            .trim_start_matches("task_id: ")
+            .trim();
+        let result_path = workspace
+            .join("delegate_results")
+            .join(format!("{task_id}.json"));
+        let _ = read_background_result_when_terminal(&result_path).await;
 
         // List results
         let list = tool

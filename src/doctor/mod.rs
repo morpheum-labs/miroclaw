@@ -701,21 +701,46 @@ fn check_config_semantics(config: &Config, items: &mut Vec<DiagItem>) {
         ));
     }
 
-    // Delegate agents: provider validity
+    // Delegate agents: resolved provider + routing (matches delegate/swarm runtime)
+    let routing_defaults = crate::tools::delegate::DelegateRoutingDefaults::from_config(config);
     let mut agent_names: Vec<_> = config.agents.keys().collect();
     agent_names.sort();
     for name in agent_names {
         let agent = config.agents.get(name).unwrap();
-        if let Some(reason) = provider_validation_error(&agent.provider, config.api_url.as_deref())
-        {
+        if let Some(reason) = delegate_agent_routing_validation_error(agent, &routing_defaults) {
+            let (effective_provider, _) =
+                crate::tools::delegate::resolve_delegate_provider_model(agent, &routing_defaults);
             items.push(DiagItem::warn(
                 cat,
-                format!(
-                    "agent \"{name}\" uses invalid provider \"{}\": {}",
-                    agent.provider, reason
-                ),
+                format!("agent \"{name}\" effective provider \"{effective_provider}\": {reason}",),
             ));
         }
+    }
+}
+
+fn delegate_agent_routing_validation_error(
+    agent: &crate::config::DelegateAgentConfig,
+    routing_defaults: &crate::tools::delegate::DelegateRoutingDefaults,
+) -> Option<String> {
+    let (prov, model) =
+        crate::tools::delegate::resolve_delegate_provider_model(agent, routing_defaults);
+    match crate::providers::create_routed_provider_with_options(
+        prov.as_str(),
+        None,
+        routing_defaults.api_url.as_deref(),
+        &routing_defaults.reliability,
+        &routing_defaults.model_routes,
+        model.as_str(),
+        &crate::providers::ProviderRuntimeOptions::default(),
+    ) {
+        Ok(_) => None,
+        Err(err) => Some(
+            err.to_string()
+                .lines()
+                .next()
+                .unwrap_or("invalid provider")
+                .to_string(),
+        ),
     }
 }
 

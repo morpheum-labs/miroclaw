@@ -569,9 +569,11 @@ impl Default for DelegateToolConfig {
 /// Configuration for a delegate sub-agent used by the `delegate` tool.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DelegateAgentConfig {
-    /// Provider name (e.g. "ollama", "openrouter", "anthropic")
+    /// Provider name (e.g. "ollama", "openrouter", "anthropic", "openai-custom").
+    /// When empty or whitespace-only, inherits `default_provider` from the root config (same routing as the primary agent).
     pub provider: String,
-    /// Model name
+    /// Model id for this sub-agent.
+    /// When empty or whitespace-only, inherits `default_model` from the root config.
     pub model: String,
     /// Optional system prompt for the sub-agent
     #[serde(default)]

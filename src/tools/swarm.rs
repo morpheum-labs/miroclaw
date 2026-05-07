@@ -1,3 +1,4 @@
+use super::delegate::{resolve_delegate_provider_model, DelegateRoutingDefaults};
 use super::traits::{Tool, ToolResult};
 use crate::config::{DelegateAgentConfig, SwarmConfig, SwarmStrategy};
 use crate::providers::{self, Provider};
@@ -20,6 +21,7 @@ pub struct SwarmTool {
     agents: Arc<RwLock<HashMap<String, DelegateAgentConfig>>>,
     security: Arc<SecurityPolicy>,
     fallback_credential: Option<String>,
+    routing_defaults: DelegateRoutingDefaults,
     provider_runtime_options: providers::ProviderRuntimeOptions,
 }
 
@@ -29,6 +31,7 @@ impl SwarmTool {
         agents: HashMap<String, DelegateAgentConfig>,
         fallback_credential: Option<String>,
         security: Arc<SecurityPolicy>,
+        routing_defaults: DelegateRoutingDefaults,
         provider_runtime_options: providers::ProviderRuntimeOptions,
     ) -> Self {
         Self {
@@ -36,6 +39,7 @@ impl SwarmTool {
             agents: Arc::new(RwLock::new(agents)),
             security,
             fallback_credential,
+            routing_defaults,
             provider_runtime_options,
         }
     }
@@ -45,6 +49,7 @@ impl SwarmTool {
         agents: Arc<RwLock<HashMap<String, DelegateAgentConfig>>>,
         fallback_credential: Option<String>,
         security: Arc<SecurityPolicy>,
+        routing_defaults: DelegateRoutingDefaults,
         provider_runtime_options: providers::ProviderRuntimeOptions,
     ) -> Self {
         Self {
@@ -52,6 +57,7 @@ impl SwarmTool {
             agents,
             security,
             fallback_credential,
+            routing_defaults,
             provider_runtime_options,
         }
     }
@@ -61,22 +67,27 @@ impl SwarmTool {
         agent_config: &DelegateAgentConfig,
         agent_name: &str,
     ) -> Result<Box<dyn Provider>, ToolResult> {
+        let (provider_name, model_name) =
+            resolve_delegate_provider_model(agent_config, &self.routing_defaults);
         let credential = agent_config
             .api_key
             .clone()
             .or_else(|| self.fallback_credential.clone());
 
-        providers::create_provider_with_options(
-            &agent_config.provider,
+        providers::create_routed_provider_with_options(
+            &provider_name,
             credential.as_deref(),
+            self.routing_defaults.api_url.as_deref(),
+            &self.routing_defaults.reliability,
+            &self.routing_defaults.model_routes,
+            &model_name,
             &self.provider_runtime_options,
         )
         .map_err(|e| ToolResult {
             success: false,
             output: String::new(),
             error: Some(format!(
-                "Failed to create provider '{}' for agent '{agent_name}': {e}",
-                agent_config.provider
+                "Failed to create provider '{provider_name}' for agent '{agent_name}': {e}",
             )),
         })
     }
@@ -93,13 +104,14 @@ impl SwarmTool {
             .map_err(|r| r.error.unwrap_or_default())?;
 
         let temperature = agent_config.temperature.unwrap_or(0.7);
+        let (_, model_name) = resolve_delegate_provider_model(agent_config, &self.routing_defaults);
 
         let result = tokio::time::timeout(
             Duration::from_secs(timeout_secs),
             provider.chat_with_system(
                 agent_config.system_prompt.as_deref(),
                 prompt,
-                &agent_config.model,
+                model_name.as_str(),
                 temperature,
             ),
         )
@@ -158,10 +170,9 @@ impl SwarmTool {
                 .await
             {
                 Ok(output) => {
-                    results.push(format!(
-                        "[{agent_name} ({}/{})] {output}",
-                        agent_config.provider, agent_config.model
-                    ));
+                    let (prov, mdl) =
+                        resolve_delegate_provider_model(&agent_config, &self.routing_defaults);
+                    results.push(format!("[{agent_name} ({prov}/{mdl})] {output}",));
                     current_input = output;
                 }
                 Err(e) => {
@@ -211,35 +222,19 @@ impl SwarmTool {
                 }
             };
 
-            let credential = agent_config
-                .api_key
-                .clone()
-                .or_else(|| self.fallback_credential.clone());
-
-            let provider = match providers::create_provider_with_options(
-                &agent_config.provider,
-                credential.as_deref(),
-                &self.provider_runtime_options,
-            ) {
+            let provider = match self.create_provider_for_agent(&agent_config, agent_name) {
                 Ok(p) => p,
-                Err(e) => {
-                    return Ok(ToolResult {
-                        success: false,
-                        output: String::new(),
-                        error: Some(format!(
-                            "Failed to create provider for agent '{agent_name}': {e}"
-                        )),
-                    });
-                }
+                Err(tool_result) => return Ok(tool_result),
             };
+
+            let (provider_name, model_name) =
+                resolve_delegate_provider_model(&agent_config, &self.routing_defaults);
 
             let name = agent_name.clone();
             let prompt_clone = full_prompt.clone();
             let timeout = swarm_config.timeout_secs;
-            let model = agent_config.model.clone();
             let temperature = agent_config.temperature.unwrap_or(0.7);
             let system_prompt = agent_config.system_prompt.clone();
-            let provider_name = agent_config.provider.clone();
 
             join_set.spawn(async move {
                 let result = tokio::time::timeout(
@@ -247,7 +242,7 @@ impl SwarmTool {
                     provider.chat_with_system(
                         system_prompt.as_deref(),
                         &prompt_clone,
-                        &model,
+                        model_name.as_str(),
                         temperature,
                     ),
                 )
@@ -265,15 +260,15 @@ impl SwarmTool {
                     Err(_) => format!("[Timed out after {timeout}s]"),
                 };
 
-                (name, provider_name, model, output)
+                (name, provider_name, model_name, output)
             });
         }
 
         let mut results = Vec::new();
         while let Some(join_result) = join_set.join_next().await {
             match join_result {
-                Ok((name, provider_name, model, output)) => {
-                    results.push(format!("[{name} ({provider_name}/{model})]\n{output}"));
+                Ok((name, provider_name, model_name, output)) => {
+                    results.push(format!("[{name} ({provider_name}/{model_name})]\n{output}"));
                 }
                 Err(e) => {
                     results.push(format!("[join error] {e}"));
@@ -316,10 +311,8 @@ impl SwarmTool {
                         .system_prompt
                         .as_deref()
                         .unwrap_or("General purpose agent");
-                    format!(
-                        "- {name}: {desc} (provider: {}, model: {})",
-                        cfg.provider, cfg.model
-                    )
+                    let (prov, mdl) = resolve_delegate_provider_model(cfg, &self.routing_defaults);
+                    format!("- {name}: {desc} (provider: {prov}, model: {mdl})",)
                 })
             })
             .collect();
@@ -354,12 +347,15 @@ impl SwarmTool {
             agent_descriptions.join("\n")
         );
 
+        let (_, router_model) =
+            resolve_delegate_provider_model(&first_agent_config, &self.routing_defaults);
+
         let chosen = tokio::time::timeout(
             Duration::from_secs(SWARM_AGENT_TIMEOUT_SECS),
             router_provider.chat_with_system(
                 Some("You are a routing assistant. Respond with only the agent name."),
                 &routing_prompt,
-                &first_agent_config.model,
+                router_model.as_str(),
                 0.0,
             ),
         )
@@ -564,6 +560,7 @@ impl Tool for SwarmTool {
 mod tests {
     use super::*;
     use crate::security::{AutonomyLevel, SecurityPolicy};
+    use crate::tools::delegate::DelegateRoutingDefaults;
 
     fn test_security() -> Arc<SecurityPolicy> {
         Arc::new(SecurityPolicy::default())
@@ -652,6 +649,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         assert_eq!(tool.name(), "swarm");
@@ -672,6 +670,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         assert!(!tool.description().is_empty());
@@ -684,6 +683,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let schema = tool.parameters_schema();
@@ -700,6 +700,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let schema = tool.parameters_schema();
@@ -716,6 +717,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -733,6 +735,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool.execute(json!({"prompt": "test"})).await;
@@ -746,6 +749,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool.execute(json!({"swarm": "pipeline"})).await;
@@ -759,6 +763,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -776,6 +781,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -804,6 +810,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -832,6 +839,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -853,6 +861,7 @@ mod tests {
             sample_agents(),
             None,
             readonly,
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -878,6 +887,7 @@ mod tests {
             sample_agents(),
             None,
             limited,
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -911,6 +921,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -939,6 +950,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool
@@ -967,6 +979,7 @@ mod tests {
             sample_agents(),
             None,
             test_security(),
+            DelegateRoutingDefaults::default(),
             providers::ProviderRuntimeOptions::default(),
         );
         let result = tool

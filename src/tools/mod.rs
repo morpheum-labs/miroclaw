@@ -954,6 +954,9 @@ pub fn all_tools_with_runtime(
             security.clone(),
             provider_runtime_options.clone(),
         )
+        .with_routing_defaults(
+            crate::tools::delegate::DelegateRoutingDefaults::from_config(root_config),
+        )
         .with_parent_tools(Arc::clone(&parent_tools))
         .with_multimodal_config(root_config.multimodal.clone())
         .with_delegate_config(root_config.delegate.clone())
@@ -987,6 +990,7 @@ pub fn all_tools_with_runtime(
             swarm_agents_cell,
             delegate_fallback_credential,
             security.clone(),
+            crate::tools::delegate::DelegateRoutingDefaults::from_config(root_config),
             provider_runtime_options,
         )));
     }
