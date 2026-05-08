@@ -25,8 +25,10 @@ use std::time::Instant;
 /// [`TurnEventSink::Emit`] from [`Agent::turn_streamed`].
 #[derive(Debug, Clone)]
 pub enum TurnEvent {
-    /// A text chunk from the LLM response (may arrive many times).
+    /// Visible assistant text chunk from the LLM (may arrive many times).
     Chunk { delta: String },
+    /// Reasoning / thinking chunk when the provider streams it separately from visible content.
+    ReasoningChunk { delta: String },
     /// The agent is invoking a tool.
     ToolCall {
         name: String,
@@ -34,6 +36,13 @@ pub enum TurnEvent {
     },
     /// A tool has returned a result.
     ToolResult { name: String, output: String },
+}
+
+/// Final payload from [`Agent::turn_streamed`] (answer shown to the user plus optional reasoning text).
+#[derive(Debug, Clone)]
+pub struct TurnStreamedOutput {
+    pub answer: String,
+    pub reasoning: String,
 }
 
 /// Unified stream item from the tool-call loop and streamed gateway turns.
@@ -1165,13 +1174,13 @@ impl Agent {
     /// items through the provided channel so callers (e.g. the WebSocket gateway)
     /// can relay incremental updates to clients.
     ///
-    /// The returned `String` is the final, complete assistant response — the
-    /// same value that `turn` would return.
+    /// The returned [`TurnStreamedOutput::answer`] is the final assistant reply (same text `turn` would return).
+    /// [`TurnStreamedOutput::reasoning`] aggregates streamed or non-stream reasoning deltas when available.
     pub async fn turn_streamed(
         &mut self,
         user_message: &str,
         event_tx: tokio::sync::mpsc::Sender<TurnEventSink>,
-    ) -> Result<String> {
+    ) -> Result<TurnStreamedOutput> {
         let _mem_tool_ns =
             memory::memory_tool_stack_guard(self.memory_cfg.tool_call_memory_namespace());
         // ── Preamble (aligned with [`turn`](Self::turn): transcript-first) ──
@@ -1298,6 +1307,8 @@ impl Agent {
         self.history
             .push(ConversationMessage::Chat(ChatMessage::user(enriched)));
 
+        let mut turn_reasoning_accum = String::new();
+
         // ── Turn loop ──────────────────────────────────────────────────
         for _ in 0..self.config.max_tool_iterations {
             let messages = self.tool_dispatcher.to_provider_messages(&self.history);
@@ -1340,7 +1351,10 @@ impl Agent {
                     self.append_session_transcript("gateway", &effective_model, &cached);
                     self.fire_post_turn_hooks("gateway", user_message, cached.as_str())
                         .await;
-                    return Ok(cached);
+                    return Ok(TurnStreamedOutput {
+                        answer: cached,
+                        reasoning: String::new(),
+                    });
                 }
                 self.observer.record_event(&ObserverEvent::CacheMiss {
                     cache_type: "response".into(),
@@ -1361,20 +1375,42 @@ impl Agent {
             );
 
             let mut streamed_text = String::new();
+            let mut streamed_reasoning_this = String::new();
             let mut got_stream = false;
 
             while let Some(item) = stream.next().await {
                 match item {
-                    Ok(chunk) => {
-                        if !chunk.delta.is_empty() {
+                    Ok(mut chunk) => {
+                        if chunk.is_final {
+                            continue;
+                        }
+                        let reasoning_delta = std::mem::take(&mut chunk.reasoning_delta);
+                        if !reasoning_delta.is_empty() {
                             got_stream = true;
-                            streamed_text.push_str(&chunk.delta);
+                            streamed_reasoning_this.push_str(&reasoning_delta);
+                            turn_reasoning_accum.push_str(&reasoning_delta);
                             let _ = event_tx
-                                .send(TurnEventSink::Emit(TurnEvent::Chunk { delta: chunk.delta }))
+                                .send(TurnEventSink::Emit(TurnEvent::ReasoningChunk {
+                                    delta: reasoning_delta,
+                                }))
+                                .await;
+                        }
+                        let delta = std::mem::take(&mut chunk.delta);
+                        if !delta.is_empty() {
+                            got_stream = true;
+                            streamed_text.push_str(&delta);
+                            let _ = event_tx
+                                .send(TurnEventSink::Emit(TurnEvent::Chunk { delta }))
                                 .await;
                         }
                     }
-                    Err(_) => break,
+                    Err(err) => {
+                        tracing::warn!(
+                            error = %err,
+                            "stream_chat chunk error; stopping stream read (fallback may follow)"
+                        );
+                        break;
+                    }
                 }
             }
             // Drop the stream so we release the borrow on provider.
@@ -1388,11 +1424,15 @@ impl Agent {
                     text: Some(streamed_text),
                     tool_calls: Vec::new(),
                     usage: None,
-                    reasoning_content: None,
+                    reasoning_content: if streamed_reasoning_this.is_empty() {
+                        None
+                    } else {
+                        Some(streamed_reasoning_this)
+                    },
                 }
             } else {
                 // Fall back to non-streaming chat
-                match self
+                let resp = match self
                     .provider
                     .chat(
                         ChatRequest {
@@ -1408,9 +1448,20 @@ impl Agent {
                     )
                     .await
                 {
-                    Ok(resp) => resp,
+                    Ok(r) => r,
                     Err(err) => return Err(err),
+                };
+                if let Some(ref rc) = resp.reasoning_content {
+                    if !rc.is_empty() {
+                        turn_reasoning_accum.push_str(rc);
+                        let _ = event_tx
+                            .send(TurnEventSink::Emit(TurnEvent::ReasoningChunk {
+                                delta: rc.clone(),
+                            }))
+                            .await;
+                    }
                 }
+                resp
             };
 
             let (text, calls) = self.tool_dispatcher.parse_response(&response);
@@ -1450,7 +1501,10 @@ impl Agent {
                 self.append_session_transcript("gateway", &effective_model, &final_text);
                 self.fire_post_turn_hooks("gateway", user_message, final_text.as_str())
                     .await;
-                return Ok(final_text);
+                return Ok(TurnStreamedOutput {
+                    answer: final_text,
+                    reasoning: turn_reasoning_accum,
+                });
             }
 
             // ── Tool calls ─────────────────────────────────────────────

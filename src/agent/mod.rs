@@ -24,6 +24,6 @@ pub mod tool_router;
 mod tests;
 
 #[allow(unused_imports)]
-pub use agent::{Agent, AgentBuilder, TurnEvent, TurnEventSink};
+pub use agent::{Agent, AgentBuilder, TurnEvent, TurnEventSink, TurnStreamedOutput};
 #[allow(unused_imports)]
 pub use loop_::{process_message, run};

@@ -358,6 +358,9 @@ async fn process_user_turn(
                 | TurnEventSink::Emit(TurnEvent::Chunk { delta }) => {
                     serde_json::json!({ "type": "chunk", "content": delta })
                 }
+                TurnEventSink::Emit(TurnEvent::ReasoningChunk { delta }) => {
+                    serde_json::json!({ "type": "reasoning_chunk", "content": delta })
+                }
                 TurnEventSink::Emit(TurnEvent::ToolCall { name, args }) => {
                     serde_json::json!({ "type": "tool_call", "name": name, "args": args })
                 }
@@ -372,19 +375,22 @@ async fn process_user_turn(
     let (result, ()) = tokio::join!(turn_fut, forward_fut);
 
     match result {
-        Ok(response) => {
+        Ok(out) => {
             if let Some(ref backend) = ctx.session_backend {
-                let assistant_msg = ChatMessage::assistant(&response);
+                let assistant_msg = ChatMessage::assistant(&out.answer);
                 let _ = backend.append(session_key, &assistant_msg);
             }
 
             let reset = serde_json::json!({ "type": "chunk_reset" });
             emit_ws_event_async(replay, replay_cap, subscribers, reset).await;
 
-            let done = serde_json::json!({
+            let mut done = serde_json::json!({
                 "type": "done",
-                "full_response": response,
+                "full_response": out.answer,
             });
+            if !out.reasoning.is_empty() {
+                done["full_reasoning"] = serde_json::json!(out.reasoning);
+            }
             emit_ws_event_async(replay, replay_cap, subscribers, done).await;
 
             let _ = ctx.event_tx.send(serde_json::json!({

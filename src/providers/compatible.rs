@@ -746,7 +746,8 @@ struct StreamDelta {
 
 /// Parse SSE (Server-Sent Events) stream from OpenAI-compatible providers.
 /// Handles the `data: {...}` format and `[DONE]` sentinel.
-fn parse_sse_line(line: &str) -> StreamResult<Option<String>> {
+/// Returns a chunk that may include **both** answer and reasoning deltas in one SSE frame.
+fn parse_sse_line(line: &str) -> StreamResult<Option<StreamChunk>> {
     let line = line.trim();
 
     // Skip empty lines and comments
@@ -766,19 +767,28 @@ fn parse_sse_line(line: &str) -> StreamResult<Option<String>> {
         // Parse JSON delta
         let chunk: StreamChunkResponse = serde_json::from_str(data).map_err(StreamError::Json)?;
 
-        // Extract content from delta
         if let Some(choice) = chunk.choices.first() {
-            if let Some(content) = &choice.delta.content {
+            let mut delta = String::new();
+            let mut reasoning_delta = String::new();
+            if let Some(content) = choice.delta.content.as_ref() {
                 if !content.is_empty() {
-                    return Ok(Some(content.clone()));
+                    delta = content.clone();
                 }
             }
-            // Fallback to reasoning_content for thinking models
-            if let Some(reasoning) = &choice.delta.reasoning_content {
+            if let Some(reasoning) = choice.delta.reasoning_content.as_ref() {
                 if !reasoning.is_empty() {
-                    return Ok(Some(reasoning.clone()));
+                    reasoning_delta = reasoning.clone();
                 }
             }
+            if delta.is_empty() && reasoning_delta.is_empty() {
+                return Ok(None);
+            }
+            return Ok(Some(StreamChunk {
+                delta,
+                reasoning_delta,
+                is_final: false,
+                token_count: 0,
+            }));
         }
     }
 
@@ -833,8 +843,7 @@ fn sse_bytes_to_chunks(
                         buffer.drain(..=pos);
 
                         match parse_sse_line(&line) {
-                            Ok(Some(content)) => {
-                                let mut chunk = StreamChunk::delta(content);
+                            Ok(Some(mut chunk)) => {
                                 if count_tokens {
                                     chunk = chunk.with_token_estimate();
                                 }
@@ -3070,37 +3079,41 @@ mod tests {
     #[test]
     fn parse_sse_line_with_content() {
         let line = r#"data: {"choices":[{"delta":{"content":"hello"}}]}"#;
-        let result = parse_sse_line(line).unwrap();
-        assert_eq!(result, Some("hello".to_string()));
+        let result = parse_sse_line(line).unwrap().unwrap();
+        assert_eq!(result.delta, "hello");
+        assert!(result.reasoning_delta.is_empty());
     }
 
     #[test]
     fn parse_sse_line_with_reasoning_content() {
         let line = r#"data: {"choices":[{"delta":{"reasoning_content":"thinking..."}}]}"#;
-        let result = parse_sse_line(line).unwrap();
-        assert_eq!(result, Some("thinking...".to_string()));
+        let result = parse_sse_line(line).unwrap().unwrap();
+        assert!(result.delta.is_empty());
+        assert_eq!(result.reasoning_delta, "thinking...");
     }
 
     #[test]
-    fn parse_sse_line_with_both_prefers_content() {
+    fn parse_sse_line_with_both_returns_distinct_streams() {
         let line = r#"data: {"choices":[{"delta":{"content":"real answer","reasoning_content":"thinking..."}}]}"#;
-        let result = parse_sse_line(line).unwrap();
-        assert_eq!(result, Some("real answer".to_string()));
+        let result = parse_sse_line(line).unwrap().unwrap();
+        assert_eq!(result.delta, "real answer");
+        assert_eq!(result.reasoning_delta, "thinking...");
     }
 
     #[test]
     fn parse_sse_line_with_empty_content_falls_back_to_reasoning_content() {
         let line =
             r#"data: {"choices":[{"delta":{"content":"","reasoning_content":"thinking..."}}]}"#;
-        let result = parse_sse_line(line).unwrap();
-        assert_eq!(result, Some("thinking...".to_string()));
+        let result = parse_sse_line(line).unwrap().unwrap();
+        assert!(result.delta.is_empty());
+        assert_eq!(result.reasoning_delta, "thinking...");
     }
 
     #[test]
     fn parse_sse_line_done_sentinel() {
         let line = "data: [DONE]";
         let result = parse_sse_line(line).unwrap();
-        assert_eq!(result, None);
+        assert!(result.is_none());
     }
 
     #[test]

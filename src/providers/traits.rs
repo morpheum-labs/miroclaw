@@ -122,8 +122,10 @@ pub enum ConversationMessage {
 /// A chunk of content from a streaming response.
 #[derive(Debug, Clone)]
 pub struct StreamChunk {
-    /// Text delta for this chunk.
+    /// Visible assistant text delta (e.g. OpenAI `delta.content`).
     pub delta: String,
+    /// Thinking / reasoning stream delta when the provider exposes it (e.g. `delta.reasoning_content`).
+    pub reasoning_delta: String,
     /// Whether this is the final chunk.
     pub is_final: bool,
     /// Approximate token count for this chunk (estimated).
@@ -131,10 +133,21 @@ pub struct StreamChunk {
 }
 
 impl StreamChunk {
-    /// Create a new non-final chunk.
+    /// Create a new non-final chunk with answer text only.
     pub fn delta(text: impl Into<String>) -> Self {
         Self {
             delta: text.into(),
+            reasoning_delta: String::new(),
+            is_final: false,
+            token_count: 0,
+        }
+    }
+
+    /// Non-final chunk with reasoning-only delta.
+    pub fn reasoning_delta_only(text: impl Into<String>) -> Self {
+        Self {
+            delta: String::new(),
+            reasoning_delta: text.into(),
             is_final: false,
             token_count: 0,
         }
@@ -144,6 +157,7 @@ impl StreamChunk {
     pub fn final_chunk() -> Self {
         Self {
             delta: String::new(),
+            reasoning_delta: String::new(),
             is_final: true,
             token_count: 0,
         }
@@ -153,6 +167,7 @@ impl StreamChunk {
     pub fn error(message: impl Into<String>) -> Self {
         Self {
             delta: message.into(),
+            reasoning_delta: String::new(),
             is_final: true,
             token_count: 0,
         }
@@ -160,7 +175,7 @@ impl StreamChunk {
 
     /// Estimate tokens (rough approximation: ~4 chars per token).
     pub fn with_token_estimate(mut self) -> Self {
-        self.token_count = self.delta.len().div_ceil(4);
+        self.token_count = self.delta.len().div_ceil(4) + self.reasoning_delta.len().div_ceil(4);
         self
     }
 }

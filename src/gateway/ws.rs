@@ -6,11 +6,12 @@
 //! ```text
 //! Server -> Client: {"type":"session_start","session_id":"...","name":"...","resumed":true,"message_count":42}
 //! Client -> Server: {"type":"message","content":"Hello"}
-//! Server -> Client: {"type":"chunk","content":"..."}   // LLM deltas + optional tool-loop progress (TurnEventSink)
+//! Server -> Client: {"type":"chunk","content":"..."}   // Visible assistant text deltas + legacy DeltaText progress
+//! Server -> Client: {"type":"reasoning_chunk","content":"..."}   // Thinking/reasoning stream when the provider separates it
 //! Server -> Client: {"type":"tool_call","name":"shell","args":{...}}
 //! Server -> Client: {"type":"tool_result","name":"shell","output":"..."}
 //! Server -> Client: {"type":"chunk_reset"}
-//! Server -> Client: {"type":"done","full_response":"..."}
+//! Server -> Client: {"type":"done","full_response":"...","full_reasoning":"..."}   // full_reasoning omitted when empty
 //! ```
 //!
 //! Streamed frames may include `"seq": <u64>` for ordering; clients can reconnect with

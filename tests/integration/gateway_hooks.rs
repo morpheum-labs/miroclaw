@@ -76,10 +76,14 @@ async fn streamed_agent_turn_runs_post_turn_hooks_like_gateway_ws() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<TurnEventSink>(16);
     let user = "user message with enough characters for consolidation threshold";
-    let _ = agent
+    let out = agent
         .turn_streamed(user, tx)
         .await
         .expect("turn_streamed should succeed");
+    assert!(
+        !out.answer.is_empty(),
+        "turn_streamed should return assistant answer"
+    );
 
     while rx.recv().await.is_some() {}
 
