@@ -1,10 +1,10 @@
-# Telegram slash commands and control hub
+# Chat slash commands (channels + gateway) and Telegram control hub
 
-This guide reflects **current ZeroClaw behavior** (not third-party tutorials).
+This guide reflects **current ZeroClaw behavior** (not third-party tutorials). **Where to find this:** `docs/setup-guides/telegram-slash-commands.md` (linked from [docs/README.md](../README.md)). Related: [channels-reference.md](../reference/api/channels-reference.md#in-chat-runtime-model-switching-telegram--discord) (runtime switching notes).
 
 ## Built-in runtime commands
 
-On Telegram (and other channels where model switching is supported), these are handled **before** the LLM:
+Handled **before** the LLM on **Telegram, Discord, Matrix, Slack**, and **gateway WebSocket chat** (`/ws/chat`):
 
 | Command | Purpose |
 | --- | --- |
@@ -14,6 +14,21 @@ On Telegram (and other channels where model switching is supported), these are h
 | `/config` | Show routing / model summary for this chat. |
 
 These do **not** require the control hub.
+
+### Gateway WebSocket extras (`/ws/chat` only)
+
+The browser/dashboard chat socket accepts the same runtime commands above, plus:
+
+| Command | Purpose |
+| --- | --- |
+| `/reset`, `/fresh-session` | Same as `/new` (fresh session). |
+| `/read` | Usage hint if bare; `/read <workspace-relative-path>` reads a file from disk immediately (subject to file-read policy). |
+| `/refresh` | Clears the dynamic-context memo for this workspace; optional `/refresh all` or `/refresh <path>` re-reads one file after clearing. |
+| `/webui` | `/webui status` or `/webui help` shows dashboard/source info; `/webui reload` reloads dashboard config from disk. |
+
+### Machine-readable catalog
+
+`GET /api/chat-slash-commands` on the gateway returns JSON describing the WebSocket slash commands (same descriptions as above). If `[gateway].path_prefix` is set, prepend it to the path (for example `/prefix/api/chat-slash-commands`).
 
 ## Optional control hub (`/z` by default)
 

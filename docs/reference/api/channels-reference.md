@@ -37,9 +37,9 @@ cli = true
 
 Each channel is enabled by creating its sub-table (for example, `[channels_config.telegram]`).
 
-## In-Chat Runtime Model Switching (Telegram / Discord)
+## In-Chat Runtime Model Switching (Telegram / Discord / Matrix / Slack)
 
-When running `zeroclaw channel start` (or daemon mode), Telegram and Discord now support sender-scoped runtime switching:
+When running `zeroclaw channel start` (or daemon mode), supported messengers expose the same sender-scoped runtime slash commands (see [telegram-slash-commands.md](../../setup-guides/telegram-slash-commands.md) for gateway-only extras and the `/api/chat-slash-commands` catalog):
 
 - `/models` — show available providers and current selection
 - `/models <provider>` — switch provider for the current sender session

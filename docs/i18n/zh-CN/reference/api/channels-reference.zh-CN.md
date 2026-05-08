@@ -37,9 +37,9 @@ cli = true
 
 每个渠道通过创建其子表来启用（例如 `[channels_config.telegram]`）。
 
-## 聊天内运行时模型切换（Telegram / Discord）
+## 聊天内运行时模型切换（Telegram / Discord / Matrix / Slack）
 
-运行 `zeroclaw channel start`（或守护进程模式）时，Telegram 和 Discord 现在支持发送者范围的运行时切换：
+运行 `zeroclaw channel start`（或守护进程模式）时，受支持的即时通讯渠道暴露同一套发送者范围的运行时斜杠命令（仅限网关的额外命令与 `GET /api/chat-slash-commands` 目录见 [telegram-slash-commands.md](../../../../setup-guides/telegram-slash-commands.md)）：
 
 - `/models` — 显示可用提供商和当前选择
 - `/models <provider>` — 为当前发送者会话切换提供商

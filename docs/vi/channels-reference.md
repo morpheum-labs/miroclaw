@@ -36,18 +36,20 @@ cli = true
 
 Mỗi channel được bật bằng cách tạo sub-table tương ứng (ví dụ: `[channels_config.telegram]`).
 
-## Chuyển đổi model runtime trong chat (Telegram / Discord)
+## Chuyển đổi model runtime trong chat (Telegram / Discord / Matrix / Slack)
 
-Khi chạy `zeroclaw channel start` (hoặc chế độ daemon), Telegram và Discord hỗ trợ chuyển đổi runtime theo phạm vi người gửi:
+Khi chạy `zeroclaw channel start` (hoặc chế độ daemon), các messenger được hỗ trợ dùng chung các lệnh slash runtime theo phạm vi người gửi (lệnh chỉ dành cho gateway và catalog `GET /api/chat-slash-commands`: xem [telegram-slash-commands.md](../../setup-guides/telegram-slash-commands.md)):
 
 - `/models` — hiển thị các provider hiện có và lựa chọn hiện tại
 - `/models <provider>` — chuyển provider cho phiên người gửi hiện tại
 - `/model` — hiển thị model hiện tại và các model ID đã cache (nếu có)
 - `/model <model-id>` — chuyển model cho phiên người gửi hiện tại
+- `/new` — xóa lịch sử hội thoại và bắt đầu phiên mới
 
 Lưu ý:
 
 - Việc chuyển đổi chỉ xóa lịch sử hội thoại trong bộ nhớ của người gửi đó, tránh ô nhiễm ngữ cảnh giữa các model.
+- `/new` xóa lịch sử của người gửi nhưng không đổi provider hay model đã chọn.
 - Xem trước bộ nhớ cache model từ `zeroclaw models refresh --provider <ID>`.
 - Đây là lệnh chat runtime, không phải lệnh con CLI.
 
