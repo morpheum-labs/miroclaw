@@ -81,9 +81,19 @@ impl CronSchedulerUpdater for HostCron {
 
     async fn remove_job(&self, job_id: &str) -> Result<(), ClawgotchaError> {
         let cfg = self.config.lock().clone();
-        crate::cron::remove_job(&cfg, job_id)
-            .map_err(|e| ClawgotchaError::Validation(format!("cron remove: {e}")))?;
-        tracing::info!(%job_id, "clawgotcha: removed cron job");
+        crate::cron::retire_job_for_clawgotcha_remove(&cfg, job_id)
+            .map_err(|e| ClawgotchaError::Validation(format!("cron retire: {e}")))?;
+        tracing::info!(%job_id, "clawgotcha: retired cron job (soft-remove)");
+        Ok(())
+    }
+
+    async fn reconcile_jobs_present(
+        &self,
+        remote_job_ids: &[String],
+    ) -> Result<(), ClawgotchaError> {
+        let cfg = self.config.lock().clone();
+        crate::cron::retire_clawgotcha_jobs_not_in_remote(&cfg, remote_job_ids)
+            .map_err(|e| ClawgotchaError::Validation(format!("cron reconcile snapshot: {e}")))?;
         Ok(())
     }
 }
@@ -91,6 +101,8 @@ impl CronSchedulerUpdater for HostCron {
 /// Webhook batch reconcile + swarm defaults application during polling.
 pub struct HostReconciler {
     pub config: Arc<Mutex<Config>>,
+    pub agents: Arc<dyn AgentRuntimeUpdater>,
+    pub cron: Arc<dyn CronSchedulerUpdater>,
 }
 
 #[async_trait]
@@ -101,8 +113,41 @@ impl ConfigReconciler for HostReconciler {
         }
         tracing::debug!(
             count = events.len(),
-            "clawgotcha: reconcile webhook batch (polling also applies deltas)"
+            "clawgotcha: applying webhook event batch"
         );
+        for ev in events {
+            match ev {
+                ChangeEvent::CronDeleted { job_id, .. } => {
+                    self.cron.remove_job(&job_id).await?;
+                }
+                ChangeEvent::AgentDeleted { name, .. } => {
+                    self.agents.remove_agent(&name).await?;
+                }
+                ChangeEvent::CronUpdated { job_id, revision } => {
+                    tracing::debug!(
+                        job_id = %job_id,
+                        revision,
+                        "clawgotcha webhook: cron updated (poll will upsert full row)"
+                    );
+                }
+                ChangeEvent::AgentUpdated { name, revision } => {
+                    tracing::debug!(
+                        agent = %name,
+                        revision,
+                        "clawgotcha webhook: agent updated (poll will upsert full row)"
+                    );
+                }
+                ChangeEvent::ConfigUpdated { revision } => {
+                    tracing::debug!(
+                        revision,
+                        "clawgotcha webhook: config updated (poll will refresh swarm defaults)"
+                    );
+                }
+                ChangeEvent::NotifySync { reason } => {
+                    tracing::debug!(%reason, "clawgotcha webhook: notify sync");
+                }
+            }
+        }
         Ok(())
     }
 
@@ -126,5 +171,52 @@ impl ConfigReconciler for HostReconciler {
             "clawgotcha: applied swarm defaults"
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn apply_batch_cron_deleted_retires_job() {
+        let tmp = TempDir::new().unwrap();
+        let cfg = Config {
+            workspace_dir: tmp.path().join("workspace"),
+            config_path: tmp.path().join("config.toml"),
+            ..Config::default()
+        };
+        std::fs::create_dir_all(&cfg.workspace_dir).unwrap();
+
+        crate::cron::upsert_clawgotcha_agent_job(&cfg, "w1", "*/5 * * * *", "prompt", true)
+            .unwrap();
+
+        let shared = Arc::new(Mutex::new(cfg.clone()));
+        let agents: Arc<dyn AgentRuntimeUpdater> = Arc::new(HostAgents {
+            config: Arc::clone(&shared),
+            delegate_agents: None,
+        });
+        let cron: Arc<dyn CronSchedulerUpdater> = Arc::new(HostCron {
+            config: Arc::clone(&shared),
+        });
+        let reconciler = HostReconciler {
+            config: Arc::clone(&shared),
+            agents,
+            cron,
+        };
+
+        reconciler
+            .apply_batch(vec![ChangeEvent::CronDeleted {
+                job_id: "w1".into(),
+                revision: 9,
+            }])
+            .await
+            .unwrap();
+
+        let j = crate::cron::get_job(&cfg, "w1").unwrap();
+        assert!(j.retired_at.is_some());
+        assert_eq!(j.retired_reason.as_deref(), Some("clawgotcha"));
     }
 }

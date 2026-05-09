@@ -163,6 +163,14 @@ pub struct CronJob {
     pub last_run: Option<DateTime<Utc>>,
     pub last_status: Option<String>,
     pub last_output: Option<String>,
+    /// Set while the scheduler is executing this job (persists across crash until cleared).
+    #[serde(default)]
+    pub run_in_progress: bool,
+    /// When set, the job is archived (soft-removed); excluded from active listings and scheduling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retired_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retired_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

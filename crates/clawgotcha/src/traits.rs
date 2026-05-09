@@ -143,6 +143,15 @@ pub trait AgentRuntimeUpdater: Send + Sync {
 pub trait CronSchedulerUpdater: Send + Sync {
     async fn upsert_job(&self, job: &CronJobDefinition) -> Result<(), ClawgotchaError>;
     async fn remove_job(&self, job_id: &str) -> Result<(), ClawgotchaError>;
+
+    /// After a successful cron list pull, retire local rows that are missing from this snapshot.
+    ///
+    /// Hosts that only receive full cron lists (typical `GET` envelope) should retire local
+    /// Clawgotcha rows whose ids are absent so removals propagate without relying on webhooks.
+    async fn reconcile_jobs_present(
+        &self,
+        remote_job_ids: &[String],
+    ) -> Result<(), ClawgotchaError>;
 }
 
 /// Persists last-known revision watermarks (workspace-local).

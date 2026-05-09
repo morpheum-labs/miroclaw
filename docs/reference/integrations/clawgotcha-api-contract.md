@@ -78,6 +78,8 @@ Runtime heartbeat (agentbook **`HeartbeatRequest`**). The instance key is in the
 
 **Legacy fallback:** **`GET /v1/cron`** with **`revision_watermark`** and **`jobs`** shaped like [`WireCronJob`](../../../crates/clawgotcha/src/models/wire.rs).
 
+**Miroclaw host semantics:** After a successful parse of the cron list body, the sync layer upserts each job, then runs a **snapshot reconcile**: local DB rows with `source = clawgotcha` that are **not** listed in that response are **soft-retired**. Operators should treat each successful response as the **full desired cron set** for the instance (empty list = retire all Clawgotcha cron locally). Partial-delta-only APIs are incompatible unless reconciliation is relaxed.
+
 ---
 
 ## `GET /v1/config`

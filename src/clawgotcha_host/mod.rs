@@ -106,15 +106,17 @@ pub async fn run_sync_supervised(
         dir.join("offline.json"),
     ));
 
-    let reconciler = Arc::new(glue::HostReconciler {
-        config: Arc::clone(&shared_config),
-    });
-    let agents = Arc::new(glue::HostAgents {
+    let agents: Arc<dyn clawgotcha::traits::AgentRuntimeUpdater> = Arc::new(glue::HostAgents {
         config: Arc::clone(&shared_config),
         delegate_agents: delegate_agents.clone(),
     });
-    let cron = Arc::new(glue::HostCron {
+    let cron: Arc<dyn clawgotcha::traits::CronSchedulerUpdater> = Arc::new(glue::HostCron {
         config: Arc::clone(&shared_config),
+    });
+    let reconciler = Arc::new(glue::HostReconciler {
+        config: Arc::clone(&shared_config),
+        agents: Arc::clone(&agents),
+        cron: Arc::clone(&cron),
     });
     let sink = Arc::new(clawgotcha::NoOpChangeSink);
 

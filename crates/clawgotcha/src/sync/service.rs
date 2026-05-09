@@ -171,6 +171,8 @@ where
                         .insert(j.id.clone(), j.current_revision);
                     self.cron.upsert_job(j).await?;
                 }
+                let ids: Vec<String> = d.jobs.iter().map(|j| j.id.clone()).collect();
+                self.cron.reconcile_jobs_present(&ids).await?;
                 Ok(())
             }
         }

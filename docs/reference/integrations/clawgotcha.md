@@ -32,8 +32,20 @@ The gateway exposes `POST /webhook/clawgotcha` (respecting [`gateway.path_prefix
 | Component | Behavior |
 |-----------|----------|
 | [`HostAgents`](../../../src/clawgotcha_host/glue.rs) | Remote agent upserts/removes update `[agents]` in config, persist via `Config::save`, and refresh the in-memory delegate map when the daemon runs with a shared `delegate_agents` cell. |
-| [`HostCron`](../../../src/clawgotcha_host/glue.rs) | Remote cron upserts/removes go through `cron::upsert_clawgotcha_agent_job` / `cron::remove_job` (same family as gateway cron storage). |
-| [`HostReconciler`](../../../src/clawgotcha_host/glue.rs) | `apply_swarm_defaults` writes `default_provider` / `default_model` and saves config. `apply_batch` (webhook-driven event batches) is currently a **no-op** aside from debug logging; **polling** is what applies agent/cron deltas from the API. |
+| [`HostCron`](../../../src/clawgotcha_host/glue.rs) | Upserts via `cron::upsert_clawgotcha_agent_job`; removes via `cron::retire_job_for_clawgotcha_remove`; after each cron list pull implements **`reconcile_jobs_present`** → `cron::retire_clawgotcha_jobs_not_in_remote` (soft-remove rows missing from the snapshot). |
+| [`HostReconciler`](../../../src/clawgotcha_host/glue.rs) | `apply_swarm_defaults` writes `default_provider` / `default_model` and saves config. **`apply_batch`** handles **`CronDeleted`** (retire via `HostCron`) and **`AgentDeleted`** (remove delegate via `HostAgents`); other event kinds are logged and rely on the next poll for full rows. |
+
+### Cron deletion propagation (control plane vs Miroclaw)
+
+**Soft retirement:** Scheduling stops and FK-safe run history is preserved whenever retirement runs (`retired_at` set, `enabled = 0`).
+
+**How removals reach the host today:**
+
+1. **Polling:** After each modified `GET` cron response, [`SyncService::pull_cron_delta`](../../../crates/clawgotcha/src/sync/service.rs) upserts every job in the payload, then calls **`reconcile_jobs_present`**. [`HostCron`](../../../src/clawgotcha_host/glue.rs) implements this as **`cron::retire_clawgotcha_jobs_not_in_remote`**: active rows with `source = clawgotcha` whose ids are **not** in that snapshot are retired. An **empty** remote list retires **all** active Clawgotcha jobs locally. This assumes the HTTP envelope is the **full desired set** for the instance (typical list endpoint); if the control plane ever returns partial deltas only, reconciliation must be disabled server-side or the contract extended. If the server responds **`304 Not Modified`**, no body is available — local cron is unchanged until the next **`200`** with a fresh list (ensure deletes bump **`ETag`** / revision semantics on the control plane).
+2. **Webhooks:** Signed `POST /webhook/clawgotcha` batches deserialized to [`ChangeEvent`](../../../crates/clawgotcha/src/events.rs) invoke **`apply_batch`**: **`CronDeleted`** retires the job; **`AgentDeleted`** removes the delegate agent from config.
+3. **Heartbeat `cron_jobs_count`:** Still derived from **`cron::list_jobs`** (**active** jobs only). If the control plane needs archived totals, add a separate metric or field — **product decision**.
+
+Production verification: [Testing guide — Production checklist: cron soft-retire and Clawgotcha sync](../../contributing/testing.md#production-checklist-cron-soft-retire-and-clawgotcha-sync).
 
 **Caveats:** Long-lived gateway sessions and in-process tool registries may not see every config change until reload or restart, depending on how those subsystems cache state. Zero-downtime hot-reload for all paths is not guaranteed.
 
@@ -50,7 +62,7 @@ Environment overrides (`MIROCLAW_AGENTS_LIST_URL`, etc.) still apply before merg
 ## Guarantees and sync artifacts
 
 - **Polling:** The sync loop pulls remote agents, cron, and swarm config; revision cursors are persisted under `<workspace>/clawgotcha/revisions.json`.
-- **Webhooks:** Inbound `POST` bodies are verified when `[clawgotcha].webhook_hmac_secret` is set (`X-Clawgotcha-Signature`, optional `sha256=` prefix); bodies must deserialize to `ChangeEvent`. Webhook **batches** do not yet drive full reconciliation through `apply_batch` (see table above).
+- **Webhooks:** Inbound `POST` bodies are verified when `[clawgotcha].webhook_hmac_secret` is set (`X-Clawgotcha-Signature`, optional `sha256=` prefix); bodies must deserialize to `ChangeEvent`. Verified batches run through **`apply_batch`** (cron/agent deletes); upserts still follow the periodic cron/agent pulls unless the control plane sends sufficient inline payload (today, polls carry full definitions).
 
 ## Operational escape hatch
 

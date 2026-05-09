@@ -94,6 +94,16 @@ impl Tool for CronRunTool {
             }
         };
 
+        if job.retired_at.is_some() {
+            return Ok(ToolResult {
+                success: false,
+                output: String::new(),
+                error: Some(format!(
+                    "Cron job '{job_id}' is retired (soft-removed); use a new job id or restore via sync"
+                )),
+            });
+        }
+
         if matches!(job.job_type, JobType::Shell) {
             if let Err(reason) = self
                 .security
@@ -116,13 +126,20 @@ impl Tool for CronRunTool {
         }
 
         let started_at = Utc::now();
+        if let Err(e) = cron::mark_cron_job_run_start(&self.config, job_id) {
+            tracing::warn!(
+                job_id = %job_id,
+                error = %e,
+                "cron_run mark_run_start failed"
+            );
+        }
         let (success, output) =
             Box::pin(cron::scheduler::execute_job_now(&self.config, &job)).await;
         let finished_at = Utc::now();
         let duration_ms = (finished_at - started_at).num_milliseconds();
         let status = if success { "ok" } else { "error" };
 
-        let _ = cron::record_run(
+        if let Err(e) = cron::record_run(
             &self.config,
             &job.id,
             started_at,
@@ -130,8 +147,28 @@ impl Tool for CronRunTool {
             status,
             Some(&output),
             duration_ms,
-        );
-        let _ = cron::record_last_run(&self.config, &job.id, finished_at, success, &output);
+        ) {
+            tracing::warn!(
+                job_id = %job.id,
+                error = %e,
+                "cron_run record_run failed"
+            );
+        }
+        if let Err(e) = cron::record_last_run(&self.config, &job.id, finished_at, success, &output)
+        {
+            tracing::warn!(
+                job_id = %job.id,
+                error = %e,
+                "cron_run record_last_run failed"
+            );
+        }
+        if let Err(e) = cron::mark_cron_job_run_finish(&self.config, job_id) {
+            tracing::warn!(
+                job_id = %job_id,
+                error = %e,
+                "cron_run mark_run_finish failed"
+            );
+        }
 
         Ok(ToolResult {
             success,

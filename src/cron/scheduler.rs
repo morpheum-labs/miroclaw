@@ -1,3 +1,4 @@
+use super::store::{mark_cron_job_run_finish, mark_cron_job_run_start, remove_job_hard_delete};
 #[cfg(feature = "channel-matrix")]
 use crate::channels::MatrixChannel;
 #[cfg(feature = "whatsapp-web")]
@@ -8,9 +9,9 @@ use crate::channels::{
 };
 use crate::config::Config;
 use crate::cron::{
-    all_overdue_jobs, due_jobs, next_run_for_schedule, record_last_run, record_run, remove_job,
-    reschedule_after_run, sync_declarative_jobs, update_job, CronJob, CronJobPatch, DeliveryConfig,
-    JobType, Schedule, SessionTarget,
+    all_overdue_jobs, due_jobs, get_job, next_run_for_schedule, record_last_run, record_run,
+    reschedule_after_run, reset_stale_cron_run_in_progress_flags, sync_declarative_jobs,
+    update_job, CronJob, CronJobPatch, DeliveryConfig, JobType, Schedule, SessionTarget,
 };
 use crate::security::SecurityPolicy;
 use anyhow::Result;
@@ -33,6 +34,17 @@ pub async fn run(config: Config) -> Result<()> {
     ));
 
     crate::health::mark_component_ok(SCHEDULER_COMPONENT);
+
+    match reset_stale_cron_run_in_progress_flags(&config) {
+        Ok(n) if n > 0 => {
+            tracing::warn!(
+                count = n,
+                "cleared stale cron run_in_progress flags after scheduler restart"
+            );
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!("Failed to reset cron run_in_progress flags: {e}"),
+    }
 
     // ── Declarative job sync: reconcile config-defined jobs with the DB.
     match sync_declarative_jobs(&config, &config.cron.jobs) {
@@ -189,6 +201,14 @@ pub(crate) async fn execute_cron_core(
 ) -> (String, bool, String) {
     crate::health::mark_component_ok(component);
     warn_if_high_frequency_agent_job(job);
+
+    if let Err(e) = mark_cron_job_run_start(config, &job.id) {
+        tracing::warn!(
+            job_id = %job.id,
+            error = %e,
+            "cron mark_run_start failed"
+        );
+    }
 
     let started_at = Utc::now();
     let (success, output) = Box::pin(execute_job_with_retry(config, security, job)).await;
@@ -380,7 +400,7 @@ async fn persist_job_result(
         }
     }
 
-    let _ = record_run(
+    if let Err(e) = record_run(
         config,
         &job.id,
         started_at,
@@ -388,24 +408,60 @@ async fn persist_job_result(
         if success { "ok" } else { "error" },
         Some(output),
         duration_ms,
-    );
+    ) {
+        tracing::warn!(
+            job_id = %job.id,
+            error = %e,
+            "cron record_run failed"
+        );
+    }
+
+    if let Err(e) = mark_cron_job_run_finish(config, &job.id) {
+        tracing::warn!(
+            job_id = %job.id,
+            error = %e,
+            "cron mark_run_finish failed"
+        );
+    }
 
     if is_one_shot_auto_delete(job) {
         if success {
-            if let Err(e) = remove_job(config, &job.id) {
-                tracing::warn!("Failed to remove one-shot cron job after success: {e}");
-                // Fall back to disabling the job so it won't re-trigger.
-                let _ = update_job(
-                    config,
-                    &job.id,
-                    CronJobPatch {
-                        enabled: Some(false),
-                        ..CronJobPatch::default()
-                    },
-                );
+            match get_job(config, &job.id) {
+                Ok(j) if j.retired_at.is_some() => {
+                    tracing::debug!(
+                        job_id = %job.id,
+                        "cron one-shot success: skip hard delete (job retired)"
+                    );
+                }
+                Ok(_) => {
+                    if let Err(e) = remove_job_hard_delete(config, &job.id) {
+                        tracing::warn!("Failed to remove one-shot cron job after success: {e}");
+                        let _ = update_job(
+                            config,
+                            &job.id,
+                            CronJobPatch {
+                                enabled: Some(false),
+                                ..CronJobPatch::default()
+                            },
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        job_id = %job.id,
+                        error = %e,
+                        "cron one-shot: job row missing after run"
+                    );
+                }
             }
         } else {
-            let _ = record_last_run(config, &job.id, finished_at, false, output);
+            if let Err(e) = record_last_run(config, &job.id, finished_at, false, output) {
+                tracing::warn!(
+                    job_id = %job.id,
+                    error = %e,
+                    "cron record_last_run failed (one-shot failure)"
+                );
+            }
             if let Err(e) = update_job(
                 config,
                 &job.id,
@@ -420,8 +476,25 @@ async fn persist_job_result(
         return success;
     }
 
-    if let Err(e) = reschedule_after_run(config, job, success, output) {
-        tracing::warn!("Failed to persist scheduler run result: {e}");
+    match get_job(config, &job.id) {
+        Ok(db_job) if db_job.retired_at.is_some() => {
+            tracing::debug!(
+                job_id = %job.id,
+                "cron skip reschedule_after_run: job retired"
+            );
+        }
+        Ok(_) => {
+            if let Err(e) = reschedule_after_run(config, job, success, output) {
+                tracing::warn!("Failed to persist scheduler run result: {e}");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                job_id = %job.id,
+                error = %e,
+                "cron persist: job row missing before reschedule"
+            );
+        }
     }
 
     success
@@ -831,6 +904,9 @@ mod tests {
             last_run: None,
             last_status: None,
             last_output: None,
+            run_in_progress: false,
+            retired_at: None,
+            retired_reason: None,
         }
     }
 

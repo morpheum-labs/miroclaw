@@ -7,10 +7,16 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::types::{FromSqlResult, ValueRef};
 use rusqlite::{params, Connection};
+use std::collections::HashSet;
 use uuid::Uuid;
 
 const MAX_CRON_OUTPUT_BYTES: usize = 16 * 1024;
 const TRUNCATED_OUTPUT_MARKER: &str = "\n...[truncated]";
+
+/// Columns for [`map_cron_job_row`] (indices must match).
+const CRON_JOB_ROW_SQL: &str = "id, expression, command, schedule, job_type, prompt, name, session_target, model,
+                    enabled, delivery, delete_after_run, created_at, next_run, last_run, last_status, last_output,
+                    allowed_tools, source, run_in_progress, retired_at, retired_reason";
 
 impl rusqlite::types::FromSql for JobType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
@@ -171,12 +177,10 @@ pub fn add_hand_job(
 
 pub fn list_jobs(config: &Config) -> Result<Vec<CronJob>> {
     with_connection(config, |conn| {
-        let mut stmt = conn.prepare(
-            "SELECT id, expression, command, schedule, job_type, prompt, name, session_target, model,
-                    enabled, delivery, delete_after_run, created_at, next_run, last_run, last_status, last_output,
-                    allowed_tools, source
-             FROM cron_jobs ORDER BY next_run ASC",
-        )?;
+        let sql = format!(
+            "SELECT {CRON_JOB_ROW_SQL} FROM cron_jobs WHERE retired_at IS NULL ORDER BY next_run ASC"
+        );
+        let mut stmt = conn.prepare(&sql)?;
 
         let rows = stmt.query_map([], map_cron_job_row)?;
 
@@ -190,12 +194,8 @@ pub fn list_jobs(config: &Config) -> Result<Vec<CronJob>> {
 
 pub fn get_job(config: &Config, job_id: &str) -> Result<CronJob> {
     with_connection(config, |conn| {
-        let mut stmt = conn.prepare(
-            "SELECT id, expression, command, schedule, job_type, prompt, name, session_target, model,
-                    enabled, delivery, delete_after_run, created_at, next_run, last_run, last_status, last_output,
-                    allowed_tools, source
-             FROM cron_jobs WHERE id = ?1",
-        )?;
+        let sql = format!("SELECT {CRON_JOB_ROW_SQL} FROM cron_jobs WHERE id = ?1");
+        let mut stmt = conn.prepare(&sql)?;
 
         let mut rows = stmt.query(params![job_id])?;
         if let Some(row) = rows.next()? {
@@ -206,7 +206,8 @@ pub fn get_job(config: &Config, job_id: &str) -> Result<CronJob> {
     })
 }
 
-pub fn remove_job(config: &Config, id: &str) -> Result<()> {
+/// Hard-remove a cron row when idle. Prefer [`remove_job`] for API/CLI (defers if a run is in flight).
+pub(crate) fn remove_job_hard_delete(config: &Config, id: &str) -> Result<()> {
     let changed = with_connection(config, |conn| {
         conn.execute("DELETE FROM cron_jobs WHERE id = ?1", params![id])
             .context("Failed to delete cron job")
@@ -217,6 +218,139 @@ pub fn remove_job(config: &Config, id: &str) -> Result<()> {
     }
 
     println!("✅ Removed cron job {id}");
+    Ok(())
+}
+
+/// Disable and archive a job without deleting the row (Clawgotcha / deferred user removal).
+pub fn retire_job_with_reason(config: &Config, job_id: &str, reason: &str) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    with_connection(config, |conn| {
+        conn.execute(
+            "UPDATE cron_jobs SET enabled = 0, retired_at = ?1, retired_reason = ?2 WHERE id = ?3",
+            params![now, reason, job_id],
+        )
+        .context("Failed to retire cron job")?;
+        Ok(())
+    })
+}
+
+/// Idempotent: unknown ids are OK. Used by Clawgotcha sync — never hard-deletes (preserves FK for in-flight runs).
+pub fn retire_job_for_clawgotcha_remove(config: &Config, job_id: &str) -> Result<()> {
+    retire_job_with_reason(config, job_id, "clawgotcha")
+}
+
+/// Full-list reconcile after a Clawgotcha cron pull: retire active `source = clawgotcha` rows missing from `remote_job_ids`.
+///
+/// An empty slice means the remote snapshot has no jobs — every active Clawgotcha job locally is retired.
+pub fn retire_clawgotcha_jobs_not_in_remote(
+    config: &Config,
+    remote_job_ids: &[String],
+) -> Result<()> {
+    let remote: HashSet<&str> = remote_job_ids.iter().map(|s| s.as_str()).collect();
+    let local_ids: Vec<String> = with_connection(config, |conn| {
+        let mut stmt = conn.prepare(
+            "SELECT id FROM cron_jobs WHERE source = 'clawgotcha' AND retired_at IS NULL",
+        )?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut v = Vec::new();
+        for r in rows {
+            v.push(r?);
+        }
+        Ok::<_, anyhow::Error>(v)
+    })?;
+
+    for id in local_ids {
+        if !remote.contains(id.as_str()) {
+            retire_job_for_clawgotcha_remove(config, &id)?;
+        }
+    }
+    Ok(())
+}
+
+/// Clears persisted `run_in_progress` flags (crash recovery). Only safe when one scheduler instance owns `jobs.db`.
+pub(crate) fn reset_stale_cron_run_in_progress_flags(config: &Config) -> Result<usize> {
+    with_connection(config, |conn| {
+        let n = conn
+            .execute(
+                "UPDATE cron_jobs SET run_in_progress = 0 WHERE COALESCE(run_in_progress, 0) != 0",
+                [],
+            )
+            .context("Failed to reset cron run_in_progress flags")?;
+        Ok(n)
+    })
+}
+
+/// Mark a job as executing (`due_jobs` skips `run_in_progress = 1`).
+pub(crate) fn mark_cron_job_run_start(config: &Config, job_id: &str) -> Result<()> {
+    with_connection(config, |conn| {
+        let n = conn
+            .execute(
+                "UPDATE cron_jobs SET run_in_progress = 1 WHERE id = ?1",
+                params![job_id],
+            )
+            .context("Failed to mark cron job run start")?;
+        if n == 0 {
+            tracing::warn!(
+                job_id = %job_id,
+                "cron mark_run_start: no row updated (missing job?)"
+            );
+        }
+        Ok(())
+    })
+}
+
+pub(crate) fn mark_cron_job_run_finish(config: &Config, job_id: &str) -> Result<()> {
+    with_connection(config, |conn| {
+        conn.execute(
+            "UPDATE cron_jobs SET run_in_progress = 0 WHERE id = ?1",
+            params![job_id],
+        )
+        .context("Failed to mark cron job run finish")?;
+        Ok(())
+    })
+}
+
+/// Remove when idle; if a run is in progress, retire instead (graceful completion).
+pub fn remove_job(config: &Config, id: &str) -> Result<()> {
+    let retired_instead = with_connection(config, |conn| {
+        let rip: i64 = match conn.query_row(
+            "SELECT COALESCE(run_in_progress, 0) FROM cron_jobs WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        ) {
+            Ok(v) => v,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                anyhow::bail!("Cron job '{id}' not found");
+            }
+            Err(e) => return Err(e.into()),
+        };
+
+        if rip != 0 {
+            let now = Utc::now().to_rfc3339();
+            conn.execute(
+                "UPDATE cron_jobs SET enabled = 0, retired_at = ?1, retired_reason = ?2 WHERE id = ?3",
+                params![now, "user_remove_while_running", id],
+            )
+            .context("Failed to retire in-flight cron job")?;
+            Ok(true)
+        } else {
+            let changed = conn
+                .execute("DELETE FROM cron_jobs WHERE id = ?1", params![id])
+                .context("Failed to delete cron job")?;
+            if changed == 0 {
+                anyhow::bail!("Cron job '{id}' not found");
+            }
+            Ok(false)
+        }
+    })?;
+
+    if retired_instead {
+        println!(
+            "Retired cron job {id} (run in progress); job stays archived for run history / FK integrity"
+        );
+    } else {
+        println!("✅ Removed cron job {id}");
+    }
     Ok(())
 }
 
@@ -248,10 +382,10 @@ pub fn upsert_clawgotcha_agent_job(
         )?;
         with_connection(config, |conn| {
             conn.execute(
-                "UPDATE cron_jobs SET source = 'clawgotcha' WHERE id = ?1",
+                "UPDATE cron_jobs SET source = 'clawgotcha', retired_at = NULL, retired_reason = NULL, run_in_progress = 0 WHERE id = ?1",
                 params![job_id],
             )
-            .context("Failed to tag clawgotcha cron job")
+            .context("Failed to revive clawgotcha cron job")
         })?;
         return Ok(());
     }
@@ -290,15 +424,14 @@ pub fn due_jobs(config: &Config, now: DateTime<Utc>) -> Result<Vec<CronJob>> {
     let lim = i64::try_from(config.scheduler.max_tasks.max(1))
         .context("Scheduler max_tasks overflows i64")?;
     with_connection(config, |conn| {
-        let mut stmt = conn.prepare(
-            "SELECT id, expression, command, schedule, job_type, prompt, name, session_target, model,
-                    enabled, delivery, delete_after_run, created_at, next_run, last_run, last_status, last_output,
-                    allowed_tools, source
+        let sql = format!(
+            "SELECT {CRON_JOB_ROW_SQL}
              FROM cron_jobs
-             WHERE enabled = 1 AND next_run <= ?1
+             WHERE enabled = 1 AND retired_at IS NULL AND COALESCE(run_in_progress, 0) = 0 AND next_run <= ?1
              ORDER BY next_run ASC
-             LIMIT ?2",
-        )?;
+             LIMIT ?2"
+        );
+        let mut stmt = conn.prepare(&sql)?;
 
         let rows = stmt.query_map(params![now.to_rfc3339(), lim], map_cron_job_row)?;
 
@@ -320,14 +453,13 @@ pub fn due_jobs(config: &Config, now: DateTime<Utc>) -> Result<Vec<CronJob>> {
 /// restart, etc.).
 pub fn all_overdue_jobs(config: &Config, now: DateTime<Utc>) -> Result<Vec<CronJob>> {
     with_connection(config, |conn| {
-        let mut stmt = conn.prepare(
-            "SELECT id, expression, command, schedule, job_type, prompt, name, session_target, model,
-                    enabled, delivery, delete_after_run, created_at, next_run, last_run, last_status, last_output,
-                    allowed_tools, source
+        let sql = format!(
+            "SELECT {CRON_JOB_ROW_SQL}
              FROM cron_jobs
-             WHERE enabled = 1 AND next_run <= ?1
-             ORDER BY next_run ASC",
-        )?;
+             WHERE enabled = 1 AND retired_at IS NULL AND COALESCE(run_in_progress, 0) = 0 AND next_run <= ?1
+             ORDER BY next_run ASC"
+        );
+        let mut stmt = conn.prepare(&sql)?;
 
         let rows = stmt.query_map(params![now.to_rfc3339()], map_cron_job_row)?;
 
@@ -431,13 +563,20 @@ pub fn record_last_run(
     let status = if success { "ok" } else { "error" };
     let bounded_output = truncate_cron_output(output);
     with_connection(config, |conn| {
-        conn.execute(
-            "UPDATE cron_jobs
+        let n = conn
+            .execute(
+                "UPDATE cron_jobs
              SET last_run = ?1, last_status = ?2, last_output = ?3
              WHERE id = ?4",
-            params![finished_at.to_rfc3339(), status, bounded_output, job_id],
-        )
-        .context("Failed to update cron last run fields")?;
+                params![finished_at.to_rfc3339(), status, bounded_output, job_id],
+            )
+            .context("Failed to update cron last run fields")?;
+        if n == 0 {
+            tracing::warn!(
+                job_id = %job_id,
+                "cron record_last_run updated 0 rows (missing job?)"
+            );
+        }
         Ok(())
     })
 }
@@ -456,31 +595,45 @@ pub fn reschedule_after_run(
     // result and disable the job so it won't be picked up again.
     if matches!(job.schedule, Schedule::At { .. }) {
         with_connection(config, |conn| {
-            conn.execute(
-                "UPDATE cron_jobs
+            let n = conn
+                .execute(
+                    "UPDATE cron_jobs
                  SET enabled = 0, last_run = ?1, last_status = ?2, last_output = ?3
                  WHERE id = ?4",
-                params![now.to_rfc3339(), status, bounded_output, job.id],
-            )
-            .context("Failed to disable completed one-shot cron job")?;
+                    params![now.to_rfc3339(), status, bounded_output, job.id],
+                )
+                .context("Failed to disable completed one-shot cron job")?;
+            if n == 0 {
+                tracing::warn!(
+                    job_id = %job.id,
+                    "cron reschedule_after_run (one-shot) updated 0 rows"
+                );
+            }
             Ok(())
         })
     } else {
         let next_run = next_run_for_schedule(&job.schedule, now)?;
         with_connection(config, |conn| {
-            conn.execute(
-                "UPDATE cron_jobs
+            let n = conn
+                .execute(
+                    "UPDATE cron_jobs
                  SET next_run = ?1, last_run = ?2, last_status = ?3, last_output = ?4
                  WHERE id = ?5",
-                params![
-                    next_run.to_rfc3339(),
-                    now.to_rfc3339(),
-                    status,
-                    bounded_output,
-                    job.id
-                ],
-            )
-            .context("Failed to update cron job run state")?;
+                    params![
+                        next_run.to_rfc3339(),
+                        now.to_rfc3339(),
+                        status,
+                        bounded_output,
+                        job.id
+                    ],
+                )
+                .context("Failed to update cron job run state")?;
+            if n == 0 {
+                tracing::warn!(
+                    job_id = %job.id,
+                    "cron reschedule_after_run updated 0 rows (missing job?)"
+                );
+            }
             Ok(())
         })
     }
@@ -637,6 +790,14 @@ fn map_cron_job_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CronJob> {
         last_output: row.get(16)?,
         allowed_tools: decode_allowed_tools(allowed_tools_raw.as_deref())
             .map_err(sql_conversion_error)?,
+        run_in_progress: row.get::<_, i64>(19)? != 0,
+        retired_at: match row.get::<_, Option<String>>(20)? {
+            Some(raw) if !raw.trim().is_empty() => {
+                Some(parse_rfc3339(&raw).map_err(sql_conversion_error)?)
+            }
+            _ => None,
+        },
+        retired_reason: row.get(21)?,
     })
 }
 
@@ -689,6 +850,32 @@ fn decode_allowed_tools(raw: Option<&str>) -> Result<Option<Vec<String>>> {
     Ok(None)
 }
 
+/// Used during declarative sync: delete idle rows, or retire if a run is in flight.
+fn remove_declarative_job_row(conn: &Connection, db_id: &str) -> Result<()> {
+    let rip: i64 = match conn.query_row(
+        "SELECT COALESCE(run_in_progress, 0) FROM cron_jobs WHERE id = ?1",
+        params![db_id],
+        |row| row.get(0),
+    ) {
+        Ok(v) => v,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+
+    if rip != 0 {
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            "UPDATE cron_jobs SET enabled = 0, retired_at = ?1, retired_reason = ?2 WHERE id = ?3",
+            params![now, "declarative_removed_from_config", db_id],
+        )
+        .with_context(|| format!("Failed to retire in-flight declarative cron job '{db_id}'"))?;
+    } else {
+        conn.execute("DELETE FROM cron_jobs WHERE id = ?1", params![db_id])
+            .with_context(|| format!("Failed to remove declarative cron job '{db_id}'"))?;
+    }
+    Ok(())
+}
+
 /// Synchronize declarative cron job definitions from config into the database.
 ///
 /// For each declarative job (identified by `id`):
@@ -706,18 +893,23 @@ pub fn sync_declarative_jobs(
     if decls.is_empty() {
         // If no declarative jobs are defined, clean up any previously
         // synced declarative jobs that are no longer in config.
-        with_connection(config, |conn| {
-            let deleted = conn
-                .execute("DELETE FROM cron_jobs WHERE source = 'declarative'", [])
-                .context("Failed to remove stale declarative cron jobs")?;
-            if deleted > 0 {
-                tracing::info!(
-                    count = deleted,
-                    "Removed declarative cron jobs no longer in config"
-                );
+        let removed = with_connection(config, |conn| {
+            let mut stmt = conn.prepare("SELECT id FROM cron_jobs WHERE source = 'declarative'")?;
+            let db_ids: Vec<String> = stmt
+                .query_map([], |row| row.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            for db_id in &db_ids {
+                remove_declarative_job_row(conn, db_id)?;
             }
-            Ok(())
+            Ok(db_ids.len())
         })?;
+        if removed > 0 {
+            tracing::info!(
+                count = removed,
+                "Removed declarative cron jobs no longer in config"
+            );
+        }
         return Ok(());
     }
 
@@ -743,10 +935,9 @@ pub fn sync_declarative_jobs(
 
             for db_id in &db_ids {
                 if !config_ids.contains(db_id.as_str()) {
-                    conn.execute("DELETE FROM cron_jobs WHERE id = ?1", params![db_id])
-                        .with_context(|| {
-                            format!("Failed to remove stale declarative cron job '{db_id}'")
-                        })?;
+                    remove_declarative_job_row(conn, db_id).with_context(|| {
+                        format!("Failed to remove stale declarative cron job '{db_id}'")
+                    })?;
                     tracing::info!(
                         job_id = %db_id,
                         "Removed declarative cron job no longer in config"
@@ -795,7 +986,9 @@ pub fn sync_declarative_jobs(
                          SET expression = ?1, command = ?2, schedule = ?3, job_type = ?4,
                              prompt = ?5, name = ?6, session_target = ?7, model = ?8,
                              enabled = ?9, delivery = ?10, delete_after_run = ?11,
-                             allowed_tools = ?12, source = 'declarative', next_run = ?13
+                             allowed_tools = ?12, source = 'declarative',
+                             retired_at = NULL, retired_reason = NULL, run_in_progress = 0,
+                             next_run = ?13
                          WHERE id = ?14",
                         params![
                             expression,
@@ -823,7 +1016,8 @@ pub fn sync_declarative_jobs(
                          SET expression = ?1, command = ?2, schedule = ?3, job_type = ?4,
                              prompt = ?5, name = ?6, session_target = ?7, model = ?8,
                              enabled = ?9, delivery = ?10, delete_after_run = ?11,
-                             allowed_tools = ?12, source = 'declarative'
+                             allowed_tools = ?12, source = 'declarative',
+                             retired_at = NULL, retired_reason = NULL, run_in_progress = 0
                          WHERE id = ?13",
                         params![
                             expression,
@@ -1063,6 +1257,9 @@ fn with_connection<T>(config: &Config, f: impl FnOnce(&Connection) -> Result<T>)
     add_column_if_missing(&conn, "delete_after_run", "INTEGER NOT NULL DEFAULT 0")?;
     add_column_if_missing(&conn, "allowed_tools", "TEXT")?;
     add_column_if_missing(&conn, "source", "TEXT DEFAULT 'imperative'")?;
+    add_column_if_missing(&conn, "run_in_progress", "INTEGER NOT NULL DEFAULT 0")?;
+    add_column_if_missing(&conn, "retired_at", "TEXT")?;
+    add_column_if_missing(&conn, "retired_reason", "TEXT")?;
 
     f(&conn)
 }
@@ -1552,6 +1749,108 @@ mod tests {
         remove_job(&config, &job.id).unwrap();
         let runs = list_runs(&config, &job.id, 10).unwrap();
         assert!(runs.is_empty());
+    }
+
+    #[test]
+    fn clawgotcha_retire_hides_from_list_but_get_job_works() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let job = add_job(&config, "*/5 * * * *", "echo x").unwrap();
+        retire_job_for_clawgotcha_remove(&config, &job.id).unwrap();
+        assert!(list_jobs(&config).unwrap().is_empty());
+        let j = get_job(&config, &job.id).unwrap();
+        assert!(j.retired_at.is_some());
+        assert_eq!(j.retired_reason.as_deref(), Some("clawgotcha"));
+        assert!(!j.enabled);
+    }
+
+    #[test]
+    fn remove_job_defers_when_run_in_progress() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let job = add_job(&config, "*/5 * * * *", "echo x").unwrap();
+        mark_cron_job_run_start(&config, &job.id).unwrap();
+        remove_job(&config, &job.id).unwrap();
+        let j = get_job(&config, &job.id).unwrap();
+        assert!(j.retired_at.is_some());
+        assert_eq!(
+            j.retired_reason.as_deref(),
+            Some("user_remove_while_running")
+        );
+        mark_cron_job_run_finish(&config, &job.id).unwrap();
+    }
+
+    #[test]
+    fn due_jobs_skips_run_in_progress() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let job = add_job(&config, "* * * * *", "echo x").unwrap();
+        let far_future = Utc::now() + ChronoDuration::days(365);
+        assert_eq!(due_jobs(&config, far_future).unwrap().len(), 1);
+        mark_cron_job_run_start(&config, &job.id).unwrap();
+        assert!(due_jobs(&config, far_future).unwrap().is_empty());
+        mark_cron_job_run_finish(&config, &job.id).unwrap();
+        assert_eq!(due_jobs(&config, far_future).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn upsert_clawgotcha_clears_retirement() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        upsert_clawgotcha_agent_job(&config, "cg1", "*/10 * * * *", "prompt", true).unwrap();
+        retire_job_for_clawgotcha_remove(&config, "cg1").unwrap();
+        assert!(get_job(&config, "cg1").unwrap().retired_at.is_some());
+        upsert_clawgotcha_agent_job(&config, "cg1", "*/15 * * * *", "prompt2", true).unwrap();
+        let j = get_job(&config, "cg1").unwrap();
+        assert!(j.retired_at.is_none());
+        assert_eq!(j.prompt.as_deref(), Some("prompt2"));
+    }
+
+    #[test]
+    fn record_run_survives_when_job_retired_mid_run() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let job = add_job(&config, "*/5 * * * *", "echo x").unwrap();
+        mark_cron_job_run_start(&config, &job.id).unwrap();
+        retire_job_for_clawgotcha_remove(&config, &job.id).unwrap();
+        let started = Utc::now();
+        let finished = started + ChronoDuration::seconds(1);
+        record_run(&config, &job.id, started, finished, "ok", Some("out"), 1000).unwrap();
+        mark_cron_job_run_finish(&config, &job.id).unwrap();
+        let runs = list_runs(&config, &job.id, 10).unwrap();
+        assert_eq!(runs.len(), 1);
+    }
+
+    #[test]
+    fn retire_clawgotcha_jobs_not_in_remote_reconciles() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        upsert_clawgotcha_agent_job(&config, "snap-a", "*/5 * * * *", "p", true).unwrap();
+        upsert_clawgotcha_agent_job(&config, "snap-b", "*/6 * * * *", "p", true).unwrap();
+        retire_clawgotcha_jobs_not_in_remote(&config, &["snap-a".to_string()]).unwrap();
+        assert!(get_job(&config, "snap-a").unwrap().retired_at.is_none());
+        assert!(get_job(&config, "snap-b").unwrap().retired_at.is_some());
+    }
+
+    #[test]
+    fn retire_clawgotcha_jobs_empty_remote_retires_all_active_clawgotcha() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        upsert_clawgotcha_agent_job(&config, "snap-x", "*/5 * * * *", "p", true).unwrap();
+        retire_clawgotcha_jobs_not_in_remote(&config, &[]).unwrap();
+        assert!(get_job(&config, "snap-x").unwrap().retired_at.is_some());
+    }
+
+    #[test]
+    fn reset_stale_cron_run_in_progress_flags_clears() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let job = add_job(&config, "*/5 * * * *", "echo x").unwrap();
+        mark_cron_job_run_start(&config, &job.id).unwrap();
+        assert!(get_job(&config, &job.id).unwrap().run_in_progress);
+        let n = reset_stale_cron_run_in_progress_flags(&config).unwrap();
+        assert_eq!(n, 1);
+        assert!(!get_job(&config, &job.id).unwrap().run_in_progress);
     }
 
     #[test]

@@ -147,3 +147,35 @@ use crate::support::helpers::{build_agent, text_response, tool_response};
 | `manual/test_dockerignore.sh` | 验证 `.dockerignore` 排除敏感路径 |
 
 Telegram 特定的测试细节请参见 [testing-telegram.md](./testing-telegram.zh-CN.md)。
+
+## 生产检查清单：cron 软退役与 Clawgotcha 同步
+
+上线前或在改动 `src/cron/store.rs`、`src/cron/scheduler.rs`、`src/clawgotcha_host/glue.rs` 或 `[clawgotcha]` 接线时使用。
+
+### 目标
+
+- 远端删除 cron 时，在仍有 **`cron_runs` 外键**或**执行中**任务的情况下，不对 `cron_jobs` 做硬删除。
+- **`cron_list` / 列表 API** 仅展示 **`retired_at IS NULL`** 的活跃任务；退役行保留以供历史与 FK。
+- **`cron remove`** 与声明式同步删除在 **`run_in_progress = 1`** 时改为**退役**而非立即删除。
+
+### CI 自动化
+
+执行与主文档相同的 `cargo fmt` / `cargo clippy -D warnings` / `cargo test`。可选用过滤器：`cargo test cron::`、`cargo test clawgotcha_retire` 等（详见英文 [testing.md](../../../contributing/testing.md) 同节中的测试名列表）。
+
+### 预发布手工场景（摘要）
+
+| 编号 | 场景 | 期望要点 |
+|------|------|----------|
+| S1 | 空闲时 Clawgotcha 删除 | 列表不可见；DB 仍有 `retired_at`、`enabled = 0` |
+| S2 | 执行中删除 | 运行结束、`cron_runs` 有记录、退役的周期任务不再推进 `next_run` |
+| S3 | 执行中 imperative 删除 | 退役原因 `user_remove_while_running` |
+| S4 | 远端再次下发同 id | upsert 清除退役字段，列表恢复 |
+| S5 | 对已退役任务 `cron_run` | 工具返回明确错误 |
+| S6 | 心跳 `cron_jobs_count` | 现为**活跃任务数**（不含退役），需与控制面展示约定一致 |
+| S7 | `run_in_progress` 卡住 | 杀掉调度进程后重启；启动时会清空陈旧标志（日志中带计数）；需在「仅单调度器实例持有 DB」前提下验证 |
+
+### 签收
+
+- CI 通过；在预发环境完成 S1–S5；运维确认心跳计数语义；必要时补充卡住标志的运维说明。
+
+详细步骤表与命令见英文原文：[testing.md § Production checklist](../../../contributing/testing.md#production-checklist-cron-soft-retire-and-clawgotcha-sync)。

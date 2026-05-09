@@ -15,8 +15,12 @@ pub use schedule::{
 #[allow(unused_imports)]
 pub use store::{
     add_agent_job, add_hand_job, all_overdue_jobs, due_jobs, get_job, list_jobs, list_runs,
-    record_last_run, record_run, remove_job, reschedule_after_run, sync_declarative_jobs,
-    update_job, upsert_clawgotcha_agent_job,
+    record_last_run, record_run, remove_job, reschedule_after_run,
+    retire_clawgotcha_jobs_not_in_remote, retire_job_for_clawgotcha_remove, retire_job_with_reason,
+    sync_declarative_jobs, update_job, upsert_clawgotcha_agent_job,
+};
+pub(crate) use store::{
+    mark_cron_job_run_finish, mark_cron_job_run_start, reset_stale_cron_run_in_progress_flags,
 };
 pub use types::{
     deserialize_maybe_stringified, CronJob, CronJobPatch, CronRun, DeliveryConfig, JobType,
