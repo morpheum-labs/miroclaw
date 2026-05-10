@@ -2147,6 +2147,44 @@ impl Default for PeripheralBoardConfig {
 
 // ── Gateway security ─────────────────────────────────────────────
 
+/// Optional loopback HTTP semantic router for gateway WebSocket fast path
+/// (`[gateway.semantic_router]`).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SemanticRouterGatewayConfig {
+    /// When true, the gateway may call `base_url` before `turn_streamed` to short-circuit
+    /// simple intents. Default: false.
+    #[serde(default)]
+    pub enabled: bool,
+    /// e.g. `http://127.0.0.1:8099` — must use a loopback host.
+    #[serde(default)]
+    pub base_url: Option<String>,
+    /// HTTP timeout for `POST /classify`. Default: 2000 ms.
+    #[serde(default = "default_semantic_router_timeout_ms")]
+    pub timeout_ms: u64,
+    /// Minimum `similarity_score` from the router to accept a fast path. Default: 0.25.
+    #[serde(default = "default_semantic_router_min_score")]
+    pub min_score: f32,
+}
+
+fn default_semantic_router_timeout_ms() -> u64 {
+    2000
+}
+
+fn default_semantic_router_min_score() -> f32 {
+    0.25
+}
+
+impl Default for SemanticRouterGatewayConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            base_url: None,
+            timeout_ms: default_semantic_router_timeout_ms(),
+            min_score: default_semantic_router_min_score(),
+        }
+    }
+}
+
 /// Gateway server configuration (`[gateway]` section).
 ///
 /// Controls the HTTP gateway for webhook and pairing endpoints.
@@ -2235,6 +2273,10 @@ pub struct GatewayConfig {
     /// Pairing dashboard configuration
     #[serde(default)]
     pub pairing_dashboard: PairingDashboardConfig,
+
+    /// Local semantic-router HTTP sidecar (WebSocket chat fast path).
+    #[serde(default)]
+    pub semantic_router: SemanticRouterGatewayConfig,
 }
 
 fn default_ws_runner_idle_minutes() -> u32 {
@@ -2300,6 +2342,7 @@ impl Default for GatewayConfig {
             ws_runner_max_sessions: 0,
             ws_event_replay_cap: 0,
             pairing_dashboard: PairingDashboardConfig::default(),
+            semantic_router: SemanticRouterGatewayConfig::default(),
         }
     }
 }
@@ -13667,6 +13710,7 @@ channel_id = "C123"
             ws_runner_max_sessions: 0,
             ws_event_replay_cap: 0,
             pairing_dashboard: PairingDashboardConfig::default(),
+            semantic_router: SemanticRouterGatewayConfig::default(),
         };
         let toml_str = toml::to_string(&g).unwrap();
         let parsed: GatewayConfig = toml::from_str(&toml_str).unwrap();

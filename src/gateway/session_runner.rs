@@ -327,6 +327,101 @@ async fn emit_ws_event_async(
     });
 }
 
+fn gateway_semantic_fast_path_reply(route: &str) -> Option<&'static str> {
+    match route {
+        "tool_help" => Some(
+            "(fast path) Tools include shell, file read/write, memory, cron, MCP, browser, and workspace skills. Ask the model to run a specific tool by name or describe what you want done.",
+        ),
+        "mcp_help" => Some(
+            "(fast path) MCP connects this agent to external tool servers. Configure MCP servers in your workspace config; enabled tools appear in the agent tool list when connected.",
+        ),
+        "cron_help" => Some(
+            "(fast path) Scheduled jobs are available via cron-related tools (e.g. list or add jobs). Ask the model to inspect or manage your schedule.",
+        ),
+        _ => None,
+    }
+}
+
+async fn try_gateway_semantic_router_fast_path(
+    ctx: &GatewayRunnerContext,
+    content: &str,
+) -> Option<String> {
+    let cfg = ctx.config.lock().clone();
+    let sr = cfg.gateway.semantic_router;
+    if !sr.enabled {
+        return None;
+    }
+    let base = sr.base_url.as_deref()?;
+    if !super::semantic_router_client::base_url_is_loopback(base) {
+        tracing::warn!(
+            target: "gateway_semantic_router",
+            "semantic_router.base_url is not loopback; skipping fast path"
+        );
+        return None;
+    }
+    let timeout = std::time::Duration::from_millis(sr.timeout_ms.max(1));
+    let client = crate::config::build_runtime_proxy_client("gateway.semantic_router");
+    let classified =
+        match super::semantic_router_client::classify(&client, base, content, timeout).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(
+                    target: "gateway_semantic_router",
+                    error = %e,
+                    "semantic router classify failed; falling back to LLM"
+                );
+                return None;
+            }
+        };
+    let result = classified?;
+    if result.score < sr.min_score {
+        tracing::debug!(
+            target: "gateway_semantic_router",
+            route = %result.route,
+            score = result.score,
+            min = sr.min_score,
+            "semantic router score below min_score"
+        );
+        return None;
+    }
+    gateway_semantic_fast_path_reply(&result.route).map(std::string::ToString::to_string)
+}
+
+async fn emit_gateway_ws_turn_success(
+    ctx: &GatewayRunnerContext,
+    session_key: &str,
+    replay: &Arc<Mutex<ReplayState>>,
+    replay_cap: usize,
+    subscribers: &mut Vec<mpsc::Sender<serde_json::Value>>,
+    provider_label: &str,
+    model_label: &str,
+    answer: &str,
+    reasoning: &str,
+) {
+    if let Some(ref backend) = ctx.session_backend {
+        let assistant_msg = ChatMessage::assistant(answer);
+        let _ = backend.append(session_key, &assistant_msg);
+    }
+
+    let reset = serde_json::json!({ "type": "chunk_reset" });
+    emit_ws_event_async(replay, replay_cap, subscribers, reset).await;
+
+    let mut done = serde_json::json!({
+        "type": "done",
+        "full_response": answer,
+    });
+    if !reasoning.is_empty() {
+        done["full_reasoning"] = serde_json::json!(reasoning);
+    }
+    emit_ws_event_async(replay, replay_cap, subscribers, done).await;
+
+    let _ = ctx.event_tx.send(serde_json::json!({
+        "type": "agent_end",
+        "provider": provider_label,
+        "model": model_label,
+    }));
+}
+
 async fn process_user_turn(
     ctx: &GatewayRunnerContext,
     agent: &mut crate::agent::Agent,
@@ -344,6 +439,22 @@ async fn process_user_turn(
         "provider": provider_label,
         "model": model_label,
     }));
+
+    if let Some(answer) = try_gateway_semantic_router_fast_path(ctx, content).await {
+        emit_gateway_ws_turn_success(
+            ctx,
+            session_key,
+            replay,
+            replay_cap,
+            subscribers,
+            &provider_label,
+            &model_label,
+            &answer,
+            "",
+        )
+        .await;
+        return;
+    }
 
     let (event_tx, mut event_rx) = mpsc::channel::<TurnEventSink>(64);
     let content_owned = content.to_string();
@@ -376,28 +487,18 @@ async fn process_user_turn(
 
     match result {
         Ok(out) => {
-            if let Some(ref backend) = ctx.session_backend {
-                let assistant_msg = ChatMessage::assistant(&out.answer);
-                let _ = backend.append(session_key, &assistant_msg);
-            }
-
-            let reset = serde_json::json!({ "type": "chunk_reset" });
-            emit_ws_event_async(replay, replay_cap, subscribers, reset).await;
-
-            let mut done = serde_json::json!({
-                "type": "done",
-                "full_response": out.answer,
-            });
-            if !out.reasoning.is_empty() {
-                done["full_reasoning"] = serde_json::json!(out.reasoning);
-            }
-            emit_ws_event_async(replay, replay_cap, subscribers, done).await;
-
-            let _ = ctx.event_tx.send(serde_json::json!({
-                "type": "agent_end",
-                "provider": provider_label,
-                "model": model_label,
-            }));
+            emit_gateway_ws_turn_success(
+                ctx,
+                session_key,
+                replay,
+                replay_cap,
+                subscribers,
+                &provider_label,
+                &model_label,
+                &out.answer,
+                &out.reasoning,
+            )
+            .await;
         }
         Err(e) => {
             tracing::error!(error = %e, "Agent turn failed");
@@ -574,6 +675,7 @@ async fn spawn_gateway_session_runner_inner(
     let sk = session_key.clone();
     let meta_task = Arc::clone(&meta);
     let replay_task = Arc::clone(&replay);
+    #[allow(clippy::large_futures)]
     let task = tokio::spawn(async move {
         gateway_session_runner_loop(
             agent,

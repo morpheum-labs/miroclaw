@@ -28,14 +28,15 @@ pub use schema::{
     PlannerConfig, PlannerTriggerMode, PluginsConfig, ProjectIntelConfig, ProxyConfig, ProxyScope,
     QdrantConfig, QueryClassificationConfig, ReliabilityConfig, ResourceLimitsConfig,
     RuntimeConfig, SandboxBackend, SandboxConfig, SchedulerConfig, SecretsConfig, SecurityConfig,
-    SecurityOpsConfig, SessionTranscriptConfig, ShellAutonomousProfileConfig,
-    ShellBalancedProfileConfig, ShellCustomProfileEntry, ShellSafeProfileConfig, ShellSection,
-    SkillCreationConfig, SkillsConfig, SkillsPromptInjectionMode, SlackConfig, SopConfig,
-    StorageConfig, StorageProviderConfig, StorageProviderSection, StreamMode, SwarmConfig,
-    SwarmStrategy, TelegramConfig, TextBrowserConfig, ToolFilterGroup, ToolFilterGroupMode,
-    ToolResultOffloadConfig, TranscriptionConfig, TtsConfig, TunnelConfig, VerifiableIntentConfig,
-    WebFetchConfig, WebSearchConfig, WebUiConfig, WebhookConfig, WhatsAppChatPolicy,
-    WhatsAppWebMode, WorkspaceConfig, DEFAULT_GWS_SERVICES,
+    SecurityOpsConfig, SemanticRouterGatewayConfig, SessionTranscriptConfig,
+    ShellAutonomousProfileConfig, ShellBalancedProfileConfig, ShellCustomProfileEntry,
+    ShellSafeProfileConfig, ShellSection, SkillCreationConfig, SkillsConfig,
+    SkillsPromptInjectionMode, SlackConfig, SopConfig, StorageConfig, StorageProviderConfig,
+    StorageProviderSection, StreamMode, SwarmConfig, SwarmStrategy, TelegramConfig,
+    TextBrowserConfig, ToolFilterGroup, ToolFilterGroupMode, ToolResultOffloadConfig,
+    TranscriptionConfig, TtsConfig, TunnelConfig, VerifiableIntentConfig, WebFetchConfig,
+    WebSearchConfig, WebUiConfig, WebhookConfig, WhatsAppChatPolicy, WhatsAppWebMode,
+    WorkspaceConfig, DEFAULT_GWS_SERVICES,
 };
 
 pub fn name_and_presence<T: traits::ChannelConfig>(channel: Option<&T>) -> (&'static str, bool) {

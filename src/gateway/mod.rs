@@ -14,6 +14,7 @@ pub mod api_plugins;
 pub mod canvas;
 pub mod chat_slash;
 pub mod nodes;
+pub mod semantic_router_client;
 pub mod session_runner;
 pub mod sse;
 pub mod static_files;
