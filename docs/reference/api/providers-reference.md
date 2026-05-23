@@ -1,4 +1,4 @@
-# ZeroClaw Providers Reference
+# Miroclaw Providers Reference
 
 This document maps provider IDs, aliases, and credential environment variables.
 
@@ -7,7 +7,7 @@ Last verified: **March 12, 2026**.
 ## How to List Providers
 
 ```bash
-zeroclaw providers
+miroclaw providers
 ```
 
 ## Credential Resolution Order
@@ -56,6 +56,7 @@ credential is not reused for fallback providers.
 | `perplexity` | — | No | `PERPLEXITY_API_KEY` |
 | `cohere` | — | No | `COHERE_API_KEY` |
 | `copilot` | `github-copilot` | No | (use config/`API_KEY` fallback with GitHub token) |
+| `grok-browser` | `grok_browser`, `grok-web` | Yes | `BUN_BROWSER_TOKEN`, `BUN_BROWSER_HOST` (or `~/.bun-browser/daemon.json`) |
 | `lmstudio` | `lm-studio` | Yes | (optional; local by default) |
 | `llamacpp` | `llama.cpp` | Yes | `LLAMACPP_API_KEY` (optional; only if server auth is enabled) |
 | `sglang` | — | Yes | `SGLANG_API_KEY` (optional) |
@@ -80,18 +81,31 @@ credential is not reused for fallback providers.
 - Gemini CLI OAuth requests use `cloudcode-pa.googleapis.com/v1internal` with Code Assist request envelope semantics
 - Thinking models (e.g. `gemini-3-pro-preview`) are supported — internal reasoning parts are automatically filtered from the response
 
+### Grok Browser Notes
+
+- Provider ID: `grok-browser` (aliases: `grok_browser`, `grok-web`)
+- Distinct from `xai` / `grok` API provider (`XAI_API_KEY`)
+- Requires [bun-browser](https://github.com/epiral/bun-browser) daemon plus a logged-in [grok.com](https://grok.com/) browser session
+- Auth: `BUN_BROWSER_TOKEN` or `~/.bun-browser/daemon.json` (`token` field); optional host override via `BUN_BROWSER_HOST`
+- Configure via `[grok_browser]` (`session_mode`, optional `agent_id` / `agent_name`, `disable_search`)
+- `session_mode = "follow"` (default): persists Grok `conversationId` and uses `grok/chatfollow` for follow-ups
+- `session_mode = "stateless"`: each call starts a fresh `grok/chat` thread
+- Models map to Grok web modes: `fast`, `auto`, `expert` (aliases: `grok-3` → `fast`, `grok-4` → `expert`)
+- No native tool calling; agentic tool loops should use an API-based provider instead
+- Typical latency: 5–30s per turn (browser automation)
+
 ### Ollama Vision Notes
 
 - Provider ID: `ollama`
 - Vision input is supported through user message image markers: ``[IMAGE:<source>]``.
-- After multimodal normalization, ZeroClaw sends image payloads through Ollama's native `messages[].images` field.
-- If a non-vision provider is selected, ZeroClaw returns a structured capability error instead of silently ignoring images.
+- After multimodal normalization, Miroclaw sends image payloads through Ollama's native `messages[].images` field.
+- If a non-vision provider is selected, Miroclaw returns a structured capability error instead of silently ignoring images.
 
 ### Ollama Cloud Routing Notes
 
 - Use `:cloud` model suffix only with a remote Ollama endpoint.
 - Remote endpoint should be set in `api_url` (example: `https://ollama.com`).
-- ZeroClaw normalizes a trailing `/api` in `api_url` automatically.
+- Miroclaw normalizes a trailing `/api` in `api_url` automatically.
 - If `default_model` ends with `:cloud` while `api_url` is local or unset, config validation fails early with an actionable error.
 - Local Ollama model discovery intentionally excludes `:cloud` entries to avoid selecting cloud-only models in local mode.
 
@@ -100,7 +114,7 @@ credential is not reused for fallback providers.
 - Provider ID: `llamacpp` (alias: `llama.cpp`)
 - Default endpoint: `http://localhost:8080/v1`
 - API key is optional by default; set `LLAMACPP_API_KEY` only when `llama-server` is started with `--api-key`.
-- Model discovery: `zeroclaw models refresh --provider llamacpp`
+- Model discovery: `miroclaw models refresh --provider llamacpp`
 
 ### SGLang Server Notes
 
@@ -108,21 +122,21 @@ credential is not reused for fallback providers.
 - Default endpoint: `http://localhost:30000/v1`
 - API key is optional by default; set `SGLANG_API_KEY` only when the server requires authentication.
 - Tool calling requires launching SGLang with `--tool-call-parser` (e.g. `hermes`, `llama3`, `qwen25`).
-- Model discovery: `zeroclaw models refresh --provider sglang`
+- Model discovery: `miroclaw models refresh --provider sglang`
 
 ### vLLM Server Notes
 
 - Provider ID: `vllm`
 - Default endpoint: `http://localhost:8000/v1`
 - API key is optional by default; set `VLLM_API_KEY` only when the server requires authentication.
-- Model discovery: `zeroclaw models refresh --provider vllm`
+- Model discovery: `miroclaw models refresh --provider vllm`
 
 ### Osaurus Server Notes
 
 - Provider ID: `osaurus`
 - Default endpoint: `http://localhost:1337/v1`
 - API key defaults to `"osaurus"` but is optional; set `OSAURUS_API_KEY` to override or leave unset for keyless access.
-- Model discovery: `zeroclaw models refresh --provider osaurus`
+- Model discovery: `miroclaw models refresh --provider osaurus`
 - [Osaurus](https://github.com/dinoki-ai/osaurus) is a unified AI edge runtime for macOS (Apple Silicon) that combines local MLX inference with cloud provider proxying through a single endpoint.
 - Supports multiple API formats simultaneously: OpenAI-compatible (`/v1/chat/completions`), Anthropic (`/messages`), Ollama (`/chat`), and Open Responses (`/v1/responses`).
 - Built-in MCP (Model Context Protocol) support for tool and context server connectivity.
@@ -166,7 +180,7 @@ Behavior:
 - Canonical provider ID: `nvidia`
 - Aliases: `nvidia-nim`, `build.nvidia.com`
 - Base API URL: `https://integrate.api.nvidia.com/v1`
-- Model discovery: `zeroclaw models refresh --provider nvidia`
+- Model discovery: `miroclaw models refresh --provider nvidia`
 
 Recommended starter model IDs (verified against NVIDIA API catalog on February 18, 2026):
 
@@ -305,8 +319,8 @@ Recommended workflow:
 1. Keep call sites stable (`hint:reasoning`, `hint:semantic`).
 2. Change only the target model under `[[model_routes]]` or `[[embedding_routes]]`.
 3. Run:
-   - `zeroclaw doctor`
-   - `zeroclaw status`
+   - `miroclaw doctor`
+   - `miroclaw status`
 4. Smoke test one representative flow (chat + memory retrieval) before rollout.
 
 This minimizes breakage because integrations and prompts do not need to change when model IDs are upgraded.

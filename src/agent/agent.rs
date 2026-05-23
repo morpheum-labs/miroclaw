@@ -1055,6 +1055,7 @@ impl Agent {
                         } else {
                             None
                         },
+                        session_key: self.memory_session_id.as_deref(),
                     },
                     &effective_model,
                     self.temperature,
@@ -1442,6 +1443,7 @@ impl Agent {
                             } else {
                                 None
                             },
+                            session_key: self.memory_session_id.as_deref(),
                         },
                         &effective_model,
                         self.temperature,

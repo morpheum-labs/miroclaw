@@ -25,7 +25,7 @@ When the server enables API keys, requests send **`Authorization: Bearer <token>
 
 [`ClawgotchaHttpAdapter`](../../../crates/clawgotcha/src/client/http.rs) drives **registration**, **heartbeat**, pulls of **agents**, **cron jobs**, **swarm config**, and optional **`GET /v1/instances/{instance}/agents/by-name/{agent}/mcp-credentials`** for delegate MCP credential overlays. It does **not** call **`GET /v1/instances`** or **`GET /v1/instances/{instance_name}`** for discovery.
 
-So **runtime-instance discovery** (listing every registered Miroclaw/zero-claw peer on the control plane) is **not** surfaced in this repo: that data is for **Clawgotcha’s own UI/API** (or other ops tools) that query the server directly. A running Miroclaw node only registers **itself** under `[clawgotcha].instance_name`; it never downloads the full instance catalog.
+So **runtime-instance discovery** (listing every registered Miroclaw peer on the control plane) is **not** surfaced in this repo: that data is for **Clawgotcha’s own UI/API** (or other ops tools) that query the server directly. A running Miroclaw node only registers **itself** under `[clawgotcha].instance_name`; it never downloads the full instance catalog.
 
 ---
 

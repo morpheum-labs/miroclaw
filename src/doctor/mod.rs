@@ -524,13 +524,25 @@ fn check_config_semantics(config: &Config, items: &mut Vec<DiagItem>) {
                 cat,
                 format!("provider \"{provider}\" is valid"),
             ));
+            if is_grok_browser_alias(provider) {
+                match grok_browser_config_error(&config.grok_browser) {
+                    Some(reason) => items.push(DiagItem::warn(
+                        cat,
+                        format!("grok-browser daemon auth: {reason}"),
+                    )),
+                    None => {
+                        items.push(DiagItem::ok(cat, "grok-browser bun-browser token resolved"))
+                    }
+                }
+            }
         }
     } else {
         items.push(DiagItem::error(cat, "no default_provider configured"));
     }
 
     // API key presence
-    if config.default_provider.as_deref() != Some("ollama") {
+    let provider_name = config.default_provider.as_deref().unwrap_or("");
+    if provider_name != "ollama" && !is_grok_browser_alias(provider_name) {
         if config.api_key.is_some() {
             items.push(DiagItem::ok(cat, "API key configured"));
         } else {
@@ -742,6 +754,22 @@ fn delegate_agent_routing_validation_error(
                 .to_string(),
         ),
     }
+}
+
+fn is_grok_browser_alias(name: &str) -> bool {
+    matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "grok-browser" | "grok_browser" | "grok-web"
+    )
+}
+
+fn grok_browser_config_error(cfg: &crate::config::GrokBrowserConfig) -> Option<String> {
+    crate::providers::bun_browser::BunBrowserConfig::resolve(
+        cfg.host.as_deref(),
+        Some(cfg.request_timeout_secs),
+    )
+    .err()
+    .map(|err| err.to_string())
 }
 
 fn provider_validation_error(name: &str, api_url: Option<&str>) -> Option<String> {

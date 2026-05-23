@@ -86,6 +86,11 @@ fn factory_grok_alias_resolves_to_xai() {
 }
 
 #[test]
+fn factory_grok_browser_resolves_without_api_key() {
+    assert_provider_ok("grok-browser", None, None);
+}
+
+#[test]
 fn factory_kimi_alias_resolves_to_moonshot() {
     assert_provider_ok("kimi", Some("test-key"), None);
 }

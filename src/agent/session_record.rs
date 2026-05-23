@@ -45,6 +45,8 @@ pub struct SessionRecord {
     pub history: Vec<ChatMessage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compaction: Option<SessionCompactionMeta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_sidecar: Option<crate::providers::grok_browser::session::ProviderSidecar>,
 }
 
 #[derive(Deserialize)]
@@ -187,6 +189,7 @@ pub fn load_session_record(path: &Path, system_prompt: &str) -> Result<SessionRe
             version: SESSION_RECORD_VERSION,
             history: vec![ChatMessage::system(system_prompt)],
             compaction: None,
+            provider_sidecar: None,
         });
     }
 
@@ -207,6 +210,7 @@ pub fn load_session_record(path: &Path, system_prompt: &str) -> Result<SessionRe
             version: SESSION_RECORD_VERSION,
             history: legacy.history,
             compaction: None,
+            provider_sidecar: None,
         }
     } else {
         serde_json::from_value(value).with_context(|| format!("session {}", path.display()))?
@@ -282,6 +286,7 @@ mod tests {
                 archive_paths: vec!["archives/x.jsonl".into()],
                 last_summary_excerpt: Some("bullets".into()),
             }),
+            provider_sidecar: None,
         };
         save_session_record(&path, &rec).unwrap();
         let loaded = load_session_record(&path, "fallback").unwrap();

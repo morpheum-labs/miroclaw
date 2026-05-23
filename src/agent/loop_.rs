@@ -601,13 +601,17 @@ fn save_interactive_session_history(
     path: &Path,
     history: &[ChatMessage],
     compaction: &crate::agent::session_record::SessionCompactionMeta,
+    session_key: Option<&str>,
 ) -> Result<()> {
+    let provider_sidecar =
+        session_key.and_then(|key| crate::providers::grok_browser::session::sidecar_from_disk(key));
     crate::agent::session_record::save_session_record(
         path,
         &crate::agent::session_record::SessionRecord {
             version: crate::agent::session_record::SESSION_RECORD_VERSION,
             history: history.to_vec(),
             compaction: Some(compaction.clone()),
+            provider_sidecar,
         },
     )
 }
@@ -3153,6 +3157,10 @@ pub(crate) async fn run_tool_call_loop_body(
             ChatRequest {
                 messages: &prepared_messages.messages,
                 tools: request_tools,
+                session_key: match planner_input {
+                    PlannerLoopInput::Active { session_id, .. } => Some(session_id),
+                    PlannerLoopInput::Inactive => None,
+                },
             },
             active_model,
             temperature,
@@ -4578,15 +4586,25 @@ pub async fn run(
         let cli = crate::channels::CliChannel::new();
 
         // Persistent conversation history across turns (v2 session record + compaction metadata).
-        let (mut history, mut compaction_meta) = if let Some(path) = session_state_file.as_deref() {
-            let r = crate::agent::session_record::load_session_record(path, &system_prompt)?;
-            (r.history, r.compaction.unwrap_or_default())
-        } else {
-            (
-                vec![ChatMessage::system(&system_prompt)],
-                crate::agent::session_record::SessionCompactionMeta::default(),
-            )
-        };
+        let (mut history, mut compaction_meta, loaded_sidecar) =
+            if let Some(path) = session_state_file.as_deref() {
+                let r = crate::agent::session_record::load_session_record(path, &system_prompt)?;
+                (
+                    r.history,
+                    r.compaction.unwrap_or_default(),
+                    r.provider_sidecar,
+                )
+            } else {
+                (
+                    vec![ChatMessage::system(&system_prompt)],
+                    crate::agent::session_record::SessionCompactionMeta::default(),
+                    None,
+                )
+            };
+        if let (Some(sidecar), Some(key)) = (loaded_sidecar.as_ref(), memory_session_id.as_deref())
+        {
+            let _ = crate::providers::grok_browser::session::sync_sidecar_to_disk(key, sidecar);
+        }
 
         loop {
             print!("> ");
@@ -4663,8 +4681,16 @@ pub async fn run(
                     } else {
                         println!("Conversation cleared.\n");
                     }
+                    if let Some(key) = memory_session_id.as_deref() {
+                        let _ = crate::providers::grok_browser::session::clear_sidecar_file(key);
+                    }
                     if let Some(path) = session_state_file.as_deref() {
-                        save_interactive_session_history(path, &history, &compaction_meta)?;
+                        save_interactive_session_history(
+                            path,
+                            &history,
+                            &compaction_meta,
+                            memory_session_id.as_deref(),
+                        )?;
                     }
                     continue;
                 }
@@ -4981,7 +5007,12 @@ pub async fn run(
             }
 
             if let Some(path) = session_state_file.as_deref() {
-                save_interactive_session_history(path, &history, &compaction_meta)?;
+                save_interactive_session_history(
+                    path,
+                    &history,
+                    &compaction_meta,
+                    memory_session_id.as_deref(),
+                )?;
             }
         }
     }
@@ -5354,8 +5385,13 @@ mod tests {
             ChatMessage::assistant("hi"),
         ];
 
-        save_interactive_session_history(&path, &history, &SessionCompactionMeta::default())
-            .unwrap();
+        save_interactive_session_history(
+            &path,
+            &history,
+            &SessionCompactionMeta::default(),
+            Some("cli:test"),
+        )
+        .unwrap();
         let restored = load_interactive_session_history(&path, "fallback").unwrap();
 
         assert_eq!(restored.len(), 3);

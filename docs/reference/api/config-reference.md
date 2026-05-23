@@ -1,4 +1,4 @@
-# ZeroClaw Config Reference (Operator-Oriented)
+# Miroclaw Config Reference (Operator-Oriented)
 
 This is a high-signal reference for common config sections and defaults.
 
@@ -7,16 +7,16 @@ Last verified: **April 16, 2026**.
 Config path resolution at startup:
 
 1. `MIROCLAW_WORKSPACE` override (if set)
-2. persisted `~/.zeroclaw/active_workspace.toml` marker (if present)
-3. default `~/.zeroclaw/config.toml`
+2. persisted `~/.miroclaw/active_workspace.toml` marker (if present)
+3. default `~/.miroclaw/config.toml`
 
-ZeroClaw logs the resolved config on startup at `INFO` level:
+Miroclaw logs the resolved config on startup at `INFO` level:
 
 - `Config loaded` with fields: `path`, `workspace`, `source`, `initialized`
 
 Schema export command:
 
-- `zeroclaw config schema` (prints JSON Schema draft 2020-12 to stdout)
+- `miroclaw config schema` (prints JSON Schema draft 2020-12 to stdout)
 
 ## Core Keys
 
@@ -33,7 +33,7 @@ Schema export command:
 |---|---|---|
 | `backend` | `none` | Observability backend: `none`, `noop`, `log`, `prometheus`, `otel`, `opentelemetry`, or `otlp` |
 | `otel_endpoint` | `http://localhost:4318` | OTLP HTTP endpoint used when backend is `otel` |
-| `otel_service_name` | `zeroclaw` | Service name emitted to OTLP collector |
+| `otel_service_name` | `miroclaw` | Service name emitted to OTLP collector |
 | `runtime_trace_mode` | `none` | Runtime trace storage mode: `none`, `rolling`, or `full` |
 | `runtime_trace_path` | `state/runtime-trace.jsonl` | Runtime trace JSONL path (relative to workspace unless absolute) |
 | `runtime_trace_max_entries` | `200` | Maximum retained events when `runtime_trace_mode = "rolling"` |
@@ -44,9 +44,9 @@ Notes:
 - Alias values `opentelemetry` and `otlp` map to the same OTel backend.
 - Runtime traces are intended for debugging tool-call failures and malformed model tool payloads. They can contain model output text, so keep this disabled by default on shared hosts.
 - Query runtime traces with:
-  - `zeroclaw doctor traces --limit 20`
-  - `zeroclaw doctor traces --event tool_call_result --contains \"error\"`
-  - `zeroclaw doctor traces --id <trace-id>`
+  - `miroclaw doctor traces --limit 20`
+  - `miroclaw doctor traces --event tool_call_result --contains \"error\"`
+  - `miroclaw doctor traces --id <trace-id>`
 
 Example:
 
@@ -54,7 +54,7 @@ Example:
 [observability]
 backend = "otel"
 otel_endpoint = "http://localhost:4318"
-otel_service_name = "zeroclaw"
+otel_service_name = "miroclaw"
 runtime_trace_mode = "rolling"
 runtime_trace_path = "state/runtime-trace.jsonl"
 runtime_trace_max_entries = 200
@@ -87,7 +87,7 @@ Codex-style named profiles under `[model_providers]` can set `base_url`, `api_pa
 | `wire_api` | unset | Protocol variant (`responses`, `chat_completions`, …) |
 | `requires_openai_auth` | `false` | Load OpenAI auth when no `api_key` in config |
 
-Other profile keys (`azure_openai_*`, etc.) match `src/config/schema.rs` — see `zeroclaw config schema` for the full struct.
+Other profile keys (`azure_openai_*`, etc.) match `src/config/schema.rs` — see `miroclaw config schema` for the full struct.
 
 ## `[agent]`
 
@@ -142,7 +142,7 @@ keywords = ["browse", "navigate", "open url", "screenshot"]
 
 ### `[agent.tool_router]`
 
-Optional **dynamic tool router**: before each user message is sent to the main LLM, ZeroClaw can call a fast OpenAI-compatible chat endpoint that returns a JSON array of tool names to **keep** in the tool schema for that turn. Every other registered tool (that is not already excluded by `[agent.tool_filter_groups]` or channel autonomy rules) is **hidden** from the main model for that turn, reducing prompt and native-tool payload size.
+Optional **dynamic tool router**: before each user message is sent to the main LLM, Miroclaw can call a fast OpenAI-compatible chat endpoint that returns a JSON array of tool names to **keep** in the tool schema for that turn. Every other registered tool (that is not already excluded by `[agent.tool_filter_groups]` or channel autonomy rules) is **hidden** from the main model for that turn, reducing prompt and native-tool payload size.
 
 This is complementary to `tool_filter_groups` (keyword/glob MCP filtering) and to MCP deferred loading: when `mcp.deferred_loading` is enabled, `tool_search` is automatically kept in the allowed set whenever it is present among the candidate tools, so the model can still discover deferred MCP tools.
 
@@ -224,7 +224,7 @@ Notes:
 - Domain patterns support wildcard `*`.
 - Category presets expand to curated domain sets during validation.
 - Invalid domain globs or unknown categories fail fast at startup.
-- When `enabled = true` and no OTP secret exists, ZeroClaw generates one and prints an enrollment URI once.
+- When `enabled = true` and no OTP secret exists, Miroclaw generates one and prints an enrollment URI once.
 
 Example:
 
@@ -244,14 +244,14 @@ gated_domain_categories = ["banking"]
 | Key | Default | Purpose |
 |---|---|---|
 | `enabled` | `false` | Enable emergency-stop state machine and CLI |
-| `state_file` | `~/.zeroclaw/estop-state.json` | Persistent estop state path |
+| `state_file` | `~/.miroclaw/estop-state.json` | Persistent estop state path |
 | `require_otp_to_resume` | `true` | Require OTP validation before resume operations |
 
 Notes:
 
 - Estop state is persisted atomically and reloaded on startup.
 - Corrupted/unreadable estop state falls back to fail-closed `kill_all`.
-- Use CLI command `zeroclaw estop` to engage and `zeroclaw estop resume` to clear levels.
+- Use CLI command `miroclaw estop` to engage and `miroclaw estop resume` to clear levels.
 
 ## `[agents.<name>]`
 
@@ -328,14 +328,14 @@ Notes:
 
 Notes:
 
-- Security-first default: ZeroClaw does **not** clone or sync `open-skills` unless `open_skills_enabled = true`.
+- Security-first default: Miroclaw does **not** clone or sync `open-skills` unless `open_skills_enabled = true`.
 - Environment overrides:
   - `MIROCLAW_OPEN_SKILLS_ENABLED` accepts `1/0`, `true/false`, `yes/no`, `on/off`.
   - `MIROCLAW_OPEN_SKILLS_DIR` overrides the repository path when non-empty.
   - `MIROCLAW_SKILLS_PROMPT_MODE` accepts `full` or `compact`.
 - Precedence for enable flag: `MIROCLAW_OPEN_SKILLS_ENABLED` → `skills.open_skills_enabled` in `config.toml` → default `false`.
 - `prompt_injection_mode = "compact"` is recommended on low-context local models to reduce startup prompt size while keeping skill files available on demand.
-- Skill loading and `zeroclaw skills install` both apply a static security audit. Skills that contain symlinks, script-like files, high-risk shell payload snippets, or unsafe markdown link traversal are rejected.
+- Skill loading and `miroclaw skills install` both apply a static security audit. Skills that contain symlinks, script-like files, high-risk shell payload snippets, or unsafe markdown link traversal are rejected.
 - Per-skill **`user_invocable`** is declared in `SKILL.md` / `SKILL.toml` (not in `[skills]`). When `true`, the skill name may appear as an extra Telegram bot menu command when the channel registers `setMyCommands`. See [telegram-slash-commands.md](../../setup-guides/telegram-slash-commands.md).
 
 ## `[composio]`
@@ -350,7 +350,7 @@ Notes:
 
 - Backward compatibility: legacy `enable = true` is accepted as an alias for `enabled = true`.
 - If `enabled = false` or `api_key` is missing, the `composio` tool is not registered.
-- ZeroClaw requests Composio v3 tools with `toolkit_versions=latest` and executes tools with `version="latest"` to avoid stale default tool revisions.
+- Miroclaw requests Composio v3 tools with `toolkit_versions=latest` and executes tools with `version="latest"` to avoid stale default tool revisions.
 - Typical flow: call `connect`, complete browser OAuth, then run `execute` for the desired tool action.
 - If Composio returns a missing connected-account reference error, call `list_accounts` (optionally with `app`) and pass the returned `connected_account_id` to `execute`.
 
@@ -511,7 +511,7 @@ Notes:
 | `port` | `42617` | gateway listen port |
 | `require_pairing` | `true` | require pairing before bearer auth |
 | `allow_public_bind` | `false` | block accidental public exposure |
-| `path_prefix` | _(none)_ | URL path prefix for reverse-proxy deployments (e.g. `"/zeroclaw"`) |
+| `path_prefix` | _(none)_ | URL path prefix for reverse-proxy deployments (e.g. `"/miroclaw"`) |
 | `session_persistence` | `true` | persist `/ws/chat` histories via the session backend |
 | `session_ttl_hours` | `0` | auto-archive stale gateway sessions (`0` = off) |
 | `web_chat_preserve_session_on_navigation` | `false` | keep the same gateway chat `session_id` across full dashboard reloads |
@@ -519,8 +519,8 @@ Notes:
 | `ws_runner_max_sessions` | `0` | cap concurrent session runners (`0` = unlimited) |
 | `ws_event_replay_cap` | `0` (use built-in **128**) | max streamed events buffered per session for reconnect replay (`0` = default cap) |
 
-When deploying behind a reverse proxy that maps ZeroClaw to a sub-path,
-set `path_prefix` to that sub-path (e.g. `"/zeroclaw"`). All gateway
+When deploying behind a reverse proxy that maps Miroclaw to a sub-path,
+set `path_prefix` to that sub-path (e.g. `"/miroclaw"`). All gateway
 routes will be served under this prefix. The value must start with `/`
 and must not end with `/`.
 
@@ -666,24 +666,24 @@ Notes:
 
 ## `[memory.layered]`
 
-Optional **layered memory** (AutoMemory + SessionMemory): curated topic files and per-session turn summaries under `~/.zeroclaw/` (scoped by workspace), injected into the **system prompt dynamic tail** instead of pasting the whole workspace `MEMORY.md`. When enabled, the `[Memory context]` user-prefix block from `Memory::recall` is skipped so memory is not duplicated.
+Optional **layered memory** (AutoMemory + SessionMemory): curated topic files and per-session turn summaries under `~/.miroclaw/` (scoped by workspace), injected into the **system prompt dynamic tail** instead of pasting the whole workspace `MEMORY.md`. When enabled, the `[Memory context]` user-prefix block from `Memory::recall` is skipped so memory is not duplicated.
 
 | Key | Default | Purpose |
 |---|---|---|
 | `enabled` | `false` | Turn layered memory on or off |
 | `staleness_warn_days` | `7` | Topics older than this get an in-prompt staleness reminder |
-| `index_max_entries` | `200` | Max `- [...](...)` index lines kept in `~/.zeroclaw/memory/<bucket>/MEMORY.md` |
+| `index_max_entries` | `200` | Max `- [...](...)` index lines kept in `~/.miroclaw/memory/<bucket>/MEMORY.md` |
 | `max_topics_in_prompt` | `5` | Max topic bodies merged into the layered block per LLM call |
 | `max_chars_total` | `8000` | Hard cap on layered markdown size (characters) |
 
 Notes:
 
-- **AutoMemory** lives at `~/.zeroclaw/memory/<workspace-bucket>/` (`MEMORY.md` index + `topics/*.md`). This is separate from workspace `MEMORY.md` used by the `markdown` memory backend.
-- **SessionMemory** turn files: `~/.zeroclaw/sessions/<session-stem>/session-memory/<uuid>.md` (same session stem family as JSONL transcripts).
+- **AutoMemory** lives at `~/.miroclaw/memory/<workspace-bucket>/` (`MEMORY.md` index + `topics/*.md`). This is separate from workspace `MEMORY.md` used by the `markdown` memory backend.
+- **SessionMemory** turn files: `~/.miroclaw/sessions/<session-stem>/session-memory/<uuid>.md` (same session stem family as JSONL transcripts).
 - **Writes** (session file + optional topic rows from consolidation) run after a successful turn when `memory.auto_save = true`: consolidation is **awaited** on the main agent / QueryEngine path (not a duplicate background hook). Layered injection can be enabled without `auto_save`, but then only the selector reads existing files.
 - **Post-compaction reload:** after history prune, the loop can merge a short markdown **memory reload** block into the system prompt dynamic tail: latest in-process session-memory digest (from the last consolidation) plus a capped snippet of the workspace AutoMemory `MEMORY.md` index when a workspace root is known. Stale summaries or index mtimes older than 24h add in-prompt warnings.
 - Topic ranking uses keyword overlap and, when `[memory]` embedding settings are non-`none`, the same hybrid weights as `vector_weight` / `keyword_weight`.
-- Diagnostics: `zeroclaw doctor query-engine` prints layered selector stats when enabled, last memory-injection time, and a preview of the session-memory summary; `zeroclaw doctor long-run` checks long-running **hands** (scratchpad, index age, static/dynamic prompt boundary).
+- Diagnostics: `miroclaw doctor query-engine` prints layered selector stats when enabled, last memory-injection time, and a preview of the session-memory summary; `miroclaw doctor long-run` checks long-running **hands** (scratchpad, index age, static/dynamic prompt boundary).
 
 ```toml
 [memory]
@@ -736,7 +736,7 @@ Upgrade strategy:
 
 1. Keep hints stable (`hint:reasoning`, `hint:semantic`).
 2. Update only `model = "...new-version..."` in the route entries.
-3. Validate with `zeroclaw doctor` before restart/rollout.
+3. Validate with `miroclaw doctor` before restart/rollout.
 
 Natural-language config path:
 
@@ -814,7 +814,7 @@ Notes:
 - When a timeout occurs, users receive: `⚠️ Request timed out while waiting for the model. Please try again.`
 - Telegram-only interruption behavior is controlled with `channels_config.telegram.interrupt_on_new_message` (default `false`).
   When enabled, a newer message from the same sender in the same chat cancels the in-flight request and preserves interrupted user context.
-- While `zeroclaw channel start` is running, updates to `default_provider`, `default_model`, `default_temperature`, `api_key`, `api_url`, and `reliability.*` are hot-applied from `config.toml` on the next inbound message.
+- While `miroclaw channel start` is running, updates to `default_provider`, `default_model`, `default_temperature`, `api_key`, `api_url`, and `reliability.*` are hot-applied from `config.toml` on the next inbound message.
 - Provider runtime wiring such as `api_path` and `native_tool_calling` is fixed when the channel process starts; restart after changing those keys.
 
 ### `[channels_config.telegram]`
@@ -982,10 +982,10 @@ Notes:
 After editing config:
 
 ```bash
-zeroclaw status
-zeroclaw doctor
-zeroclaw channel doctor
-zeroclaw service restart
+miroclaw status
+miroclaw doctor
+miroclaw channel doctor
+miroclaw service restart
 ```
 
 ## Related Docs

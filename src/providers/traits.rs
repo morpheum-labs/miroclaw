@@ -92,6 +92,8 @@ impl ChatResponse {
 pub struct ChatRequest<'a> {
     pub messages: &'a [ChatMessage],
     pub tools: Option<&'a [ToolSpec]>,
+    /// Optional miroclaw session key for providers that maintain external thread state.
+    pub session_key: Option<&'a str>,
 }
 
 /// A tool result to feed back to the LLM.
@@ -809,6 +811,7 @@ mod tests {
         let request = ChatRequest {
             messages: &[ChatMessage::user("Hello")],
             tools: Some(&tools),
+            session_key: None,
         };
 
         let response = provider.chat(request, "model", 0.7).await.unwrap();
@@ -826,6 +829,7 @@ mod tests {
         let request = ChatRequest {
             messages: &[ChatMessage::user("Hello")],
             tools: None,
+            session_key: None,
         };
 
         let response = provider.chat(request, "model", 0.7).await.unwrap();
@@ -926,6 +930,7 @@ mod tests {
                 ChatMessage::system("BASE_SYSTEM_PROMPT"),
             ],
             tools: Some(&tools),
+            session_key: None,
         };
 
         let response = provider.chat(request, "model", 0.7).await.unwrap();
@@ -948,6 +953,7 @@ mod tests {
         let request = ChatRequest {
             messages: &[ChatMessage::system("BASE"), ChatMessage::user("Hello")],
             tools: Some(&tools),
+            session_key: None,
         };
 
         let response = provider.chat(request, "model", 0.7).await.unwrap();
@@ -970,6 +976,7 @@ mod tests {
         let request = ChatRequest {
             messages: &[ChatMessage::user("Hello")],
             tools: Some(&tools),
+            session_key: None,
         };
 
         let err = provider.chat(request, "model", 0.7).await.unwrap_err();

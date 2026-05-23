@@ -758,6 +758,7 @@ impl Provider for AnthropicProvider {
             } else {
                 Some(&tool_specs)
             },
+            session_key: None,
         };
         self.chat(request, model, temperature).await
     }

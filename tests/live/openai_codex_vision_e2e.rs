@@ -86,6 +86,7 @@ async fn provider_vision_support() -> Result<()> {
     let request = ChatRequest {
         messages: &messages,
         tools: None,
+        session_key: None,
     };
 
     // Send request to provider
@@ -156,6 +157,7 @@ async fn openai_codex_second_vision_support() -> Result<()> {
         extra_headers: std::collections::HashMap::new(),
         api_path: None,
         native_tool_calling: None,
+        ..ProviderRuntimeOptions::default()
     };
 
     let provider = zeroclaw::providers::create_provider_with_options("openai-codex", None, &opts)?;
@@ -213,6 +215,7 @@ async fn openai_codex_second_vision_support() -> Result<()> {
     let request = ChatRequest {
         messages: &messages,
         tools: None,
+        session_key: None,
     };
 
     // Send request to provider

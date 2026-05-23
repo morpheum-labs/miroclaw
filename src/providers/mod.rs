@@ -19,11 +19,13 @@
 pub mod anthropic;
 pub mod azure_openai;
 pub mod bedrock;
+pub mod bun_browser;
 pub mod claude_code;
 pub mod compatible;
 pub mod copilot;
 pub mod gemini;
 pub mod gemini_cli;
+pub mod grok_browser;
 pub mod kilocli;
 pub mod ollama;
 pub mod openai;
@@ -701,6 +703,8 @@ pub struct ProviderRuntimeOptions {
     /// `None` lets an optional `?native_tool_calling=` query flag apply; if neither is set,
     /// BYO OpenAI-compatible endpoints default to prompt-guided tools (safer for imperfect proxies).
     pub native_tool_calling: Option<bool>,
+    /// Grok browser provider settings (`[grok_browser]`).
+    pub grok_browser: crate::config::GrokBrowserConfig,
 }
 
 impl Default for ProviderRuntimeOptions {
@@ -716,6 +720,7 @@ impl Default for ProviderRuntimeOptions {
             extra_headers: std::collections::HashMap::new(),
             api_path: None,
             native_tool_calling: None,
+            grok_browser: crate::config::GrokBrowserConfig::default(),
         }
     }
 }
@@ -734,6 +739,7 @@ pub fn provider_runtime_options_from_config(
         extra_headers: config.extra_headers.clone(),
         api_path: config.api_path.clone(),
         native_tool_calling: config.native_tool_calling,
+        grok_browser: config.grok_browser.clone(),
     }
 }
 
@@ -1436,6 +1442,9 @@ fn create_provider_with_url_and_options(
         "copilot" | "github-copilot" => Ok(Box::new(copilot::CopilotProvider::new(key))),
         "claude-code" => Ok(Box::new(claude_code::ClaudeCodeProvider::new())),
         "gemini-cli" => Ok(Box::new(gemini_cli::GeminiCliProvider::new())),
+        "grok-browser" | "grok_browser" | "grok-web" => {
+            Ok(Box::new(grok_browser::GrokBrowserProvider::new(options)?))
+        }
         "kilocli" | "kilo" => Ok(Box::new(kilocli::KiloCliProvider::new())),
         "lmstudio" | "lm-studio" => {
             let lm_studio_key = key
@@ -2167,6 +2176,12 @@ pub fn list_providers() -> Vec<ProviderInfo> {
             name: "gemini-cli",
             display_name: "Gemini CLI",
             aliases: &[],
+            local: true,
+        },
+        ProviderInfo {
+            name: "grok-browser",
+            display_name: "Grok (Browser)",
+            aliases: &["grok_browser", "grok-web"],
             local: true,
         },
         ProviderInfo {
@@ -3037,6 +3052,13 @@ mod tests {
     }
 
     #[test]
+    fn factory_grok_browser() {
+        assert!(create_provider("grok-browser", None).is_ok());
+        assert!(create_provider("grok_browser", None).is_ok());
+        assert!(create_provider("grok-web", None).is_ok());
+    }
+
+    #[test]
     fn factory_kilocli() {
         assert!(create_provider("kilocli", None).is_ok());
         assert!(create_provider("kilo", None).is_ok());
@@ -3472,6 +3494,7 @@ mod tests {
             "copilot",
             "claude-code",
             "gemini-cli",
+            "grok-browser",
             "kilocli",
             "nvidia",
             "astrai",

@@ -448,6 +448,10 @@ pub struct Config {
     #[serde(default)]
     pub gemini_cli: GeminiCliConfig,
 
+    /// Grok browser LLM provider configuration (`[grok_browser]`).
+    #[serde(default)]
+    pub grok_browser: GrokBrowserConfig,
+
     /// OpenCode CLI tool configuration (`[opencode_cli]`).
     #[serde(default)]
     pub opencode_cli: OpenCodeCliConfig,
@@ -4016,6 +4020,73 @@ impl Default for GeminiCliConfig {
             timeout_secs: default_gemini_cli_timeout_secs(),
             max_output_bytes: default_gemini_cli_max_output_bytes(),
             env_passthrough: Vec::new(),
+        }
+    }
+}
+
+// ── Grok browser provider ───────────────────────────────────────
+
+/// Session continuity mode for the `grok-browser` LLM provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GrokBrowserSessionMode {
+    /// Each call starts a fresh Grok chat thread.
+    Stateless,
+    /// Persist `conversationId` and use `grok/chatfollow` for follow-ups.
+    #[default]
+    Follow,
+}
+
+/// Grok browser LLM provider configuration (`[grok_browser]` section).
+///
+/// Uses the bun-browser daemon and grok.com site adapters (browser session auth).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GrokBrowserConfig {
+    /// Session routing mode. Default: `follow`.
+    #[serde(default)]
+    pub session_mode: GrokBrowserSessionMode,
+    /// Optional Grok Project Agent UUID or project URL.
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    /// Optional Grok Project Agent name (resolved via `grok/agents` at warmup).
+    #[serde(default)]
+    pub agent_name: Option<String>,
+    /// Default Grok mode when model is `default` or empty.
+    #[serde(default = "default_grok_browser_model")]
+    pub model: Option<String>,
+    /// Disable Grok web search for adapter calls.
+    #[serde(default = "default_grok_browser_disable_search")]
+    pub disable_search: bool,
+    /// HTTP request timeout for bun-browser site adapter calls.
+    #[serde(default = "default_grok_browser_request_timeout_secs")]
+    pub request_timeout_secs: u64,
+    /// Optional bun-browser daemon host override.
+    #[serde(default)]
+    pub host: Option<String>,
+}
+
+fn default_grok_browser_model() -> Option<String> {
+    Some("auto".into())
+}
+
+fn default_grok_browser_disable_search() -> bool {
+    true
+}
+
+fn default_grok_browser_request_timeout_secs() -> u64 {
+    120
+}
+
+impl Default for GrokBrowserConfig {
+    fn default() -> Self {
+        Self {
+            session_mode: GrokBrowserSessionMode::Follow,
+            agent_id: None,
+            agent_name: None,
+            model: default_grok_browser_model(),
+            disable_search: default_grok_browser_disable_search(),
+            request_timeout_secs: default_grok_browser_request_timeout_secs(),
+            host: None,
         }
     }
 }
@@ -8721,6 +8792,7 @@ impl Default for Config {
             claude_code_runner: ClaudeCodeRunnerConfig::default(),
             codex_cli: CodexCliConfig::default(),
             gemini_cli: GeminiCliConfig::default(),
+            grok_browser: GrokBrowserConfig::default(),
             opencode_cli: OpenCodeCliConfig::default(),
             sop: SopConfig::default(),
             shell: ShellSection::default(),
@@ -12323,6 +12395,7 @@ default_temperature = 0.7
             claude_code_runner: ClaudeCodeRunnerConfig::default(),
             codex_cli: CodexCliConfig::default(),
             gemini_cli: GeminiCliConfig::default(),
+            grok_browser: GrokBrowserConfig::default(),
             opencode_cli: OpenCodeCliConfig::default(),
             sop: SopConfig::default(),
             shell: ShellSection::default(),
@@ -12858,6 +12931,7 @@ default_temperature = 0.7
             claude_code_runner: ClaudeCodeRunnerConfig::default(),
             codex_cli: CodexCliConfig::default(),
             gemini_cli: GeminiCliConfig::default(),
+            grok_browser: GrokBrowserConfig::default(),
             opencode_cli: OpenCodeCliConfig::default(),
             sop: SopConfig::default(),
             shell: ShellSection::default(),

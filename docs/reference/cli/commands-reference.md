@@ -39,7 +39,7 @@ Order matches `miroclaw --help`.
 | `update` | Check for and install binary releases |
 | `self-test` | Run installation self-tests (optional `--quick` to skip network) |
 | `completions` | Generate shell completion scripts to stdout |
-| `hands` | List or run autonomous hand packages under `~/.zeroclaw/hands/` |
+| `hands` | List or run autonomous hand packages under `~/.miroclaw/hands/` |
 | `desktop` | Launch or install the companion desktop app |
 
 Builds compiled with the **`plugins-wasm`** Cargo feature also expose `plugin` (WASM plugin lifecycle); it is omitted from stock release help.
@@ -166,7 +166,7 @@ Notes:
 - `miroclaw doctor models [--provider <ID>] [--use-cache]`
 - `miroclaw doctor traces [--limit <N>] [--event <TYPE>] [--contains <TEXT>]`
 - `miroclaw doctor traces --id <TRACE_ID>`
-- `miroclaw doctor long-run [HAND]` — optional `HAND` is the TOML stem under `~/.zeroclaw/hands` (omit to scan every hand). For each selected hand, checks coordinator scratchpad freshness (`decisions.md` / `final_summary.md`), workspace AutoMemory index age when `[memory.layered]` is on, and whether the assembled hand system prompt still contains `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` (Phase 1 cache split).
+- `miroclaw doctor long-run [HAND]` — optional `HAND` is the TOML stem under `~/.miroclaw/hands` (omit to scan every hand). For each selected hand, checks coordinator scratchpad freshness (`decisions.md` / `final_summary.md`), workspace AutoMemory index age when `[memory.layered]` is on, and whether the assembled hand system prompt still contains `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` (Phase 1 cache split).
 
 `doctor traces` reads runtime tool/model diagnostics from `observability.runtime_trace_path`.
 
@@ -266,7 +266,7 @@ Use `miroclaw auth <subcommand> --help` for the full flag set.
 ### `hands`
 
 - `miroclaw hands list`
-- `miroclaw hands run <name>` — `name` is the `name` field from a hand TOML under `~/.zeroclaw/hands/`
+- `miroclaw hands run <name>` — `name` is the `name` field from a hand TOML under `~/.miroclaw/hands/`
 
 ### `desktop`
 
