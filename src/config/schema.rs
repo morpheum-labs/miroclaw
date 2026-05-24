@@ -385,9 +385,9 @@ pub struct Config {
     #[serde(default)]
     pub nodes: NodesConfig,
 
-    /// Multi-client workspace isolation configuration (`[workspace]`).
+    /// Hub / supervisor configuration for multi-agent profile layout (`[hub]`).
     #[serde(default)]
-    pub workspace: WorkspaceConfig,
+    pub hub: HubConfig,
 
     /// Notion integration configuration (`[notion]`).
     #[serde(default)]
@@ -465,50 +465,42 @@ pub struct Config {
     pub shell: ShellSection,
 }
 
-/// Multi-client workspace isolation configuration.
-///
-/// When enabled, each client engagement gets an isolated workspace with
-/// separate memory, audit, secrets, and tool restrictions.
-#[allow(clippy::struct_excessive_bools)]
+/// Hub / supervisor settings for profile-per-agent multi-process layout.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct WorkspaceConfig {
-    /// Enable workspace isolation. Default: false.
+pub struct HubConfig {
+    /// When true, `miroclaw daemon` runs as supervisor (public hub + agent workers).
     #[serde(default)]
     pub enabled: bool,
-    /// Currently active workspace name.
-    #[serde(default)]
-    pub active_workspace: Option<String>,
-    /// Base directory for workspace profiles.
-    #[serde(default = "default_workspaces_dir")]
-    pub workspaces_dir: String,
-    /// Isolate memory databases per workspace. Default: true.
-    #[serde(default = "default_true")]
-    pub isolate_memory: bool,
-    /// Isolate secrets namespaces per workspace. Default: true.
-    #[serde(default = "default_true")]
-    pub isolate_secrets: bool,
-    /// Isolate audit logs per workspace. Default: true.
-    #[serde(default = "default_true")]
-    pub isolate_audit: bool,
-    /// Allow searching across workspaces. Default: false (security).
-    #[serde(default)]
-    pub cross_workspace_search: bool,
+    /// Path to agent registry file (relative to home config dir unless absolute).
+    #[serde(default = "default_hub_registry_path")]
+    pub registry_path: String,
+    /// Default profiles subdirectory name under home config dir.
+    #[serde(default = "default_hub_profiles_dir")]
+    pub profiles_dir: String,
+    /// Default agent name when none specified.
+    #[serde(default = "default_hub_default_agent")]
+    pub default_agent: String,
 }
 
-fn default_workspaces_dir() -> String {
-    "~/.miroclaw/workspaces".to_string()
+fn default_hub_registry_path() -> String {
+    crate::config::REGISTRY_FILENAME.to_string()
 }
 
-impl Default for WorkspaceConfig {
+fn default_hub_profiles_dir() -> String {
+    crate::config::DEFAULT_PROFILES_DIR.to_string()
+}
+
+fn default_hub_default_agent() -> String {
+    crate::config::DEFAULT_AGENT_NAME.to_string()
+}
+
+impl Default for HubConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            active_workspace: None,
-            workspaces_dir: default_workspaces_dir(),
-            isolate_memory: true,
-            isolate_secrets: true,
-            isolate_audit: true,
-            cross_workspace_search: false,
+            registry_path: default_hub_registry_path(),
+            profiles_dir: default_hub_profiles_dir(),
+            default_agent: default_hub_default_agent(),
         }
     }
 }
@@ -8778,7 +8770,7 @@ impl Default for Config {
             mcp: McpConfig::default(),
             mcp_serve: McpServeConfig::default(),
             nodes: NodesConfig::default(),
-            workspace: WorkspaceConfig::default(),
+            hub: HubConfig::default(),
             notion: NotionConfig::default(),
             jira: JiraConfig::default(),
             node_transport: NodeTransportConfig::default(),
@@ -8802,6 +8794,12 @@ impl Default for Config {
 
 fn default_config_and_workspace_dirs() -> Result<(PathBuf, PathBuf)> {
     let config_dir = default_config_dir()?;
+    let profile_main = config_dir
+        .join(crate::config::DEFAULT_PROFILES_DIR)
+        .join(crate::config::DEFAULT_AGENT_NAME);
+    if profile_main.join("config.toml").exists() {
+        return Ok((profile_main.clone(), profile_main.join("workspace")));
+    }
     Ok((config_dir.clone(), config_dir.join("workspace")))
 }
 
@@ -8812,7 +8810,7 @@ struct ActiveWorkspaceState {
     config_dir: String,
 }
 
-fn default_config_dir() -> Result<PathBuf> {
+pub(crate) fn default_config_dir() -> Result<PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
         if !home.is_empty() {
             return Ok(crate::context::preferred_user_data_dir_in_home(
@@ -8843,49 +8841,15 @@ fn is_temp_directory(path: &Path) -> bool {
 async fn load_persisted_workspace_dirs(
     default_config_dir: &Path,
 ) -> Result<Option<(PathBuf, PathBuf)>> {
-    let state_path = active_workspace_state_path(default_config_dir);
-    if !state_path.exists() {
-        return Ok(None);
+    if let Some(config_dir) = crate::config::active_agent::load_persisted_active_agent_config_dir(
+        default_config_dir,
+        expand_tilde_path,
+    )
+    .await?
+    {
+        return Ok(Some((config_dir.clone(), config_dir.join("workspace"))));
     }
-
-    let contents = match fs::read_to_string(&state_path).await {
-        Ok(contents) => contents,
-        Err(error) => {
-            tracing::warn!(
-                "Failed to read active workspace marker {}: {error}",
-                state_path.display()
-            );
-            return Ok(None);
-        }
-    };
-
-    let state: ActiveWorkspaceState = match toml::from_str(&contents) {
-        Ok(state) => state,
-        Err(error) => {
-            tracing::warn!(
-                "Failed to parse active workspace marker {}: {error}",
-                state_path.display()
-            );
-            return Ok(None);
-        }
-    };
-
-    let raw_config_dir = state.config_dir.trim();
-    if raw_config_dir.is_empty() {
-        tracing::warn!(
-            "Ignoring active workspace marker {} because config_dir is empty",
-            state_path.display()
-        );
-        return Ok(None);
-    }
-
-    let parsed_dir = expand_tilde_path(raw_config_dir);
-    let config_dir = if parsed_dir.is_absolute() {
-        parsed_dir
-    } else {
-        default_config_dir.join(parsed_dir)
-    };
-    Ok(Some((config_dir.clone(), config_dir.join("workspace"))))
+    Ok(None)
 }
 
 pub(crate) async fn persist_active_workspace_config_dir(config_dir: &Path) -> Result<()> {
@@ -8899,67 +8863,56 @@ async fn persist_active_workspace_config_dir_in(
     config_dir: &Path,
     default_config_dir: &Path,
 ) -> Result<()> {
-    let state_path = active_workspace_state_path(default_config_dir);
+    crate::config::active_agent::persist_active_agent_config_dir(
+        config_dir,
+        None,
+        default_config_dir,
+        is_temp_directory,
+    )
+    .await
+}
 
-    // Guard: refuse to write a temp-directory config_dir into a non-temp
-    // default location. This prevents transient test runs or one-off
-    // invocations from hijacking the real user's daemon config resolution.
-    // When both paths are temp (e.g. in tests), the write is harmless.
+/// Legacy marker path — retained for tests that write `active_workspace.toml` directly.
+fn legacy_active_workspace_state_path(default_dir: &Path) -> PathBuf {
+    default_dir.join(ACTIVE_WORKSPACE_STATE_FILE)
+}
+
+#[allow(dead_code)]
+async fn persist_legacy_active_workspace_marker_in(
+    config_dir: &Path,
+    default_config_dir: &Path,
+) -> Result<()> {
+    let state_path = legacy_active_workspace_state_path(default_config_dir);
+
     if is_temp_directory(config_dir) && !is_temp_directory(default_config_dir) {
-        tracing::warn!(
-            path = %config_dir.display(),
-            "Refusing to persist temp directory as active workspace marker"
-        );
         return Ok(());
     }
 
     if config_dir == default_config_dir {
         if state_path.exists() {
-            fs::remove_file(&state_path).await.with_context(|| {
-                format!(
-                    "Failed to clear active workspace marker: {}",
-                    state_path.display()
-                )
-            })?;
+            fs::remove_file(&state_path).await.ok();
         }
         return Ok(());
     }
 
-    fs::create_dir_all(&default_config_dir)
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to create default config directory: {}",
-                default_config_dir.display()
-            )
-        })?;
+    fs::create_dir_all(default_config_dir).await.with_context(|| {
+        format!(
+            "Failed to create default config directory: {}",
+            default_config_dir.display()
+        )
+    })?;
 
     let state = ActiveWorkspaceState {
         config_dir: config_dir.to_string_lossy().into_owned(),
     };
     let serialized =
         toml::to_string_pretty(&state).context("Failed to serialize active workspace marker")?;
-
-    let temp_path = default_config_dir.join(format!(
-        ".{ACTIVE_WORKSPACE_STATE_FILE}.tmp-{}",
-        uuid::Uuid::new_v4()
-    ));
-    fs::write(&temp_path, serialized).await.with_context(|| {
+    fs::write(&state_path, serialized).await.with_context(|| {
         format!(
-            "Failed to write temporary active workspace marker: {}",
-            temp_path.display()
+            "Failed to write active workspace marker: {}",
+            state_path.display()
         )
     })?;
-
-    if let Err(error) = fs::rename(&temp_path, &state_path).await {
-        let _ = fs::remove_file(&temp_path).await;
-        anyhow::bail!(
-            "Failed to atomically persist active workspace marker {}: {error}",
-            state_path.display()
-        );
-    }
-
-    sync_directory(default_config_dir).await?;
     Ok(())
 }
 
@@ -9257,7 +9210,7 @@ fn read_codex_openai_api_key() -> Option<String> {
 /// When the workspace is created outside of `miroclaw onboard` (e.g., non-tty
 /// daemon/cron sessions), these files would otherwise be missing. This function
 /// creates sensible defaults that allow the agent to operate with a basic identity.
-async fn ensure_bootstrap_files(workspace_dir: &Path) -> Result<()> {
+pub(crate) async fn ensure_bootstrap_files(workspace_dir: &Path) -> Result<()> {
     let defaults: &[(&str, &str)] = &[
         (
             "IDENTITY.md",
@@ -12381,7 +12334,7 @@ default_temperature = 0.7
             mcp: McpConfig::default(),
             mcp_serve: McpServeConfig::default(),
             nodes: NodesConfig::default(),
-            workspace: WorkspaceConfig::default(),
+            hub: HubConfig::default(),
             notion: NotionConfig::default(),
             jira: JiraConfig::default(),
             node_transport: NodeTransportConfig::default(),
@@ -12917,7 +12870,7 @@ default_temperature = 0.7
             mcp: McpConfig::default(),
             mcp_serve: McpServeConfig::default(),
             nodes: NodesConfig::default(),
-            workspace: WorkspaceConfig::default(),
+            hub: HubConfig::default(),
             notion: NotionConfig::default(),
             jira: JiraConfig::default(),
             node_transport: NodeTransportConfig::default(),
@@ -14819,7 +14772,7 @@ default_model = "legacy-model"
             std::env::temp_dir().join(format!("zeroclaw_test_home_{}", uuid::Uuid::new_v4()));
         let default_config_dir = temp_home.join(".miroclaw");
         let custom_config_dir = temp_home.join("profiles").join("custom-profile");
-        let marker_path = default_config_dir.join(ACTIVE_WORKSPACE_STATE_FILE);
+        let marker_path = default_config_dir.join(crate::config::ACTIVE_AGENT_STATE_FILE);
 
         // Use the _in variant directly -- no HOME manipulation needed since
         // this test only exercises persist/clear logic, not Config::load_or_init.

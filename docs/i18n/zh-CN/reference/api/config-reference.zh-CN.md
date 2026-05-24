@@ -1,22 +1,24 @@
-# ZeroClaw 配置参考（面向运维人员）
+# Miroclaw 配置参考（面向运维人员）
 
 本文档是常见配置部分和默认值的高信息量参考。
 
-最后验证时间：**2026年4月2日**。
+最后验证时间：**2026年4月16日**。
 
 启动时的配置路径解析顺序：
 
-1. `MIROCLAW_WORKSPACE` 覆盖（如果设置）
-2. 持久化的 `~/.zeroclaw/active_workspace.toml` 标记（如果存在）
-3. 默认 `~/.zeroclaw/config.toml`
+1. `MIROCLAW_CONFIG_DIR` 或 `MIROCLAW_WORKSPACE` 覆盖（如果设置）
+2. 持久化的 `~/.miroclaw/active_agent.toml`（或旧版 `active_workspace.toml`）
+3. 存在默认配置档 `~/.miroclaw/profiles/main/` 时使用该路径，否则 `~/.miroclaw/` + `workspace/`
 
-ZeroClaw 在启动时以 `INFO` 级别记录解析后的配置：
+多 agent 布局详见 [agent-profile-hub.md](../../../../architecture/agent-profile-hub.md)。
+
+Miroclaw 在启动时以 `INFO` 级别记录解析后的配置：
 
 - `Config loaded` 包含字段：`path`、`workspace`、`source`、`initialized`
 
 模式导出命令：
 
-- `zeroclaw config schema`（将 JSON Schema 草案 2020-12 打印到 stdout）
+- `miroclaw config schema`（将 JSON Schema 草案 2020-12 打印到 stdout）
 
 ## 核心键
 
@@ -32,7 +34,7 @@ ZeroClaw 在启动时以 `INFO` 级别记录解析后的配置：
 |---|---|---|
 | `backend` | `none` | 可观测性后端：`none`、`noop`、`log`、`prometheus`、`otel`、`opentelemetry` 或 `otlp` |
 | `otel_endpoint` | `http://localhost:4318` | 当后端为 `otel` 时使用的 OTLP HTTP 端点 |
-| `otel_service_name` | `zeroclaw` | 发送到 OTLP 收集器的服务名称 |
+| `otel_service_name` | `miroclaw` | 发送到 OTLP 收集器的服务名称 |
 | `runtime_trace_mode` | `none` | 运行时跟踪存储模式：`none`、`rolling` 或 `full` |
 | `runtime_trace_path` | `state/runtime-trace.jsonl` | 运行时跟踪 JSONL 路径（除非绝对路径，否则相对于工作区） |
 | `runtime_trace_max_entries` | `200` | 当 `runtime_trace_mode = \"rolling\"` 时保留的最大事件数 |
@@ -43,9 +45,9 @@ ZeroClaw 在启动时以 `INFO` 级别记录解析后的配置：
 - 别名值 `opentelemetry` 和 `otlp` 映射到同一个 OTel 后端。
 - 运行时跟踪旨在调试工具调用失败和格式错误的模型工具负载。它们可能包含模型输出文本，因此在共享主机上默认保持禁用。
 - 查询运行时跟踪：
-  - `zeroclaw doctor traces --limit 20`
-  - `zeroclaw doctor traces --event tool_call_result --contains \"error\"`
-  - `zeroclaw doctor traces --id <trace-id>`
+  - `miroclaw doctor traces --limit 20`
+  - `miroclaw doctor traces --event tool_call_result --contains \"error\"`
+  - `miroclaw doctor traces --id <trace-id>`
 
 示例：
 
@@ -53,7 +55,7 @@ ZeroClaw 在启动时以 `INFO` 级别记录解析后的配置：
 [observability]
 backend = \"otel\"
 otel_endpoint = \"http://localhost:4318\"
-otel_service_name = \"zeroclaw\"
+otel_service_name = \"miroclaw\"
 runtime_trace_mode = \"rolling\"
 runtime_trace_path = \"state/runtime-trace.jsonl\"
 runtime_trace_max_entries = 200
@@ -94,7 +96,7 @@ runtime_trace_max_entries = 200
 
 ### `[agent.tool_router]`
 
-可选的**动态工具路由器**：在每条用户消息发给主模型之前，ZeroClaw 可以调用兼容 OpenAI 的聊天接口，由其返回一个 JSON 工具名数组，表示本轮**保留**在工具模式中的工具。其余已注册工具（未被 `[agent.tool_filter_groups]` 或渠道自主性规则排除的候选）在本轮对主模型**隐藏**，从而减小系统提示与原生工具负载。
+可选的**动态工具路由器**：在每条用户消息发给主模型之前，Miroclaw 可以调用兼容 OpenAI 的聊天接口，由其返回一个 JSON 工具名数组，表示本轮**保留**在工具模式中的工具。其余已注册工具（未被 `[agent.tool_filter_groups]` 或渠道自主性规则排除的候选）在本轮对主模型**隐藏**，从而减小系统提示与原生工具负载。
 
 与 `tool_filter_groups`（按关键词/通配符筛选 MCP 工具）以及 MCP 延迟加载互补：当启用 `mcp.deferred_loading` 时，若候选工具中存在 `tool_search`，路由器会自动保留它，以便主模型仍能按需发现延迟加载的 MCP 工具。
 
@@ -148,7 +150,7 @@ fallback_to_all_tools = true
 - 域模式支持通配符 `*`。
 - 类别预设在验证期间扩展为精选的域集。
 - 无效的域 glob 或未知类别在启动时快速失败。
-- 当 `enabled = true` 且不存在 OTP 密钥时，ZeroClaw 会生成一个并打印一次注册 URI。
+- 当 `enabled = true` 且不存在 OTP 密钥时，Miroclaw 会生成一个并打印一次注册 URI。
 
 示例：
 
@@ -168,14 +170,14 @@ gated_domain_categories = [\"banking\"]
 | 键 | 默认值 | 用途 |
 |---|---|---|
 | `enabled` | `false` | 启用紧急停止状态机和 CLI |
-| `state_file` | `~/.zeroclaw/estop-state.json` | 持久化 estop 状态路径 |
+| `state_file` | `~/.miroclaw/estop-state.json` | 持久化 estop 状态路径 |
 | `require_otp_to_resume` | `true` | 恢复操作前需要 OTP 验证 |
 
 注意事项：
 
 - Estop 状态被原子持久化并在启动时重新加载。
 - 损坏/不可读的 estop 状态回退到故障关闭 `kill_all`。
-- 使用 CLI 命令 `zeroclaw estop` 启动，`zeroclaw estop resume` 清除级别。
+- 使用 CLI 命令 `miroclaw estop` 启动，`miroclaw estop resume` 清除级别。
 
 ## `[agents.<name>]`
 
@@ -237,14 +239,14 @@ temperature = 0.2
 
 注意事项：
 
-- 安全优先默认：除非 `open_skills_enabled = true`，否则 ZeroClaw **不会**克隆或同步 `open-skills`。
+- 安全优先默认：除非 `open_skills_enabled = true`，否则 Miroclaw **不会**克隆或同步 `open-skills`。
 - 环境覆盖：
   - `MIROCLAW_OPEN_SKILLS_ENABLED` 接受 `1/0`、`true/false`、`yes/no`、`on/off`。
   - `MIROCLAW_OPEN_SKILLS_DIR` 非空时覆盖仓库路径。
   - `MIROCLAW_SKILLS_PROMPT_MODE` 接受 `full` 或 `compact`。
 - 启用标志的优先级：`MIROCLAW_OPEN_SKILLS_ENABLED` → `config.toml` 中的 `skills.open_skills_enabled` → 默认 `false`。
 - 建议在低上下文本地模型上使用 `prompt_injection_mode = \"compact\"`，以减少启动提示大小，同时按需保留技能文件可用。
-- 技能加载和 `zeroclaw skills install` 都会应用静态安全审计。包含符号链接、类脚本文件、高风险 shell  payload 片段或不安全 markdown 链接遍历的技能会被拒绝。
+- 技能加载和 `miroclaw skills install` 都会应用静态安全审计。包含符号链接、类脚本文件、高风险 shell  payload 片段或不安全 markdown 链接遍历的技能会被拒绝。
 
 ## `[composio]`
 
@@ -258,7 +260,7 @@ temperature = 0.2
 
 - 向后兼容性：旧版 `enable = true` 被接受为 `enabled = true` 的别名。
 - 如果 `enabled = false` 或缺少 `api_key`，则不会注册 `composio` 工具。
-- ZeroClaw 请求 Composio v3 工具时使用 `toolkit_versions=latest`，并使用 `version=\"latest\"` 执行工具，以避免过时的默认工具版本。
+- Miroclaw 请求 Composio v3 工具时使用 `toolkit_versions=latest`，并使用 `version=\"latest\"` 执行工具，以避免过时的默认工具版本。
 - 典型流程：调用 `connect`，完成浏览器 OAuth，然后为所需工具操作运行 `execute`。
 - 如果 Composio 返回缺少连接账户引用错误，请调用 `list_accounts`（可选带 `app`）并将返回的 `connected_account_id` 传递给 `execute`。
 
@@ -402,6 +404,68 @@ methods = ["list", "get", "create", "update"]
 | `port` | `42617` | 网关监听端口 |
 | `require_pairing` | `true` | bearer 认证前需要配对 |
 | `allow_public_bind` | `false` | 阻止意外公共暴露 |
+| `path_prefix` | _(无)_ | 反向代理部署的 URL 路径前缀（例如 `"/miroclaw"`） |
+| `session_persistence` | `true` | 通过会话后端持久化 `/ws/chat` 历史 |
+| `session_ttl_hours` | `0` | 自动归档过期的网关会话（`0` = 关闭） |
+| `web_chat_preserve_session_on_navigation` | `false` | 仪表盘整页刷新后是否保留同一 gateway chat `session_id` |
+| `ws_runner_idle_minutes` | `30` | 驱逐空闲的 `/ws/chat` 会话 runner（无订阅者、无活跃回合）；`0` 关闭 |
+| `ws_runner_max_sessions` | `0` | 并发会话 runner 上限（`0` = 不限） |
+| `ws_event_replay_cap` | `0`（内置默认 **128**） | 每个会话为重连重放缓冲的流式事件上限（`0` = 默认上限） |
+
+在反向代理将 Miroclaw 映射到子路径时，将 `path_prefix` 设为该子路径（例如 `"/miroclaw"`）。所有网关路由都在此前缀下提供。值必须以 `/` 开头且不能以 `/` 结尾。
+
+在 **hub 模式**（`[hub].enabled = true`）下，公共 `[gateway]` 设置仅作用于 **hub** 进程。Agent worker 在 `registry.toml` 中的 `internal_port` 上绑定 `127.0.0.1`。
+
+### Hub WebSocket（公共）
+
+启用 hub 时，客户端连接公共网关的 `/ws/chat`，并在 connect 帧中 **必须** 发送 `agent_id`。协议摘要：
+
+| 消息 | 用途 |
+|---|---|
+| `{"type":"connect","agent_id":"main",…}` | 选择 worker；可选 `session_key` 用于 attach |
+| `{"type":"switch_agent","agent_id":"…"}` | 切换活跃 worker（同一时间仅一个） |
+| `{"type":"list_agents"}` | 注册表快照 |
+| `{"type":"list_sessions","agent_id":"main"}` | 代理到 worker `GET /internal/sessions` |
+
+完整协议：[agent-profile-hub.md](../../../../architecture/agent-profile-hub.md#hub-websocket-protocol)。
+
+## `[hub]`
+
+监督器 / 多 agent 配置档布局。当 `enabled = true` 时，`miroclaw daemon` 运行 hub 网关及每个已启用注册表条目的 **agent worker**，而非单一合并运行时。
+
+| 键 | 默认值 | 用途 |
+|---|---|---|
+| `enabled` | `false` | 启动 hub 监督器与各配置档 worker |
+| `registry_path` | `registry.toml` | Agent 索引文件（相对于主配置目录） |
+| `profiles_dir` | `profiles` | 配置档根目录的子目录名 |
+| `default_agent` | `main` | 未指定时的默认 agent 名称 |
+
+Hub 根目录 `~/.miroclaw/config.toml` 应仅包含 `[hub]` 与公共 `[gateway]` — 不含 `[channels.*]` 或 hub 级委托 agent 映射。Agent 运行时配置位于 `profiles/<name>/config.toml`。
+
+示例：
+
+```toml
+[hub]
+enabled = true
+
+[gateway]
+host = "127.0.0.1"
+port = 8080
+require_pairing = true
+```
+
+## `registry.toml`
+
+持久化于 `~/.miroclaw/registry.toml`（路径可通过 `[hub].registry_path` 覆盖）。由 `miroclaw agents` CLI 与 Clawgotcha 配置档同步管理。
+
+| 字段 | 用途 |
+|---|---|
+| `version` | 模式版本（当前为 `1`） |
+| `profiles_dir` | 默认 profiles 子目录 |
+| `default_agent` | 默认注册表名称 |
+| `[[agents]]` | 每个配置档一行：`name`、`config_dir`、`enabled`、`internal_port` |
+
+详见 [agent-profile-hub.md](../../../../architecture/agent-profile-hub.md#registry-registrytoml)。
 
 ## `[autonomy]`
 
@@ -453,24 +517,24 @@ allowed_roots = [\"~/Desktop/projects\", \"/opt/shared-repo\"]
 
 ## `[memory.layered]`
 
-可选的**分层记忆**（AutoMemory + SessionMemory）：在 `~/.zeroclaw/` 下按工作区隔离的精选主题文件与会话回合摘要，注入到**系统提示动态尾部**，而不是整份粘贴工作区 `MEMORY.md`。启用后，会跳过用户消息前缀中的 `[Memory context]`（`Memory::recall`），避免重复注入。
+可选的**分层记忆**（AutoMemory + SessionMemory）：在 `~/.miroclaw/` 下按工作区隔离的精选主题文件与会话回合摘要，注入到**系统提示动态尾部**，而不是整份粘贴工作区 `MEMORY.md`。启用后，会跳过用户消息前缀中的 `[Memory context]`（`Memory::recall`），避免重复注入。
 
 | 键 | 默认值 | 用途 |
 |---|---|---|
 | `enabled` | `false` | 开关分层记忆 |
 | `staleness_warn_days` | `7` | 超过该天数的主题在提示中附带“陈旧”提醒 |
-| `index_max_entries` | `200` | `~/.zeroclaw/memory/<bucket>/MEMORY.md` 中保留的 `- [...](...)` 索引行上限 |
+| `index_max_entries` | `200` | `~/.miroclaw/memory/<bucket>/MEMORY.md` 中保留的 `- [...](...)` 索引行上限 |
 | `max_topics_in_prompt` | `5` | 每次 LLM 调用合并进分层块的主题正文数量上限 |
 | `max_chars_total` | `8000` | 分层 Markdown 块字符数硬上限 |
 
 注意事项：
 
-- **AutoMemory** 位于 `~/.zeroclaw/memory/<工作区桶>/`（`MEMORY.md` 索引 + `topics/*.md`），与 `markdown` 后端使用的工作区 `MEMORY.md` 相互独立。
-- **SessionMemory** 回合文件：`~/.zeroclaw/sessions/<会话 stem>/session-memory/<uuid>.md`（与会话 JSONL 转录使用相同的 stem 规则族）。
+- **AutoMemory** 位于 `~/.miroclaw/memory/<工作区桶>/`（`MEMORY.md` 索引 + `topics/*.md`），与 `markdown` 后端使用的工作区 `MEMORY.md` 相互独立。
+- **SessionMemory** 回合文件：`~/.miroclaw/sessions/<会话 stem>/session-memory/<uuid>.md`（与会话 JSONL 转录使用相同的 stem 规则族）。
 - 当 `memory.auto_save = true` 时，在成功回合结束后**同步 `await` 合并**并写入会话文件及可选主题更新（主 Agent / QueryEngine 路径，不再由钩子后台重复调用 LLM）。仅启用分层而不启用 `auto_save` 时，选择器只读取已有文件。
 - **压缩后重载：** 历史裁剪后，循环可将简短 Markdown **memory reload** 块并入系统提示动态尾部：来自最近一次合并的进程内会话记忆摘要，以及已知工作区根时 AutoMemory `MEMORY.md` 索引的截断片段。摘要或索引 mtime 超过约 24 小时会在提示中加入陈旧警告。
 - 主题排序使用关键词重叠；当 `[memory]` 嵌入配置非 `none` 时，复用 `vector_weight` / `keyword_weight` 的混合权重。
-- 诊断：`zeroclaw doctor query-engine` 在启用分层时打印选择器统计，并输出上次记忆注入时间与会话记忆摘要预览；`zeroclaw doctor long-run` 用于长期运行的 **hands**（scratchpad、索引年龄、静态/动态提示边界）。
+- 诊断：`miroclaw doctor query-engine` 在启用分层时打印选择器统计，并输出上次记忆注入时间与会话记忆摘要预览；`miroclaw doctor long-run` 用于长期运行的 **hands**（scratchpad、索引年龄、静态/动态提示边界）。
 
 ```toml
 [memory]
@@ -523,7 +587,7 @@ dimensions = 1536
 
 1. 保持提示稳定（`hint:reasoning`、`hint:semantic`）。
 2. 仅更新路由条目中的 `model = \"...new-version...\"`。
-3. 在重启/部署前使用 `zeroclaw doctor` 验证。
+3. 在重启/部署前使用 `miroclaw doctor` 验证。
 
 自然语言配置路径：
 
@@ -601,7 +665,7 @@ priority = 5
 - 发生超时时，用户会收到：`⚠️ Request timed out while waiting for the model. Please try again.`
 - 仅 Telegram 的中断行为由 `channels_config.telegram.interrupt_on_new_message` 控制（默认 `false`）。
   启用后，同一发送者在同一聊天中的较新消息会取消进行中的请求并保留被中断的用户上下文。
-- 当 `zeroclaw channel start` 运行时，`default_provider`、`default_model`、`default_temperature`、`api_key`、`api_url` 和 `reliability.*` 的更新会在下一条入站消息时从 `config.toml` 热应用。
+- 当 `miroclaw channel start` 运行时，`default_provider`、`default_model`、`default_temperature`、`api_key`、`api_url` 和 `reliability.*` 的更新会在下一条入站消息时从 `config.toml` 热应用。
 
 ### `[channels_config.nostr]`
 
@@ -751,14 +815,16 @@ transport = \"native\"
 编辑配置后：
 
 ```bash
-zeroclaw status
-zeroclaw doctor
-zeroclaw channel doctor
-zeroclaw service restart
+miroclaw status
+miroclaw doctor
+miroclaw channel doctor
+miroclaw service restart
 ```
 
 ## 相关文档
 
+- [agent-profile-hub.md](../../../../architecture/agent-profile-hub.md)
+- [multi-agent-profiles.md](../../../../setup-guides/multi-agent-profiles.md)
 - [channels-reference.zh-CN.md](channels-reference.zh-CN.md)
 - [providers-reference.zh-CN.md](providers-reference.zh-CN.md)
 - [operations-runbook.zh-CN.md](../../ops/operations-runbook.zh-CN.md)

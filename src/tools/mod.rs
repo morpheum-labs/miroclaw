@@ -110,7 +110,6 @@ pub mod weather_tool;
 pub mod web_fetch;
 mod web_search_provider_routing;
 pub mod web_search_tool;
-pub mod workspace_tool;
 
 pub use ask_user::AskUserTool;
 pub use backup_tool::BackupTool;
@@ -216,7 +215,6 @@ pub use verifiable_intent::VerifiableIntentTool;
 pub use weather_tool::WeatherTool;
 pub use web_fetch::WebFetchTool;
 pub use web_search_tool::WebSearchTool;
-pub use workspace_tool::WorkspaceTool;
 
 use crate::config::{Config, DelegateAgentConfig};
 use crate::memory::Memory;
@@ -226,6 +224,7 @@ use crate::shell::ShellEngine;
 use async_trait::async_trait;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Shared handle to the delegate tool's parent-tools list.
@@ -961,6 +960,13 @@ pub fn all_tools_with_runtime(
         .with_multimodal_config(root_config.multimodal.clone())
         .with_delegate_config(root_config.delegate.clone())
         .with_workspace_dir(workspace_dir.to_path_buf())
+        .with_profile_home_dir(
+            root_config
+                .config_path
+                .parent()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| workspace_dir.to_path_buf()),
+        )
         .with_delegation_memory(
             post_turn,
             root_config.memory.clone(),
@@ -995,22 +1001,7 @@ pub fn all_tools_with_runtime(
         )));
     }
 
-    // Workspace management tool (conditionally registered when workspace isolation is enabled)
-    if root_config.workspace.enabled {
-        let workspaces_dir = if root_config.workspace.workspaces_dir.starts_with("~/") {
-            let home = directories::UserDirs::new()
-                .map(|u| u.home_dir().to_path_buf())
-                .unwrap_or_else(|| std::path::PathBuf::from("."));
-            home.join(&root_config.workspace.workspaces_dir[2..])
-        } else {
-            std::path::PathBuf::from(&root_config.workspace.workspaces_dir)
-        };
-        let ws_manager = crate::config::workspace::WorkspaceManager::new(workspaces_dir);
-        tool_arcs.push(Arc::new(WorkspaceTool::new(
-            Arc::new(tokio::sync::RwLock::new(ws_manager)),
-            security.clone(),
-        )));
-    }
+    // Workspace management tool removed — use `miroclaw agents` profile registry instead.
 
     // Verifiable Intent tool (opt-in via config)
     if root_config.verifiable_intent.enabled {

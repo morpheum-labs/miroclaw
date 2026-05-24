@@ -8,11 +8,14 @@
 //! - Header sanitization (handled by axum/hyper)
 
 pub mod api;
+pub use hub_proxy::run_hub_gateway;
 pub mod api_pairing;
 #[cfg(feature = "plugins-wasm")]
 pub mod api_plugins;
 pub mod canvas;
 pub mod chat_slash;
+pub mod hub_proxy;
+pub mod internal;
 pub mod nodes;
 pub mod semantic_router_client;
 pub mod session_runner;
@@ -1133,6 +1136,7 @@ pub async fn run_gateway(
     let inner = inner
         // ── SSE event stream ──
         .route("/api/events", get(sse::handle_sse_events))
+        .route("/internal/sessions", get(internal::handle_internal_sessions))
         // ── WebSocket agent chat ──
         .route("/ws/chat", get(ws::handle_ws_chat))
         // ── WebSocket canvas updates ──

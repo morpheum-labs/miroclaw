@@ -113,8 +113,8 @@ Use this table to pick a path; each link goes deeper.
 | **First install (recommended)** | Run `miroclaw onboard` after [install](#install-recommended). It creates your workspace, provider, channels, security, memory, and optional **Clawgotcha** control-plane URL + instance name. |
 | **Guided walkthrough** | [Getting started](docs/setup-guides/one-click-bootstrap.md) — auth, pairing, channels, gateway. |
 | **Commands-only reference** | [Quick start command reference](docs/setup-guides/quick-start-command-reference.md) — ports, daemon, non-interactive install, completions, `cargo run`. |
-| **Run the gateway + assistant** | After onboarding: `miroclaw gateway` (or `miroclaw daemon` for gateway + channels + scheduler). See the command reference above. |
-| **Clawgotcha (optional)** | Configure `[clawgotcha]` in `config.toml` so Miroclaw registers and syncs agents/cron/swarm defaults from a control plane that implements the HTTP contract. Overview: [Clawgotcha integration](docs/reference/integrations/clawgotcha.md). Wire contract: [clawgotcha-api-contract.md](docs/reference/integrations/clawgotcha-api-contract.md). |
+| **Run the gateway + assistant** | After onboarding: `miroclaw gateway` (or `miroclaw daemon` for gateway + channels + scheduler). With `[hub].enabled`, `daemon` runs hub + per-profile workers — see [multi-agent setup](docs/setup-guides/multi-agent-profiles.md). |
+| **Clawgotcha (optional)** | Configure `[clawgotcha]` per profile; upserts create registry profiles. Overview: [Clawgotcha integration](docs/reference/integrations/clawgotcha.md). Wire contract: [clawgotcha-api-contract.md](docs/reference/integrations/clawgotcha-api-contract.md). |
 | **Docker** | Build the Miroclaw binary image from the repo root [`Dockerfile`](Dockerfile) when you need a containerized gateway (bring your own workspace/config volume). Run any Clawgotcha-compatible control plane separately if you use `[clawgotcha]`. |
 
 ## Migrating from OpenClaw
@@ -130,6 +130,20 @@ miroclaw migrate openclaw
 ```
 
 This migrates your memory entries, workspace files, and configuration from `~/.openclaw/` to `~/.miroclaw/`. Config is converted from JSON to TOML automatically.
+
+## Multi-agent profiles & hub
+
+Run multiple isolated agents (separate workspaces, channels, and models) under one home directory with a **single public WebSocket** on the hub:
+
+```bash
+miroclaw migrate profiles --dry-run   # flat layout → profiles/main/
+miroclaw agents create researcher --from main
+miroclaw agents list
+# Enable [hub].enabled = true in ~/.miroclaw/config.toml, then:
+miroclaw daemon
+```
+
+Documentation: [Multi-agent setup](docs/setup-guides/multi-agent-profiles.md) · [Architecture](docs/architecture/agent-profile-hub.md) · [Config `[hub]`](docs/reference/api/config-reference.md#hub)
 
 ## Security defaults (DM access)
 

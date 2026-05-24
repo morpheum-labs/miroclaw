@@ -62,15 +62,18 @@ struct ConnectParams {
     /// Replay gateway stream events strictly after this sequence (optional).
     #[serde(default)]
     last_event_seq: Option<u64>,
+    /// Attach to an existing session by key (`gw_*` gateway or channel history key).
+    #[serde(default)]
+    session_key: Option<String>,
 }
 
 /// The sub-protocol we support for the chat WebSocket.
-const WS_PROTOCOL: &str = "zeroclaw.v1";
+pub(crate) const WS_PROTOCOL: &str = "zeroclaw.v1";
 
 /// Prefix used in `Sec-WebSocket-Protocol` to carry a bearer token.
 const BEARER_SUBPROTO_PREFIX: &str = "bearer.";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct WsQuery {
     pub token: Option<String>,
     pub session_id: Option<String>,
@@ -97,7 +100,7 @@ fn parse_ws_fresh_query(raw: Option<&str>) -> bool {
 ///
 /// Browsers cannot set custom headers on `new WebSocket(url)`, so the query
 /// parameter and subprotocol paths are required for browser-based clients.
-fn extract_ws_token<'a>(headers: &'a HeaderMap, query_token: Option<&'a str>) -> Option<&'a str> {
+pub(crate) fn extract_ws_token<'a>(headers: &'a HeaderMap, query_token: Option<&'a str>) -> Option<&'a str> {
     // 1. Authorization header
     if let Some(t) = headers
         .get(header::AUTHORIZATION)
@@ -295,6 +298,84 @@ async fn send_ws_session_start(
         .await;
 }
 
+async fn handle_channel_session_attach(
+    mut sender: futures_util::stream::SplitSink<WebSocket, Message>,
+    mut receiver: futures_util::stream::SplitStream<WebSocket>,
+    session_key: String,
+    last_event_seq: Option<u64>,
+) {
+    let (snapshot, mut live_rx) = match crate::channels::session_runner::attach_channel_session(
+        &session_key,
+        last_event_seq,
+    )
+    .await
+    {
+        Ok(x) => x,
+        Err(msg) => {
+            let err = serde_json::json!({
+                "type": "error",
+                "message": msg,
+                "code": "CHANNEL_ATTACH_FAILED",
+            });
+            let _ = sender.send(Message::Text(err.to_string().into())).await;
+            return;
+        }
+    };
+
+    let ack = serde_json::json!({
+        "type": "connected",
+        "message": "Attached to channel session",
+        "session_key": session_key,
+        "kind": "channel",
+    });
+    let _ = sender.send(Message::Text(ack.to_string().into())).await;
+
+    for frame in snapshot {
+        if sender
+            .send(Message::Text(frame.to_string().into()))
+            .await
+            .is_err()
+        {
+            let _ = crate::channels::session_runner::unregister_channel_subscriber(&session_key).await;
+            return;
+        }
+    }
+
+    loop {
+        tokio::select! {
+            frame_opt = live_rx.recv() => {
+                match frame_opt {
+                    Some(frame) => {
+                        if sender.send(Message::Text(frame.to_string().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            }
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if v.get("type").and_then(|t| t.as_str()) == Some("message") {
+                                let err = serde_json::json!({
+                                    "type": "error",
+                                    "code": "CHANNEL_INTERACT_UNSUPPORTED",
+                                    "message": "Cannot inject messages into an in-flight channel turn; attach is observe-only",
+                                });
+                                let _ = sender.send(Message::Text(err.to_string().into())).await;
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_)) | Err(_)) | None => break,
+                    Some(Ok(_)) => {}
+                }
+            }
+        }
+    }
+    let _ = crate::channels::session_runner::unregister_channel_subscriber(&session_key).await;
+}
+
 async fn handle_socket(
     socket: WebSocket,
     state: AppState,
@@ -306,6 +387,7 @@ async fn handle_socket(
 
     let mut session_id = session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let mut last_event_seq: Option<u64> = None;
+    let mut attach_session_key: Option<String> = None;
 
     if nav_fresh {
         let session_key_preview = crate::agent::session_record::gateway_backend_key(&session_id);
@@ -333,8 +415,15 @@ async fn handle_socket(
                     if cp.msg_type == "connect" {
                         connect_handshake = true;
                         last_event_seq = cp.last_event_seq;
+                        attach_session_key = cp
+                            .session_key
+                            .as_ref()
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_string);
                         debug!(
                             session_id = ?cp.session_id,
+                            session_key = ?attach_session_key,
                             device_name = ?cp.device_name,
                             capabilities = ?cp.capabilities,
                             last_event_seq = ?last_event_seq,
@@ -347,6 +436,10 @@ async fn handle_socket(
                             .filter(|s| !s.is_empty())
                         {
                             session_id = sid.to_string();
+                        } else if let Some(ref key) = attach_session_key {
+                            if let Some(sid) = key.strip_prefix(crate::agent::session_record::GATEWAY_SESSION_PREFIX) {
+                                session_id = sid.to_string();
+                            }
                         }
                     } else {
                         first_msg_fallback = Some(text.to_string());
@@ -360,6 +453,18 @@ async fn handle_socket(
         }
     } else {
         return;
+    }
+
+    if let Some(ref channel_key) = attach_session_key {
+        if !channel_key.starts_with(crate::agent::session_record::GATEWAY_SESSION_PREFIX)
+            && crate::channels::session_runner::active_channel_session_keys()
+                .iter()
+                .any(|k| k == channel_key)
+        {
+            handle_channel_session_attach(sender, receiver, channel_key.clone(), last_event_seq)
+                .await;
+            return;
+        }
     }
 
     let (session_key, resumed, message_count, effective_name) =

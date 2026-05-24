@@ -205,6 +205,7 @@ bash scripts/install.sh --help
 ## Related docs
 
 - [README.md](../README.md)
+- [multi-agent-profiles.md](multi-agent-profiles.md)
 - [commands-reference.md](../reference/cli/commands-reference.md)
 - [providers-reference.md](../reference/api/providers-reference.md)
 - [channels-reference.md](../reference/api/channels-reference.md)

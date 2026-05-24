@@ -6,6 +6,8 @@ The **reference surface** is the agentbook clawgotcha OpenAPI (`internal/api/ope
 
 Legacy control planes that used snake_case JSON (`revision_watermark`, `jobs`, **`GET /v1/cron`**, **`GET /v1/swarm/config`**) are still accepted where the adapter implements a fallback.
 
+**Host mapping (Miroclaw):** Remote agent rows from **`GET /v1/agents`** are persisted as **registry profiles** (`profiles/<name>/`, `registry.toml`) via [`HostAgents`](../../../src/clawgotcha_host/glue.rs), not as `[agents]` entries in a shared hub `config.toml`. Each syncing profile needs a unique **`[clawgotcha].instance_name`**. See [clawgotcha.md](clawgotcha.md) and [agent-profile-hub.md](../../architecture/agent-profile-hub.md).
+
 ## Base URL
 
 The Miroclaw setting **`[clawgotcha].url`** is the **HTTP prefix** prepended to every path below (no automatic `/api` insertion).

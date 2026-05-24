@@ -1,6 +1,7 @@
-//! Clawgotcha host adapters: persist delegate agents + cron rows and merge swarm defaults.
+//! Clawgotcha host adapters: persist agent profiles in registry + cron rows.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -9,9 +10,30 @@ use clawgotcha::traits::{AgentRuntimeUpdater, ConfigReconciler, CronSchedulerUpd
 use clawgotcha::{ChangeEvent, ClawgotchaError};
 use parking_lot::{Mutex, RwLock};
 
+use crate::config::registry::AgentRegistry;
 use crate::config::{Config, DelegateAgentConfig};
 
-/// Updates `[agents]` on disk and keeps the delegate tool snapshot in sync when provided.
+async fn write_profile_config(profile_dir: &std::path::Path, agent: &DelegateAgentConfig) -> Result<(), ClawgotchaError> {
+    let mut cfg = Config::default();
+    cfg.default_provider = Some(agent.provider.clone());
+    cfg.default_model = Some(agent.model.clone());
+    cfg.api_key = agent.api_key.clone();
+    cfg.default_temperature = agent.temperature.unwrap_or(cfg.default_temperature);
+    let mut stripped = cfg;
+    stripped.workspace_dir = PathBuf::new();
+    stripped.config_path = PathBuf::new();
+    let toml_str = toml::to_string_pretty(&stripped)
+        .map_err(|e| ClawgotchaError::Validation(format!("serialize profile: {e}")))?;
+    tokio::fs::create_dir_all(profile_dir.join("workspace"))
+        .await
+        .map_err(|e| ClawgotchaError::Validation(format!("create workspace: {e}")))?;
+    tokio::fs::write(profile_dir.join("config.toml"), toml_str)
+        .await
+        .map_err(|e| ClawgotchaError::Validation(format!("write profile config: {e}")))?;
+    Ok(())
+}
+
+/// Updates agent profiles in registry and keeps the delegate tool snapshot in sync when provided.
 pub struct HostAgents {
     pub config: Arc<Mutex<Config>>,
     pub delegate_agents: Option<Arc<RwLock<HashMap<String, DelegateAgentConfig>>>>,
@@ -20,39 +42,61 @@ pub struct HostAgents {
 #[async_trait]
 impl AgentRuntimeUpdater for HostAgents {
     async fn upsert_agent(&self, def: &AgentDefinition) -> Result<(), ClawgotchaError> {
-        let snapshot = {
-            let mut cfg = self.config.lock();
-            cfg.agents
-                .insert(def.name.clone(), DelegateAgentConfig::from(def));
-            cfg.clone()
+        let agent_cfg = DelegateAgentConfig::from(def);
+        let home_dir = {
+            let cfg = self.config.lock();
+            cfg.config_path
+                .parent()
+                .map(PathBuf::from)
+                .ok_or_else(|| ClawgotchaError::Validation("config path has no parent".into()))?
         };
-        snapshot
-            .save()
+        let mut registry = AgentRegistry::load_from(&home_dir)
             .await
-            .map_err(|e| ClawgotchaError::Validation(format!("save config: {e}")))?;
+            .map_err(|e| ClawgotchaError::Validation(format!("load registry: {e}")))?;
+        let profile_dir = registry.profile_config_dir(&home_dir, &def.name);
+        write_profile_config(&profile_dir, &agent_cfg).await?;
+        if registry.get(&def.name).is_none() {
+            registry.agents.push(crate::config::registry::AgentRegistryEntry {
+                name: def.name.clone(),
+                config_dir: format!("{}/{}", registry.profiles_dir, def.name),
+                enabled: true,
+                internal_port: registry.next_internal_port(),
+            });
+        }
+        registry
+            .save_to(&home_dir)
+            .await
+            .map_err(|e| ClawgotchaError::Validation(format!("save registry: {e}")))?;
         if let Some(cell) = &self.delegate_agents {
-            *cell.write() = snapshot.agents.clone();
+            let mut map = cell.write();
+            map.insert(def.name.clone(), agent_cfg);
         }
         crate::tools::mcp_vault::invalidate_mcp_scoped_state();
-        tracing::info!(agent = %def.name, revision = def.current_revision, "clawgotcha: upserted delegate agent");
+        tracing::info!(agent = %def.name, revision = def.current_revision, "clawgotcha: upserted agent profile");
         Ok(())
     }
 
     async fn remove_agent(&self, name: &str) -> Result<(), ClawgotchaError> {
-        let snapshot = {
-            let mut cfg = self.config.lock();
-            cfg.agents.remove(name);
-            cfg.clone()
+        let home_dir = {
+            let cfg = self.config.lock();
+            cfg.config_path
+                .parent()
+                .map(PathBuf::from)
+                .ok_or_else(|| ClawgotchaError::Validation("config path has no parent".into()))?
         };
-        snapshot
-            .save()
+        let mut registry = AgentRegistry::load_from(&home_dir)
             .await
-            .map_err(|e| ClawgotchaError::Validation(format!("save config: {e}")))?;
+            .map_err(|e| ClawgotchaError::Validation(format!("load registry: {e}")))?;
+        registry.agents.retain(|a| a.name != name);
+        registry
+            .save_to(&home_dir)
+            .await
+            .map_err(|e| ClawgotchaError::Validation(format!("save registry: {e}")))?;
         if let Some(cell) = &self.delegate_agents {
-            *cell.write() = snapshot.agents.clone();
+            cell.write().remove(name);
         }
         crate::tools::mcp_vault::invalidate_mcp_scoped_state();
-        tracing::info!(%name, "clawgotcha: removed delegate agent");
+        tracing::info!(%name, "clawgotcha: removed agent profile from registry");
         Ok(())
     }
 }

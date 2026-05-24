@@ -8,8 +8,9 @@ For first-time setup and quick orientation.
 2. Detailed quick-start commands (flags, auth, cheat sheet): [quick-start-command-reference.md](quick-start-command-reference.md)
 3. One-click setup and dual bootstrap mode: [one-click-bootstrap.md](one-click-bootstrap.md)
 4. Update or uninstall on macOS: [macos-update-uninstall.md](macos-update-uninstall.md)
-5. Find commands by tasks: [../reference/cli/commands-reference.md](../reference/cli/commands-reference.md)
-6. Tune shell execution tiers: [shell-profiles.md](shell-profiles.md)
+5. Multi-agent profiles and hub: [multi-agent-profiles.md](multi-agent-profiles.md)
+6. Find commands by tasks: [../reference/cli/commands-reference.md](../reference/cli/commands-reference.md)
+7. Tune shell execution tiers: [shell-profiles.md](shell-profiles.md)
 
 ## Choose Your Path
 

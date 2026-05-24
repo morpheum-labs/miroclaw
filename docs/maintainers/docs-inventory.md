@@ -46,6 +46,8 @@ Last reviewed: **February 18, 2026**.
 | `docs/custom-providers.md` | Current Integration Guide | integration developers |
 | `docs/zai-glm-setup.md` | Current Provider Setup Guide | users/operators |
 | `docs/setup-guides/shell-profiles.md` | Current Guide | users/operators |
+| `docs/setup-guides/multi-agent-profiles.md` | Current Guide | users/operators |
+| `docs/architecture/agent-profile-hub.md` | Current Guide | users/operators/contributors |
 | `docs/langgraph-integration.md` | Current Integration Guide | integration developers |
 | `docs/operations-runbook.md` | Current Guide | operators |
 | `docs/troubleshooting.md` | Current Guide | users/operators |

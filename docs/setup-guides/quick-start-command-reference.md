@@ -54,6 +54,25 @@ Full autonomous runtime (gateway + channels + cron + hands):
 miroclaw daemon
 ```
 
+**Multi-agent hub** (public WebSocket routes to one agent at a time; channels isolated per profile):
+
+```bash
+# See setup guide — enable [hub].enabled, create profiles, then:
+miroclaw daemon
+```
+
+Setup: [multi-agent-profiles.md](multi-agent-profiles.md). Architecture: [agent-profile-hub.md](../architecture/agent-profile-hub.md).
+
+## Agent profiles (CLI)
+
+```bash
+miroclaw agents list
+miroclaw agents create researcher --from main
+miroclaw agents use main
+miroclaw migrate profiles --dry-run
+miroclaw migrate profiles
+```
+
 ## From source (development)
 
 After pulling the latest sources, a normal release build is usually enough. If incremental artifacts confuse the compiler, use `cargo clean && cargo build`.
@@ -199,6 +218,8 @@ Migration:
 ```bash
 miroclaw migrate openclaw --dry-run
 miroclaw migrate openclaw
+miroclaw migrate profiles --dry-run
+miroclaw migrate profiles
 ```
 
 Shell completions:

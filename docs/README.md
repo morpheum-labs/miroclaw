@@ -2,13 +2,15 @@
 
 This page is the primary entry point for the documentation system.
 
-Last refreshed: **April 22, 2026**.
+Last refreshed: **May 24, 2026**.
 
 ## Start Here
 
 | I want to… | Read this |
 |---|---|
 | Install and run Miroclaw quickly | [README.md (Quick Start)](../README.md#quick-start) |
+| Run multiple isolated agents + public WS hub | [multi-agent-profiles.md](setup-guides/multi-agent-profiles.md) |
+| Understand hub / registry architecture | [agent-profile-hub.md](architecture/agent-profile-hub.md) |
 | Expand README quick-start commands (flags, auth, cheat sheet) | [quick-start-command-reference.md](setup-guides/quick-start-command-reference.md) |
 | Bootstrap in one command | [one-click-bootstrap.md](setup-guides/one-click-bootstrap.md) |
 | Update or uninstall on macOS | [macos-update-uninstall.md](setup-guides/macos-update-uninstall.md) |

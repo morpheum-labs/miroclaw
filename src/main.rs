@@ -72,12 +72,19 @@ fn pause_after_no_command_help() {
 }
 
 mod agent;
+mod agent_worker {
+    pub use zeroclaw::agent_worker::run_for_profile_dir;
+    pub use zeroclaw::agent_worker::*;
+}
 mod approval;
 mod auth;
 mod channels;
 mod clawgotcha_host;
 mod cli_input;
-mod commands;
+mod commands {
+    pub mod self_test;
+    pub mod update;
+}
 mod rag {
     pub use zeroclaw::rag::*;
 }
@@ -241,6 +248,12 @@ Examples:
         /// Attach a peripheral (board:path, e.g. nucleo-f401re:/dev/ttyACM0)
         #[arg(long)]
         peripheral: Vec<String>,
+    },
+
+    /// Manage agent profiles (create, list, switch, worker)
+    Agents {
+        #[command(subcommand)]
+        agents_command: zeroclaw::AgentProfileCommands,
     },
 
     /// Start/manage the gateway server (webhooks, websockets)
@@ -1065,6 +1078,10 @@ async fn main() -> Result<()> {
             ))
             .await
             .map(|_| ())
+        }
+
+        Commands::Agents { agents_command } => {
+            zeroclaw::commands::agent_profile::handle_command(agents_command).await
         }
 
         Commands::Gateway { gateway_command } => {

@@ -6,9 +6,11 @@ Last verified: **April 16, 2026**.
 
 Config path resolution at startup:
 
-1. `MIROCLAW_WORKSPACE` override (if set)
-2. persisted `~/.miroclaw/active_workspace.toml` marker (if present)
-3. default `~/.miroclaw/config.toml`
+1. `MIROCLAW_CONFIG_DIR` or `MIROCLAW_WORKSPACE` override (if set)
+2. persisted `~/.miroclaw/active_agent.toml` (or legacy `active_workspace.toml`)
+3. default profile `~/.miroclaw/profiles/main/` when present, else `~/.miroclaw/` + `workspace/`
+
+Multi-agent layout is documented in [agent-profile-hub.md](../../architecture/agent-profile-hub.md).
 
 Miroclaw logs the resolved config on startup at `INFO` level:
 
@@ -253,7 +255,9 @@ Notes:
 - Corrupted/unreadable estop state falls back to fail-closed `kill_all`.
 - Use CLI command `miroclaw estop` to engage and `miroclaw estop resume` to clear levels.
 
-## `[agents.<name>]`
+## `[agents.<name>]` (legacy / per-profile)
+
+**Prefer registry profiles** for multi-agent isolation. The table below describes in-profile delegate entries used by the `delegate` and `swarm` tools within one profile. Cross-profile delegation resolves names from `registry.toml` first.
 
 Delegate sub-agent configurations. Each key under `[agents]` defines a named sub-agent that the primary agent can delegate to.
 
@@ -270,15 +274,15 @@ Delegate sub-agent configurations. Each key under `[agents]` defines a named sub
 | `max_iterations` | `10` | Max tool-call iterations for agentic mode |
 | `timeout_secs` | `120` | Timeout in seconds for non-agentic provider calls (1–3600) |
 | `agentic_timeout_secs` | `300` | Timeout in seconds for agentic sub-agent loops (1–3600) |
-| `skills_directory` | unset | Optional skills directory path (workspace-relative) for scoped skill loading |
 
 Notes:
 
+- **Registry profiles** (`registry.toml`, `miroclaw agents create`) are the preferred way to define separate agents with isolated workspaces. In-profile `[agents.<name>]` is for delegate/swarm sub-agents within one profile.
+- Cross-profile `delegate` calls resolve agent names from the registry when not found in the local `[agents]` map.
 - `agentic = false` preserves existing single prompt→response delegate behavior.
 - `agentic = true` requires at least one matching entry in `allowed_tools`.
 - The `delegate` tool is excluded from sub-agent allowlists to prevent re-entrant delegation loops.
-- Sub-agents receive an enriched system prompt containing: tools section (allowed tools with parameters), skills section (from scoped or default directory), workspace path, current date/time, safety constraints, and shell policy when `shell` is in the effective tool list.
-- When `skills_directory` is unset or empty, the sub-agent loads skills from the default workspace `skills/` directory. When set, skills are loaded exclusively from that directory (relative to workspace root), enabling per-agent scoped skill sets.
+- Sub-agents receive an enriched system prompt containing: tools section (allowed tools with parameters), skills section (from profile workspace `skills/`), workspace path, current date/time, safety constraints, and shell policy when `shell` is in the effective tool list.
 
 ```toml
 [agents.researcher]
@@ -303,7 +307,6 @@ model = "claude-opus-4-5"
 system_prompt = "You are an expert code reviewer focused on security and performance."
 agentic = true
 allowed_tools = ["file_read", "shell"]
-skills_directory = "skills/code-review"
 ```
 
 ## `[runtime]`
@@ -523,6 +526,59 @@ When deploying behind a reverse proxy that maps Miroclaw to a sub-path,
 set `path_prefix` to that sub-path (e.g. `"/miroclaw"`). All gateway
 routes will be served under this prefix. The value must start with `/`
 and must not end with `/`.
+
+In **hub mode** (`[hub].enabled = true`), public `[gateway]` settings apply to the **hub** process only. Agent workers bind `127.0.0.1` at `internal_port` from `registry.toml`.
+
+### Hub WebSocket (public)
+
+When the hub is enabled, clients connect to `/ws/chat` on the public gateway and **must** send `agent_id` in the connect frame. Protocol summary:
+
+| Message | Purpose |
+|---|---|
+| `{"type":"connect","agent_id":"main",…}` | Select worker; optional `session_key` for attach |
+| `{"type":"switch_agent","agent_id":"…"}` | Change active worker (one at a time) |
+| `{"type":"list_agents"}` | Registry snapshot |
+| `{"type":"list_sessions","agent_id":"main"}` | Proxied to worker `GET /internal/sessions` |
+
+Full protocol: [agent-profile-hub.md](../../architecture/agent-profile-hub.md#hub-websocket-protocol).
+
+## `[hub]`
+
+Supervisor / multi-agent profile layout. When `enabled = true`, `miroclaw daemon` runs the hub gateway plus one **agent worker** per enabled registry entry instead of a single combined runtime.
+
+| Key | Default | Purpose |
+|---|---|---|
+| `enabled` | `false` | Start hub supervisor + per-profile workers |
+| `registry_path` | `registry.toml` | Agent index file (relative to home config dir) |
+| `profiles_dir` | `profiles` | Subdirectory name for profile roots |
+| `default_agent` | `main` | Default agent name when none specified |
+
+Hub root `~/.miroclaw/config.toml` should contain `[hub]` and public `[gateway]` only — not `[channels.*]` or hub-level delegate agent maps. Agent runtime config lives under `profiles/<name>/config.toml`.
+
+Example:
+
+```toml
+[hub]
+enabled = true
+
+[gateway]
+host = "127.0.0.1"
+port = 8080
+require_pairing = true
+```
+
+## `registry.toml`
+
+Persisted at `~/.miroclaw/registry.toml` (path overridable via `[hub].registry_path`). Managed by `miroclaw agents` CLI and Clawgotcha profile sync.
+
+| Field | Purpose |
+|---|---|
+| `version` | Schema version (currently `1`) |
+| `profiles_dir` | Default profiles subdirectory |
+| `default_agent` | Default registry name |
+| `[[agents]]` | One row per profile: `name`, `config_dir`, `enabled`, `internal_port` |
+
+See [agent-profile-hub.md](../../architecture/agent-profile-hub.md#registry-registrytoml).
 
 ## `[autonomy]`
 
@@ -990,6 +1046,8 @@ miroclaw service restart
 
 ## Related Docs
 
+- [agent-profile-hub.md](../../architecture/agent-profile-hub.md)
+- [multi-agent-profiles.md](../../setup-guides/multi-agent-profiles.md)
 - [channels-reference.md](channels-reference.md)
 - [providers-reference.md](providers-reference.md)
 - [operations-runbook.md](../../ops/operations-runbook.md)

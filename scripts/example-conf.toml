@@ -1,7 +1,7 @@
-# ZeroClaw — full configuration reference (`Config` in `src/config/schema.rs`)
+# Miroclaw — full configuration reference (`Config` in `src/config/schema.rs`)
 #
-# Copy to ~/.zeroclaw/config.toml (e.g. Raspberry Pi production). deploy-rpi.sh can do this.
-# API keys: prefer ~/.zeroclaw/.env (e.g. ANTHROPIC_API_KEY) or provider-specific env vars.
+# Copy to ~/.miroclaw/config.toml (e.g. Raspberry Pi production). deploy-rpi.sh can do this.
+# API keys: prefer ~/.miroclaw/.env (e.g. ANTHROPIC_API_KEY) or provider-specific env vars.
 # This file lists every top-level section the binary deserializes; omit any section to use defaults.
 
 # ── Provider (top-level) ─────────────────────────────────────────
@@ -49,7 +49,7 @@ locale = "en"
 [observability]
 backend = "none"
 otel_endpoint = "http://localhost:4318"
-otel_service_name = "zeroclaw"
+otel_service_name = "miroclaw"
 runtime_trace_mode = "none"
 runtime_trace_path = "state/runtime-trace.jsonl"
 runtime_trace_max_entries = 200
@@ -115,7 +115,7 @@ challenge_max_attempts = 3
 
 [security.estop]
 enabled = false
-state_file = "~/.zeroclaw/estop-state.json"
+state_file = "~/.miroclaw/estop-state.json"
 require_otp_to_resume = true
 
 [security.nevis]
@@ -169,11 +169,11 @@ knowledge_base_tool = ""
 
 [security_ops]
 enabled = false
-playbooks_dir = "~/.zeroclaw/playbooks"
+playbooks_dir = "~/.miroclaw/playbooks"
 auto_triage = false
 require_approval_for_actions = true
 max_auto_severity = "low"
-report_output_dir = "~/.zeroclaw/security-reports"
+report_output_dir = "~/.miroclaw/security-reports"
 siem_integration = ""
 
 # ── Runtime & reliability ───────────────────────────────────────
@@ -366,7 +366,7 @@ audit_enabled = false
 audit_retention_days = 30
 sqlite_open_timeout_secs = 300
 
-# Optional layered memory: curated topics + per-session summaries under ~/.zeroclaw/
+# Optional layered memory: curated topics + per-session summaries under ~/.miroclaw/
 # (see docs/reference/api/config-reference.md — "[memory.layered]")
 [memory.layered]
 enabled = false
@@ -528,7 +528,7 @@ timeout_secs = 15
 [project_intel]
 enabled = false
 default_language = "en"
-report_output_dir = "~/.zeroclaw/project-reports"
+report_output_dir = "~/.miroclaw/project-reports"
 templates_dir = ""
 risk_sensitivity = "medium"
 include_git_data = true
@@ -715,14 +715,11 @@ enabled = false
 max_nodes = 16
 auth_token = ""
 
-[workspace]
+[hub]
 enabled = false
-active_workspace = ""
-workspaces_dir = "~/.zeroclaw/workspaces"
-isolate_memory = true
-isolate_secrets = true
-isolate_audit = true
-cross_workspace_search = false
+# registry_path = "registry.toml"
+# profiles_dir = "profiles"
+# default_agent = "main"
 
 [notion]
 enabled = false
@@ -756,7 +753,7 @@ connection_pool_size = 4
 
 [knowledge]
 enabled = false
-db_path = "~/.zeroclaw/knowledge.db"
+db_path = "~/.miroclaw/knowledge.db"
 max_nodes = 100000
 auto_capture = false
 suggest_on_query = true
@@ -800,7 +797,7 @@ api_key_env = "FAL_API_KEY"
 
 [plugins]
 enabled = false
-plugins_dir = "~/.zeroclaw/plugins"
+plugins_dir = "~/.miroclaw/plugins"
 auto_discover = false
 max_plugins = 50
 

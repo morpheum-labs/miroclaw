@@ -28,7 +28,7 @@ Order matches `miroclaw --help`.
 | `channel` | Manage channels and channel health checks |
 | `integrations` | Browse 50+ integrations |
 | `skills` | List/install/remove skills |
-| `migrate` | Import from external runtimes (currently OpenClaw) |
+| `migrate` | Import from external runtimes (OpenClaw) or migrate layout (`profiles`) |
 | `auth` | Manage provider subscription authentication profiles (OAuth, tokens, profiles) |
 | `hardware` | Discover and introspect USB hardware |
 | `peripheral` | Configure and flash peripherals |
@@ -40,6 +40,7 @@ Order matches `miroclaw --help`.
 | `self-test` | Run installation self-tests (optional `--quick` to skip network) |
 | `completions` | Generate shell completion scripts to stdout |
 | `hands` | List or run autonomous hand packages under `~/.miroclaw/hands/` |
+| `agents` | Manage agent profiles (registry): list, create, use, show, worker |
 | `desktop` | Launch or install the companion desktop app |
 
 Builds compiled with the **`plugins-wasm`** Cargo feature also expose `plugin` (WASM plugin lifecycle); it is omitted from stock release help.
@@ -87,7 +88,22 @@ Gateway:
 
 Daemon:
 
-- `miroclaw daemon [--host <HOST>] [--port <PORT>]` — full long-running runtime (uses gateway host/port overrides when passed).
+- `miroclaw daemon [--host <HOST>] [--port <PORT>]` — long-running runtime. When `[hub].enabled = true`, starts **hub supervisor** (public gateway + all enabled agent workers). Otherwise runs legacy single-process gateway + channels.
+
+### `agents`
+
+Agent profile registry (`registry.toml`). See [multi-agent-profiles.md](../../setup-guides/multi-agent-profiles.md).
+
+- `miroclaw agents list` — list registered profiles ( `*` marks active)
+- `miroclaw agents create <name> [--from <existing>]` — scaffold profile + registry entry
+- `miroclaw agents use <name>` — set `active_agent.toml` for CLI default config dir
+- `miroclaw agents show <name>` — profile paths and internal port
+- `miroclaw agents worker --profile <name> [--port <PORT>]` — run one worker (debug)
+
+### `migrate`
+
+- `miroclaw migrate openclaw [--dry-run]` — import OpenClaw layout into current profile
+- `miroclaw migrate profiles [--dry-run]` — move flat `~/.miroclaw/` layout to `profiles/main/` + write registry
 
 ### `mcp`
 

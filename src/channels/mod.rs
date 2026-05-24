@@ -44,6 +44,7 @@ pub mod runtime_slash;
 pub mod session_backend;
 pub mod session_sqlite;
 pub mod session_store;
+pub mod session_runner;
 pub mod signal;
 pub mod slack;
 pub mod telegram;
@@ -132,12 +133,23 @@ struct ChannelNotifyObserver {
     inner: Arc<dyn Observer>,
     tx: tokio::sync::mpsc::UnboundedSender<String>,
     tools_used: AtomicBool,
+    session_key: Option<String>,
 }
 
 impl Observer for ChannelNotifyObserver {
     fn record_event(&self, event: &ObserverEvent) {
         if let ObserverEvent::ToolCallStart { tool, arguments } = event {
             self.tools_used.store(true, Ordering::Relaxed);
+            if let Some(ref key) = self.session_key {
+                crate::channels::session_runner::emit_channel_session_event(
+                    key,
+                    serde_json::json!({
+                        "type": "tool_call",
+                        "name": tool,
+                        "args": arguments,
+                    }),
+                );
+            }
             let detail = match arguments {
                 Some(args) if !args.is_empty() => {
                     if let Ok(v) = serde_json::from_str::<serde_json::Value>(args) {
@@ -161,6 +173,18 @@ impl Observer for ChannelNotifyObserver {
                 _ => String::new(),
             };
             let _ = self.tx.send(format!("\u{1F527} `{tool}`{detail}"));
+        }
+        if let ObserverEvent::ToolCall { tool, success, .. } = event {
+            if let Some(ref key) = self.session_key {
+                crate::channels::session_runner::emit_channel_session_event(
+                    key,
+                    serde_json::json!({
+                        "type": "tool_result",
+                        "name": tool,
+                        "success": success,
+                    }),
+                );
+            }
         }
         self.inner.record_event(event);
     }
@@ -2265,6 +2289,24 @@ async fn process_channel_message(
     }
 
     let history_key = conversation_history_key(&msg);
+    session_runner::register_channel_session(&history_key);
+    session_runner::emit_channel_session_event(
+        &history_key,
+        serde_json::json!({
+            "type": "session_start",
+            "session_key": history_key,
+            "channel": msg.channel,
+            "sender": msg.sender,
+            "kind": "channel",
+        }),
+    );
+    struct ChannelSessionGuard(String);
+    impl Drop for ChannelSessionGuard {
+        fn drop(&mut self) {
+            session_runner::unregister_channel_session(&self.0);
+        }
+    }
+    let _channel_session_guard = ChannelSessionGuard(history_key.clone());
     let mut route = get_route_selection(ctx.as_ref(), &history_key);
 
     // ── Query classification: override route when a rule matches ──
@@ -2581,6 +2623,7 @@ async fn process_channel_message(
         inner: Arc::clone(&ctx.observer),
         tx: notify_tx,
         tools_used: AtomicBool::new(false),
+        session_key: Some(history_key.clone()),
     });
     let notify_observer_flag = Arc::clone(&notify_observer);
     let notify_channel = target_channel.clone();
@@ -2825,6 +2868,14 @@ async fn process_channel_message(
 
     match llm_result {
         LlmExecutionResult::Cancelled => {
+            session_runner::emit_channel_session_event(
+                &history_key,
+                serde_json::json!({
+                    "type": "error",
+                    "code": "CANCELLED",
+                    "message": "Channel turn cancelled",
+                }),
+            );
             tracing::info!(
                 channel = %msg.channel,
                 sender = %msg.sender,
@@ -2852,6 +2903,13 @@ async fn process_channel_message(
             }
         }
         LlmExecutionResult::Completed(Ok(Ok(response))) => {
+            session_runner::emit_channel_session_event(
+                &history_key,
+                serde_json::json!({
+                    "type": "done",
+                    "full_response": response,
+                }),
+            );
             // ── Hook: on_message_sending (modifying) ─────────
             let mut outbound_response = response;
             if let Some(hooks) = &ctx.hooks {
@@ -2985,6 +3043,13 @@ async fn process_channel_message(
             }
         }
         LlmExecutionResult::Completed(Ok(Err(e))) => {
+            session_runner::emit_channel_session_event(
+                &history_key,
+                serde_json::json!({
+                    "type": "error",
+                    "message": providers::sanitize_api_error(&e.to_string()),
+                }),
+            );
             if crate::agent::loop_::is_tool_loop_cancelled(&e) || cancellation_token.is_cancelled()
             {
                 tracing::info!(
@@ -8079,6 +8144,7 @@ BTC is currently around $65,000 based on latest tool output."#
             inner: Arc::new(NoopObserver),
             tx,
             tools_used: AtomicBool::new(false),
+            session_key: None,
         };
 
         let payload = (0..300)

@@ -39,6 +39,7 @@ use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
 pub mod agent;
+pub mod agent_worker;
 pub(crate) mod approval;
 pub(crate) mod auth;
 pub mod channels;
@@ -299,6 +300,12 @@ pub enum MigrateCommands {
         #[arg(long, required = true)]
         source: std::path::PathBuf,
 
+        /// Validate and preview migration without writing any data
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Migrate legacy flat layout to profile-per-agent structure
+    Profiles {
         /// Validate and preview migration without writing any data
         #[arg(long)]
         dry_run: bool,
@@ -635,3 +642,6 @@ pub enum SopCommands {
         name: String,
     },
 }
+
+/// Agent profile management (`miroclaw agents …`).
+pub use commands::agent_profile::AgentProfileCommands;

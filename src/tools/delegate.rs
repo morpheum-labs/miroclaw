@@ -160,6 +160,8 @@ pub struct DelegateTool {
     embedding_api_key: Option<String>,
     /// From root config `[[embedding_routes]]`.
     embedding_routes: Vec<EmbeddingRouteConfig>,
+    /// Home config directory for registry-based profile delegation.
+    profile_home_dir: Option<PathBuf>,
 }
 
 impl DelegateTool {
@@ -212,6 +214,7 @@ impl DelegateTool {
             root_memory: None,
             embedding_api_key: None,
             embedding_routes: Vec::new(),
+            profile_home_dir: None,
         }
     }
 
@@ -256,6 +259,7 @@ impl DelegateTool {
             root_memory: None,
             embedding_api_key: None,
             embedding_routes: Vec::new(),
+            profile_home_dir: None,
         }
     }
 
@@ -313,6 +317,12 @@ impl DelegateTool {
         self
     }
 
+    /// Home config directory used to resolve registry profile names.
+    pub fn with_profile_home_dir(mut self, profile_home_dir: PathBuf) -> Self {
+        self.profile_home_dir = Some(profile_home_dir);
+        self
+    }
+
     /// Attach a cancellation token for cascade control of background tasks.
     /// When the token is cancelled, all background sub-agents are aborted.
     pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
@@ -337,6 +347,51 @@ impl DelegateTool {
             return Err(format!("Invalid task_id '{task_id}': must be a valid UUID"));
         }
         Ok(())
+    }
+
+    async fn resolve_agent(
+        &self,
+        agent_name: &str,
+    ) -> Result<(DelegateAgentConfig, PathBuf), ToolResult> {
+        if let Some(cfg) = {
+            let g = self.agents.read();
+            g.get(agent_name).cloned()
+        } {
+            return Ok((cfg, self.workspace_dir.clone()));
+        }
+        if let Some(home) = &self.profile_home_dir {
+            if let Ok(found) =
+                crate::config::registry::AgentRegistry::load_profile_delegate(home, agent_name)
+                    .await
+            {
+                return Ok(found);
+            }
+        }
+        let mut names = {
+            let g = self.agents.read();
+            g.keys().cloned().collect::<Vec<String>>()
+        };
+        if let Some(home) = &self.profile_home_dir {
+            if let Ok(reg) = crate::config::registry::AgentRegistry::load_from(home).await {
+                for entry in &reg.agents {
+                    if !names.contains(&entry.name) {
+                        names.push(entry.name.clone());
+                    }
+                }
+            }
+        }
+        let available_list = if names.is_empty() {
+            "(none configured)".to_string()
+        } else {
+            names.join(", ")
+        };
+        Err(ToolResult {
+            success: false,
+            output: String::new(),
+            error: Some(format!(
+                "Unknown agent '{agent_name}'. Available agents: {available_list}"
+            )),
+        })
     }
 }
 
@@ -534,28 +589,10 @@ impl DelegateTool {
             .map(str::trim)
             .unwrap_or("");
 
-        // Look up agent config
-        let agent_config = match self.agents.read().get(agent_name).cloned() {
-            Some(cfg) => cfg,
-            None => {
-                let available_list = {
-                    let g = self.agents.read();
-                    let names: Vec<String> = g.keys().cloned().collect();
-                    if names.is_empty() {
-                        "(none configured)".to_string()
-                    } else {
-                        names.join(", ")
-                    }
-                };
-                return Ok(ToolResult {
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!(
-                        "Unknown agent '{agent_name}'. Available agents: {}",
-                        available_list
-                    )),
-                });
-            }
+        // Look up agent config (in-process map or registry profile)
+        let (agent_config, workspace_dir) = match self.resolve_agent(agent_name).await {
+            Ok(v) => v,
+            Err(tool_result) => return Ok(tool_result),
         };
 
         // Check recursion depth (immutable — set at construction, incremented for sub-agents)
@@ -609,6 +646,7 @@ impl DelegateTool {
         if agent_config.agentic {
             return self
                 .execute_agentic(
+                    &workspace_dir,
                     agent_name,
                     &agent_config,
                     &*provider,
@@ -626,7 +664,7 @@ impl DelegateTool {
             if mem.layered.enabled {
                 let sel = crate::memory::layered_selector::select_relevant(
                     &full_prompt,
-                    &self.workspace_dir,
+                    &workspace_dir,
                     &session_key,
                     &mem.layered,
                     mem,
@@ -644,7 +682,7 @@ impl DelegateTool {
         let enriched_system_prompt = self.build_enriched_system_prompt(
             &agent_config,
             &[],
-            &self.workspace_dir,
+            &workspace_dir,
             layered_block.as_deref(),
             model_name.as_str(),
         );
@@ -716,27 +754,9 @@ impl DelegateTool {
         args: &serde_json::Value,
     ) -> anyhow::Result<ToolResult> {
         // Validate agent exists and check depth/security before spawning
-        let agent_config = match self.agents.read().get(agent_name).cloned() {
-            Some(cfg) => cfg,
-            None => {
-                let available_list = {
-                    let g = self.agents.read();
-                    let names: Vec<String> = g.keys().cloned().collect();
-                    if names.is_empty() {
-                        "(none configured)".to_string()
-                    } else {
-                        names.join(", ")
-                    }
-                };
-                return Ok(ToolResult {
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!(
-                        "Unknown agent '{agent_name}'. Available agents: {}",
-                        available_list
-                    )),
-                });
-            }
+        let (agent_config, workspace_dir) = match self.resolve_agent(agent_name).await {
+            Ok(v) => v,
+            Err(tool_result) => return Ok(tool_result),
         };
 
         if self.depth >= agent_config.max_depth {
@@ -803,7 +823,8 @@ impl DelegateTool {
         let parent_tools = Arc::clone(&self.parent_tools);
         let multimodal_config = self.multimodal_config.clone();
         let delegate_config = self.delegate_config.clone();
-        let workspace_dir = self.workspace_dir.clone();
+        let workspace_dir = workspace_dir;
+        let profile_home_dir = self.profile_home_dir.clone();
         let child_token = self.cancellation_token.child_token();
         let task_id_clone = task_id.clone();
         let post_turn_memory = self.post_turn_memory.clone();
@@ -830,6 +851,7 @@ impl DelegateTool {
                 root_memory,
                 embedding_api_key,
                 embedding_routes,
+                profile_home_dir,
             };
 
             let args_inner = json!({
@@ -979,6 +1001,7 @@ impl DelegateTool {
             let embedding_api_key = self.embedding_api_key.clone();
             let embedding_routes = self.embedding_routes.clone();
             let routing_defaults = self.routing_defaults.clone();
+            let profile_home_dir = self.profile_home_dir.clone();
             let agent_name = agent_name.clone();
             let prompt = prompt.to_string();
             let args_clone = args.clone();
@@ -1000,6 +1023,7 @@ impl DelegateTool {
                     root_memory,
                     embedding_api_key,
                     embedding_routes,
+                    profile_home_dir,
                 };
                 let result = Box::pin(inner.execute_sync(&agent_name, &prompt, &args_clone)).await;
                 (agent_name, result)
@@ -1286,6 +1310,7 @@ impl DelegateTool {
 
     async fn execute_agentic(
         &self,
+        workspace_dir: &Path,
         agent_name: &str,
         agent_config: &DelegateAgentConfig,
         provider: &dyn Provider,
@@ -1339,7 +1364,7 @@ impl DelegateTool {
             if mem.layered.enabled {
                 let sel = crate::memory::layered_selector::select_relevant(
                     full_prompt,
-                    &self.workspace_dir,
+                    workspace_dir,
                     &session_key,
                     &mem.layered,
                     mem,
@@ -1357,7 +1382,7 @@ impl DelegateTool {
             if mem.layered.enabled && mem.auto_save {
                 crate::memory::layered_context::install_pending_layered_turn(Some(
                     crate::memory::layered_context::LayeredTurnContext {
-                        workspace_dir: self.workspace_dir.clone(),
+                        workspace_dir: workspace_dir.to_path_buf(),
                         session_key,
                         layered: mem.layered.clone(),
                     },
@@ -1374,7 +1399,7 @@ impl DelegateTool {
         let enriched_system_prompt = self.build_enriched_system_prompt(
             agent_config,
             &sub_tools,
-            &self.workspace_dir,
+            workspace_dir,
             layered_block.as_deref(),
             model_name,
         );
@@ -2115,6 +2140,7 @@ mod tests {
         let provider = OneToolThenFinalProvider;
         let result = tool
             .execute_agentic(
+                std::path::Path::new("/tmp"),
                 "agentic",
                 &config,
                 &provider,
@@ -2145,6 +2171,7 @@ mod tests {
         let provider = OneToolThenFinalProvider;
         let result = tool
             .execute_agentic(
+                std::path::Path::new("/tmp"),
                 "agentic",
                 &config,
                 &provider,
@@ -2173,6 +2200,7 @@ mod tests {
         let provider = InfiniteToolCallProvider;
         let result = tool
             .execute_agentic(
+                std::path::Path::new("/tmp"),
                 "agentic",
                 &config,
                 &provider,
@@ -2201,6 +2229,7 @@ mod tests {
         let provider = FailingProvider;
         let result = tool
             .execute_agentic(
+                std::path::Path::new("/tmp"),
                 "agentic",
                 &config,
                 &provider,
@@ -2305,6 +2334,7 @@ mod tests {
         let provider = McpToolThenFinalProvider;
         let result = tool
             .execute_agentic(
+                std::path::Path::new("/tmp"),
                 "agentic",
                 &config,
                 &provider,

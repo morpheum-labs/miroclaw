@@ -2,6 +2,8 @@
 
 ZeroClaw is a Rust-first autonomous agent runtime. It receives messages from messaging platforms, routes them through an LLM, executes tool calls, persists memory, and returns responses. It can also control hardware peripherals and run as a long-lived daemon.
 
+**Multi-agent (Miroclaw):** When `[hub].enabled`, the daemon runs a public **hub gateway** plus **agent workers** (one profile each: `profiles/<name>/config.toml` + `workspace/`). See [agent-profile-hub.md](../architecture/agent-profile-hub.md).
+
 ## Runtime Flow
 
 ```

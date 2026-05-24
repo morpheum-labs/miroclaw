@@ -20,9 +20,13 @@ For first-time installation, start from [one-click-bootstrap.md](../setup-guides
 | Mode | Command | When to use |
 |---|---|---|
 | Foreground runtime | `miroclaw daemon` | local debugging, short-lived sessions |
+| Hub supervisor | `miroclaw daemon` with `[hub].enabled = true` | multiple agent profiles; public WS hub + localhost workers |
 | Foreground gateway only | `miroclaw gateway` or `miroclaw gateway start` | webhook endpoint testing (same bind; use `start` when passing `--host` / `--port`) |
+| Single worker (debug) | `miroclaw agents worker --profile <name>` | one profile without full hub |
 | User service | `miroclaw service install && miroclaw service start` | persistent operator-managed runtime |
 | Docker / Podman | manual container or install script (see below) | containerized deployment |
+
+Hub architecture: [agent-profile-hub.md](../architecture/agent-profile-hub.md).
 
 ## Docker / Podman Runtime
 

@@ -35,9 +35,11 @@ This guide is the operator checklist for a **host that runs MiroClaw** (laptop, 
 
 Resolution order at startup:
 
-1. `MIROCLAW_WORKSPACE` (if set) — points at the workspace root.
-2. Else `~/.miroclaw/active_workspace.toml` marker (if present).
-3. Else default `~/.miroclaw/config.toml`.
+1. `MIROCLAW_CONFIG_DIR` or `MIROCLAW_WORKSPACE` (if set)
+2. Else `~/.miroclaw/active_agent.toml` (or legacy `active_workspace.toml`)
+3. Else `~/.miroclaw/profiles/main/` when present, else default `~/.miroclaw/config.toml`
+
+Multi-agent layout: [multi-agent-profiles.md](multi-agent-profiles.md).
 
 MiroClaw logs the resolved path at **INFO** on startup. If something “can’t find config,” confirm `MIROCLAW_WORKSPACE` and the file on disk.
 
@@ -49,6 +51,7 @@ MiroClaw logs the resolved path at **INFO** on startup. If something “can’t 
 | Editorial swarm (AgentFloor) | `miroclaw agent --mode=editorial-swarm --headline-ref=... --n-agents=...` (see [editorial-swarm-guide.md](../editorial-swarm-guide.md)) |
 | HTTP/WebSocket API only | `miroclaw gateway start` (or `miroclaw gateway` subcommands for status/restart) |
 | Always-on (gateway + channels + scheduler) | `miroclaw daemon` — for boot persistence, use `miroclaw service install` where supported |
+| Multi-agent hub supervisor | Enable `[hub].enabled`, then `miroclaw daemon` — see [multi-agent-profiles.md](multi-agent-profiles.md) |
 
 Gateway bind address, port, pairing, and path prefix: **`[gateway]`** in [config-reference.md](../reference/api/config-reference.md). Default listen port is **42617**; override with `miroclaw daemon -p …` or config.
 

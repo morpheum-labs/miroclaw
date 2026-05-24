@@ -140,7 +140,8 @@ Extending the codebase: [`change-playbooks.md`](../contributing/change-playbooks
 | `weather` | Core registry. |
 | `web_fetch` | `[web_fetch].enabled`. |
 | `web_search_tool` | `[web_search].enabled`. |
-| `workspace` | `[workspace].enabled` (workspace isolation / multi-workspace management). |
+
+_Removed:_ `workspace` tool — use `miroclaw agents` and registry profiles instead ([agent-profile-hub.md](../architecture/agent-profile-hub.md)).
 
 ### MCP client tools (dynamic names)
 

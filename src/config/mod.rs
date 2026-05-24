@@ -1,6 +1,13 @@
+pub mod active_agent;
+pub mod registry;
 pub mod schema;
 pub mod traits;
-pub mod workspace;
+
+pub use active_agent::{ActiveAgentState, ACTIVE_AGENT_STATE_FILE};
+pub use registry::{
+    AgentRegistry, AgentRegistryEntry, DEFAULT_AGENT_NAME, DEFAULT_INTERNAL_PORT_BASE,
+    DEFAULT_PROFILES_DIR, REGISTRY_FILENAME,
+};
 
 #[allow(unused_imports)]
 pub use schema::{
@@ -14,10 +21,10 @@ pub use schema::{
     CronConfig, CronJobDecl, CronScheduleDecl, DataRetentionConfig, DeepgramSttConfig,
     DelegateAgentConfig, DelegateToolConfig, DiscordConfig, DockerRuntimeConfig,
     DynamicContextConfig, EdgeTtsConfig, ElevenLabsTtsConfig, EmbeddingRouteConfig, EstopConfig,
-    FeishuConfig, GatewayConfig, GeminiCliConfig, GoogleSttConfig, GoogleTtsConfig,
+    FeishuConfig,     GatewayConfig, GeminiCliConfig, GoogleSttConfig, GoogleTtsConfig,
     GoogleWorkspaceAllowedOperation, GoogleWorkspaceConfig, GrokBrowserConfig,
     GrokBrowserSessionMode, HardwareConfig, HardwareTransport, HeartbeatConfig, HooksConfig,
-    HttpRequestConfig, IMessageConfig, IdentityConfig, ImageGenConfig, ImageProviderDalleConfig,
+    HubConfig, HttpRequestConfig, IMessageConfig, IdentityConfig, ImageGenConfig, ImageProviderDalleConfig,
     ImageProviderFluxConfig, ImageProviderImagenConfig, ImageProviderStabilityConfig, JiraConfig,
     KnowledgeConfig, LarkConfig, LayeredMemoryConfig, LinkEnricherConfig, LinkedInConfig,
     LinkedInContentConfig, LinkedInImageConfig, LocalWhisperConfig, MatrixConfig, McpConfig,
@@ -37,7 +44,7 @@ pub use schema::{
     TextBrowserConfig, ToolFilterGroup, ToolFilterGroupMode, ToolResultOffloadConfig,
     TranscriptionConfig, TtsConfig, TunnelConfig, VerifiableIntentConfig, WebFetchConfig,
     WebSearchConfig, WebUiConfig, WebhookConfig, WhatsAppChatPolicy, WhatsAppWebMode,
-    WorkspaceConfig, DEFAULT_GWS_SERVICES,
+    DEFAULT_GWS_SERVICES,
 };
 
 pub fn name_and_presence<T: traits::ChannelConfig>(channel: Option<&T>) -> (&'static str, bool) {

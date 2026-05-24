@@ -1,22 +1,24 @@
-# Tham khảo cấu hình ZeroClaw
+# Tham khảo cấu hình Miroclaw
 
 Các mục cấu hình thường dùng và giá trị mặc định.
 
-Xác minh lần cuối: **2026-04-02**.
+Xác minh lần cuối: **2026-04-16**.
 
 Thứ tự tìm config khi khởi động:
 
-1. Biến `MIROCLAW_WORKSPACE` (nếu được đặt)
-2. Marker `~/.zeroclaw/active_workspace.toml` (nếu có)
-3. Mặc định `~/.zeroclaw/config.toml`
+1. Ghi đè `MIROCLAW_CONFIG_DIR` hoặc `MIROCLAW_WORKSPACE` (nếu được đặt)
+2. `~/.miroclaw/active_agent.toml` đã lưu (hoặc marker cũ `active_workspace.toml`)
+3. Profile mặc định `~/.miroclaw/profiles/main/` nếu có, nếu không thì `~/.miroclaw/` + `workspace/`
 
-ZeroClaw ghi log đường dẫn config đã giải quyết khi khởi động ở mức `INFO`:
+Bố cục multi-agent: [agent-profile-hub.md](../architecture/agent-profile-hub.md).
+
+Miroclaw ghi log đường dẫn config đã giải quyết khi khởi động ở mức `INFO`:
 
 - `Config loaded` với các trường: `path`, `workspace`, `source`, `initialized`
 
 Lệnh xuất schema:
 
-- `zeroclaw config schema` (xuất JSON Schema draft 2020-12 ra stdout)
+- `miroclaw config schema` (xuất JSON Schema draft 2020-12 ra stdout)
 
 ## Khóa chính
 
@@ -32,7 +34,7 @@ Lệnh xuất schema:
 |---|---|---|
 | `backend` | `none` | Backend quan sát: `none`, `noop`, `log`, `prometheus`, `otel`, `opentelemetry` hoặc `otlp` |
 | `otel_endpoint` | `http://localhost:4318` | Endpoint OTLP HTTP khi backend là `otel` |
-| `otel_service_name` | `zeroclaw` | Tên dịch vụ gửi đến OTLP collector |
+| `otel_service_name` | `miroclaw` | Tên dịch vụ gửi đến OTLP collector |
 
 Lưu ý:
 
@@ -45,7 +47,7 @@ Ví dụ:
 [observability]
 backend = "otel"
 otel_endpoint = "http://localhost:4318"
-otel_service_name = "zeroclaw"
+otel_service_name = "miroclaw"
 ```
 
 ## Ghi đè provider qua biến môi trường
@@ -83,7 +85,7 @@ Lưu ý:
 
 ### `[agent.tool_router]`
 
-**Bộ định tuyến tool động** (tùy chọn): trước khi tin nhắn người dùng gửi tới model chính, ZeroClaw có thể gọi endpoint chat tương thích OpenAI trả về mảng JSON các tên tool cần **giữ** trong schema tool cho lượt đó. Mọi tool đã đăng ký khác (vẫn nằm trong tập ứng viên sau `[agent.tool_filter_groups]` và quy tắc autonomy trên channel) sẽ **ẩn** khỏi model chính trong lượt đó, giảm kích thước prompt và payload tool gốc.
+**Bộ định tuyến tool động** (tùy chọn): trước khi tin nhắn người dùng gửi tới model chính, Miroclaw có thể gọi endpoint chat tương thích OpenAI trả về mảng JSON các tên tool cần **giữ** trong schema tool cho lượt đó. Mọi tool đã đăng ký khác (vẫn nằm trong tập ứng viên sau `[agent.tool_filter_groups]` và quy tắc autonomy trên channel) sẽ **ẩn** khỏi model chính trong lượt đó, giảm kích thước prompt và payload tool gốc.
 
 Bổ sung cho `tool_filter_groups` và tải MCP trì hoãn: khi `mcp.deferred_loading` bật, nếu có `tool_search` trong ứng viên thì router luôn giữ lại để model vẫn có thể kích hoạt tool MCP trì hoãn.
 
@@ -179,7 +181,7 @@ Lưu ý:
 
 Lưu ý:
 
-- Mặc định an toàn: ZeroClaw **không** clone hay đồng bộ `open-skills` trừ khi `open_skills_enabled = true`.
+- Mặc định an toàn: Miroclaw **không** clone hay đồng bộ `open-skills` trừ khi `open_skills_enabled = true`.
 - Ghi đè qua biến môi trường:
   - `MIROCLAW_OPEN_SKILLS_ENABLED` chấp nhận `1/0`, `true/false`, `yes/no`, `on/off`.
   - `MIROCLAW_OPEN_SKILLS_DIR` ghi đè đường dẫn kho khi có giá trị.
@@ -197,7 +199,7 @@ Lưu ý:
 
 - Tương thích ngược: `enable = true` kiểu cũ được chấp nhận như bí danh cho `enabled = true`.
 - Nếu `enabled = false` hoặc thiếu `api_key`, tool `composio` không được đăng ký.
-- ZeroClaw yêu cầu Composio v3 tools với `toolkit_versions=latest` và thực thi với `version="latest"` để tránh bản tool mặc định cũ.
+- Miroclaw yêu cầu Composio v3 tools với `toolkit_versions=latest` và thực thi với `version="latest"` để tránh bản tool mặc định cũ.
 - Luồng thông thường: gọi `connect`, hoàn tất OAuth trên trình duyệt, rồi chạy `execute` cho hành động mong muốn.
 - Nếu Composio trả lỗi thiếu connected-account, gọi `list_accounts` (tùy chọn với `app`) và truyền `connected_account_id` trả về cho `execute`.
 
@@ -336,9 +338,71 @@ methods = ["list", "get", "create", "update"]
 | Khóa | Mặc định | Mục đích |
 |---|---|---|
 | `host` | `127.0.0.1` | Địa chỉ bind |
-| `port` | `3000` | Cổng lắng nghe gateway |
+| `port` | `42617` | Cổng lắng nghe gateway |
 | `require_pairing` | `true` | Yêu cầu ghép nối trước khi xác thực bearer |
 | `allow_public_bind` | `false` | Chặn lộ public do vô ý |
+| `path_prefix` | _(không)_ | Tiền tố URL cho triển khai reverse proxy (ví dụ `"/miroclaw"`) |
+| `session_persistence` | `true` | Lưu lịch sử `/ws/chat` qua backend phiên |
+| `session_ttl_hours` | `0` | Tự lưu trữ phiên gateway cũ (`0` = tắt) |
+| `web_chat_preserve_session_on_navigation` | `false` | Giữ cùng `session_id` chat gateway sau khi tải lại dashboard |
+| `ws_runner_idle_minutes` | `30` | Loại runner phiên `/ws/chat` nhàn rỗi; `0` = tắt |
+| `ws_runner_max_sessions` | `0` | Giới hạn runner phiên đồng thời (`0` = không giới hạn) |
+| `ws_event_replay_cap` | `0` (mặc định **128**) | Số sự kiện stream tối đa mỗi phiên cho replay khi reconnect |
+
+Khi triển khai sau reverse proxy ánh xạ Miroclaw vào sub-path, đặt `path_prefix` (ví dụ `"/miroclaw"`). Mọi route gateway nằm dưới tiền tố này; giá trị phải bắt đầu bằng `/` và không kết thúc bằng `/`.
+
+Ở **chế độ hub** (`[hub].enabled = true`), cài đặt `[gateway]` công khai chỉ áp dụng cho tiến trình **hub**. Agent worker bind `127.0.0.1` tại `internal_port` trong `registry.toml`.
+
+### Hub WebSocket (công khai)
+
+Khi hub bật, client kết nối `/ws/chat` trên gateway công khai và **phải** gửi `agent_id` trong frame connect. Tóm tắt giao thức:
+
+| Thông điệp | Mục đích |
+|---|---|
+| `{"type":"connect","agent_id":"main",…}` | Chọn worker; tùy chọn `session_key` để attach |
+| `{"type":"switch_agent","agent_id":"…"}` | Đổi worker đang hoạt động (một lúc một) |
+| `{"type":"list_agents"}` | Snapshot registry |
+| `{"type":"list_sessions","agent_id":"main"}` | Proxy tới worker `GET /internal/sessions` |
+
+Giao thức đầy đủ: [agent-profile-hub.md](../architecture/agent-profile-hub.md#hub-websocket-protocol).
+
+## `[hub]`
+
+Bố cục supervisor / profile multi-agent. Khi `enabled = true`, `miroclaw daemon` chạy gateway hub cộng một **agent worker** cho mỗi mục registry được bật, thay vì runtime gộp đơn.
+
+| Khóa | Mặc định | Mục đích |
+|---|---|---|
+| `enabled` | `false` | Khởi động supervisor hub và worker theo profile |
+| `registry_path` | `registry.toml` | File chỉ mục agent (tương đối thư mục config home) |
+| `profiles_dir` | `profiles` | Tên thư mục con cho profile root |
+| `default_agent` | `main` | Tên agent mặc định khi không chỉ định |
+
+File gốc hub `~/.miroclaw/config.toml` chỉ nên chứa `[hub]` và `[gateway]` công khai — không `[channels.*]` hay map agent delegate ở hub. Config runtime agent nằm dưới `profiles/<name>/config.toml`.
+
+Ví dụ:
+
+```toml
+[hub]
+enabled = true
+
+[gateway]
+host = "127.0.0.1"
+port = 8080
+require_pairing = true
+```
+
+## `registry.toml`
+
+Lưu tại `~/.miroclaw/registry.toml` (đường dẫn ghi đè qua `[hub].registry_path`). Quản lý bởi CLI `miroclaw agents` và đồng bộ profile Clawgotcha.
+
+| Trường | Mục đích |
+|---|---|
+| `version` | Phiên bản schema (hiện `1`) |
+| `profiles_dir` | Thư mục con profiles mặc định |
+| `default_agent` | Tên registry mặc định |
+| `[[agents]]` | Một dòng mỗi profile: `name`, `config_dir`, `enabled`, `internal_port` |
+
+Xem [agent-profile-hub.md](../architecture/agent-profile-hub.md#registry-registrytoml).
 
 ## `[autonomy]`
 
@@ -379,23 +443,23 @@ Lưu ý:
 
 ## `[memory.layered]`
 
-**Bộ nhớ phân lớp** tùy chọn (AutoMemory + SessionMemory): file chủ đề được chọn lọc và bản tóm tắt theo phiên dưới `~/.zeroclaw/` (theo workspace), được chèn vào **đuôi động của system prompt** thay vì dán nguyên `MEMORY.md` trong workspace. Khi bật, khối tiền tố `[Memory context]` từ `Memory::recall` trên tin nhắn user bị bỏ để tránh trùng lặp.
+**Bộ nhớ phân lớp** tùy chọn (AutoMemory + SessionMemory): file chủ đề được chọn lọc và bản tóm tắt theo phiên dưới `~/.miroclaw/` (theo workspace), được chèn vào **đuôi động của system prompt** thay vì dán nguyên `MEMORY.md` trong workspace. Khi bật, khối tiền tố `[Memory context]` từ `Memory::recall` trên tin nhắn user bị bỏ để tránh trùng lặp.
 
 | Khóa | Mặc định | Mục đích |
 |---|---|---|
 | `enabled` | `false` | Bật/tắt bộ nhớ phân lớp |
 | `staleness_warn_days` | `7` | Chủ đề cũ hơn số ngày này sẽ có cảnh báo “lỗi thời” trong prompt |
-| `index_max_entries` | `200` | Số dòng chỉ mục `- [...](...)` tối đa giữ trong `~/.zeroclaw/memory/<bucket>/MEMORY.md` |
+| `index_max_entries` | `200` | Số dòng chỉ mục `- [...](...)` tối đa giữ trong `~/.miroclaw/memory/<bucket>/MEMORY.md` |
 | `max_topics_in_prompt` | `5` | Số nội dung chủ đề tối đa gộp vào khối phân lớp mỗi lần gọi LLM |
 | `max_chars_total` | `8000` | Giới hạn cứng kích thước markdown (ký tự) |
 
 Lưu ý:
 
-- **AutoMemory** nằm tại `~/.zeroclaw/memory/<bucket-workspace>/` (`MEMORY.md` + `topics/*.md`), tách khỏi `MEMORY.md` trong workspace mà backend `markdown` dùng.
-- **SessionMemory** (theo lượt): `~/.zeroclaw/sessions/<session-stem>/session-memory/<uuid>.md` (cùng họ quy tắc stem với bản ghi JSONL phiên).
+- **AutoMemory** nằm tại `~/.miroclaw/memory/<bucket-workspace>/` (`MEMORY.md` + `topics/*.md`), tách khỏi `MEMORY.md` trong workspace mà backend `markdown` dùng.
+- **SessionMemory** (theo lượt): `~/.miroclaw/sessions/<session-stem>/session-memory/<uuid>.md` (cùng họ quy tắc stem với bản ghi JSONL phiên).
 - Ghi file (session + chủ đề tùy chọn từ consolidation) chạy sau lượt khi `memory.auto_save = true` và consolidation chạy; có thể bật layered mà không bật `auto_save`, khi đó chỉ có bộ chọn đọc file có sẵn.
 - Xếp hạng chủ đề: trùng khóa; nếu cấu hình embedding của `[memory]` khác `none`, dùng lại `vector_weight` / `keyword_weight`.
-- Chẩn đoán: `zeroclaw doctor query-engine` in thống kê bộ chọn phân lớp gần nhất trong tiến trình.
+- Chẩn đoán: `miroclaw doctor query-engine` in thống kê bộ chọn phân lớp gần nhất trong tiến trình.
 
 ```toml
 [memory]
@@ -448,7 +512,7 @@ Chiến lược nâng cấp:
 
 1. Giữ hint ổn định (`hint:reasoning`, `hint:semantic`).
 2. Chỉ cập nhật `model = "...phiên-bản-mới..."` trong mục route.
-3. Kiểm tra bằng `zeroclaw doctor` trước khi khởi động lại/triển khai.
+3. Kiểm tra bằng `miroclaw doctor` trước khi khởi động lại/triển khai.
 
 ## `[query_classification]`
 
@@ -512,7 +576,7 @@ Lưu ý:
 - Khi timeout xảy ra, người dùng nhận: `⚠️ Request timed out while waiting for the model. Please try again.`
 - Hành vi ngắt chỉ Telegram được điều khiển bằng `channels_config.telegram.interrupt_on_new_message` (mặc định `false`).
   Khi bật, tin nhắn mới từ cùng người gửi trong cùng chat sẽ hủy yêu cầu đang xử lý và giữ ngữ cảnh người dùng bị ngắt.
-- Khi `zeroclaw channel start` đang chạy, thay đổi `default_provider`, `default_model`, `default_temperature`, `api_key`, `api_url` và `reliability.*` được áp dụng nóng từ `config.toml` ở tin nhắn tiếp theo.
+- Khi `miroclaw channel start` đang chạy, thay đổi `default_provider`, `default_model`, `default_temperature`, `api_key`, `api_url` và `reliability.*` được áp dụng nóng từ `config.toml` ở tin nhắn tiếp theo.
 
 Xem ma trận kênh và hành vi allowlist chi tiết tại [channels-reference.md](channels-reference.md).
 
@@ -614,14 +678,16 @@ Lưu ý:
 Sau khi chỉnh config:
 
 ```bash
-zeroclaw status
-zeroclaw doctor
-zeroclaw channel doctor
-zeroclaw service restart
+miroclaw status
+miroclaw doctor
+miroclaw channel doctor
+miroclaw service restart
 ```
 
 ## Tài liệu liên quan
 
+- [agent-profile-hub.md](../architecture/agent-profile-hub.md)
+- [multi-agent-profiles.md](../setup-guides/multi-agent-profiles.md)
 - [channels-reference.md](channels-reference.md)
 - [providers-reference.md](providers-reference.md)
 - [operations-runbook.md](operations-runbook.md)

@@ -6,6 +6,8 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+mod supervisor;
+
 use parking_lot::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -14,7 +16,7 @@ const STATUS_FLUSH_SECONDS: u64 = 5;
 
 /// Wait for shutdown signal (SIGINT or SIGTERM).
 /// SIGHUP is explicitly ignored so the daemon survives terminal/SSH disconnects.
-async fn wait_for_shutdown_signal() -> Result<()> {
+pub(crate) async fn wait_for_shutdown_signal() -> Result<()> {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{signal, SignalKind};
@@ -50,6 +52,10 @@ async fn wait_for_shutdown_signal() -> Result<()> {
 }
 
 pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
+    if config.hub.enabled {
+        return supervisor::run_hub_supervisor(config, host, port).await;
+    }
+
     crate::tools::mcp_tool_context::init_tool_execution_context();
 
     let initial_backoff = config.reliability.channel_initial_backoff_secs.max(1);
@@ -273,7 +279,7 @@ fn spawn_state_writer(config: Config) -> JoinHandle<()> {
     })
 }
 
-fn spawn_component_supervisor<F, Fut>(
+pub(crate) fn spawn_component_supervisor<F, Fut>(
     name: &'static str,
     initial_backoff_secs: u64,
     max_backoff_secs: u64,
@@ -852,7 +858,7 @@ fn validate_heartbeat_channel_config(config: &Config, channel: &str) -> Result<(
     Ok(())
 }
 
-fn has_supervised_channels(config: &Config) -> bool {
+pub(crate) fn has_supervised_channels(config: &Config) -> bool {
     config
         .channels_config
         .channels_except_webhook()

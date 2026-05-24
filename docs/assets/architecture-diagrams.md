@@ -207,11 +207,13 @@ flowchart TD
 
 ## 5. Daemon Supervision Model
 
-**How the daemon keeps components alive:**
+**How the daemon keeps components alive** (legacy single-profile mode when `[hub].enabled = false`):
 
 ```mermaid
 flowchart TB
-    Start[[zeroclaw daemon]] --> SpawnComponents
+    Start[[miroclaw daemon]] --> HubCheck{hub.enabled?}
+    HubCheck -->|true| HubSupervisor[[Hub supervisor — see section 14]]
+    HubCheck -->|false| SpawnComponents
 
     SpawnComponents --> SpawnState[Spawn State Writer<br/>5s flush interval]
     SpawnComponents --> SpawnGateway[Spawn Gateway Supervisor]
@@ -829,4 +831,58 @@ mindmap
 
 ---
 
-*Generated for ZeroClaw v0.1.0 - Architecture Documentation*
+## 14. Agent-Profile Hub (Multi-Agent)
+
+**When `[hub].enabled = true`**, the daemon runs a hub supervisor instead of the legacy single-process layout. Full narrative: [agent-profile-hub.md](../architecture/agent-profile-hub.md).
+
+```mermaid
+flowchart TB
+    subgraph public [Public Hub]
+        HubGW["Hub gateway host:port"]
+        HubWS["/ws/chat"]
+        HubAPI["/api/agents"]
+        HubGW --> HubWS
+        HubGW --> HubAPI
+    end
+
+    subgraph registry [Global Home]
+        Reg["registry.toml"]
+        Active["active_agent.toml"]
+    end
+
+    subgraph worker_a [AgentWorker]
+        ProfCfg["profiles/name/config.toml"]
+        InternalGW["127.0.0.1:internal_port"]
+        Channels["channels supervisor"]
+        ProfCfg --> InternalGW
+        ProfCfg --> Channels
+    end
+
+    Client["Client / Web UI"] --> HubWS
+    HubWS -->|"agent_id proxy"| InternalGW
+    Reg --> HubGW
+    Reg --> worker_a
+```
+
+**Hub WebSocket attach flow:**
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Hub as Hub /ws/chat
+    participant Worker as Agent worker
+    participant Session as Session runner
+
+    Client->>Hub: connect agent_id, session_key?
+    Hub->>Worker: proxy WS connect
+    Worker->>Session: attach_subscriber or channel attach
+    Session-->>Worker: replay + live events
+    Worker-->>Hub: stream frames
+    Hub-->>Client: stream frames
+    Client->>Hub: switch_agent
+    Hub->>Worker: close backend, new worker WS
+```
+
+---
+
+*Generated for ZeroClaw / Miroclaw architecture documentation*
