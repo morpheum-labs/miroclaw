@@ -1,0 +1,26 @@
+api_key = ""
+default_provider = "openrouter"
+default_model = "anthropic/claude-sonnet-4-20250514"
+default_temperature = 0.7
+
+# Internal worker gateway (127.0.0.1 only). Auth is enforced at the public hub.
+[gateway]
+require_pairing = false
+
+[autonomy]
+level = "supervised"
+auto_approve = [
+  "file_read",
+  "file_write",
+  "file_edit",
+  "memory_recall",
+  "memory_store",
+  "web_search_tool",
+  "web_fetch",
+  "calculator",
+  "glob_search",
+  "content_search",
+  "image_info",
+  "weather",
+  "git_operations",
+]

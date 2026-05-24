@@ -1,0 +1,9 @@
+version = 1
+profiles_dir = "profiles"
+default_agent = "main"
+
+[[agents]]
+name = "main"
+config_dir = "profiles/main"
+enabled = true
+internal_port = 18080

@@ -1,0 +1,9 @@
+# Dev hub config — same layout as release; pairing off for local/docker smoke tests.
+[hub]
+enabled = true
+
+[gateway]
+port = 42617
+host = "[::]"
+allow_public_bind = true
+require_pairing = false

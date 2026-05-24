@@ -1,6 +1,14 @@
 # syntax=docker/dockerfile:1.7
 # Miroclaw multi-stage image (`miroclaw` binary).
 #
+# Runtime layout (hub / multi-agent):
+#   /miroclaw-data/.miroclaw/config.toml      — hub supervisor + public gateway
+#   /miroclaw-data/.miroclaw/registry.toml    — agent registry
+#   /miroclaw-data/.miroclaw/profiles/<name>/ — per-agent config.toml + workspace/
+#
+# Default CMD runs `miroclaw daemon` in hub mode with a `main` profile on internal port 18080.
+# Mount /miroclaw-data/.miroclaw to persist config, registry, profiles, and paired tokens.
+#
 # This image does not build Bun/Vite; use `[webui].external_path` (or `MIROCLAW_WEBUI_EXTERNAL_PATH`)
 # to serve a built `dist/` from disk, or disable the dashboard with `[webui].disabled`.
 
@@ -57,25 +65,15 @@ RUN --mount=type=cache,id=miroclaw-cargo-registry,target=/usr/local/cargo/regist
 RUN size=$(stat -c%s /app/miroclaw) && \
   if [ "$size" -lt 1000000 ]; then echo "ERROR: binary too small (${size} bytes), likely dummy build artifact" && exit 1; fi
 
-# Prepare runtime directory structure and default config inline (no extra stage)
-RUN mkdir -p /miroclaw-data/.miroclaw /miroclaw-data/workspace && \
-  printf '%s\n' \
-  'workspace_dir = "/miroclaw-data/workspace"' \
-  'config_path = "/miroclaw-data/.miroclaw/config.toml"' \
-  'api_key = ""' \
-  'default_provider = "openrouter"' \
-  'default_model = "anthropic/claude-sonnet-4-20250514"' \
-  'default_temperature = 0.7' \
-  '' \
-  '[gateway]' \
-  'port = 42617' \
-  'host = "[::]"' \
-  'allow_public_bind = true' \
-  '' \
-  '[autonomy]' \
-  'level = "supervised"' \
-  'auto_approve = ["file_read", "file_write", "file_edit", "memory_recall", "memory_store", "web_search_tool", "web_fetch", "calculator", "glob_search", "content_search", "image_info", "weather", "git_operations"]' \
-  > /miroclaw-data/.miroclaw/config.toml && \
+# Seed hub + agent profile layout (see docker/ for editable templates)
+COPY docker/hub.config.toml docker/registry.toml /docker-seed/
+COPY docker/profiles/ /docker-seed/profiles/
+RUN mkdir -p /miroclaw-data/.miroclaw/profiles/main/workspace && \
+  cp /docker-seed/hub.config.toml /miroclaw-data/.miroclaw/config.toml && \
+  cp /docker-seed/registry.toml /miroclaw-data/.miroclaw/registry.toml && \
+  cp /docker-seed/profiles/main.config.toml /miroclaw-data/.miroclaw/profiles/main/config.toml && \
+  cp /docker-seed/profiles/IDENTITY.md /docker-seed/profiles/SOUL.md \
+    /miroclaw-data/.miroclaw/profiles/main/workspace/ && \
   chown -R 1000:1000 /miroclaw-data
 
 # ── Stage 1: Development Runtime (Debian) ───────────────────
@@ -90,23 +88,19 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /miroclaw-data /miroclaw-data
 COPY --from=builder /app/miroclaw /usr/local/bin/miroclaw
 
-# Overwrite minimal config with DEV template (Ollama defaults)
-COPY dev/config.template.toml /miroclaw-data/.miroclaw/config.toml
-RUN chown 1000:1000 /miroclaw-data/.miroclaw/config.toml
+# Dev overrides: Ollama defaults on the main profile (hub layout unchanged)
+COPY docker/dev/hub.config.toml /miroclaw-data/.miroclaw/config.toml
+COPY docker/dev/profiles/main.config.toml /miroclaw-data/.miroclaw/profiles/main/config.toml
+RUN chown -R 1000:1000 /miroclaw-data/.miroclaw
 
 # Environment setup
 # Ensure UTF-8 locale so CJK / multibyte input is handled correctly
 ENV LANG=C.UTF-8
-# Use consistent workspace path
-ENV MIROCLAW_WORKSPACE=/miroclaw-data/workspace
 ENV HOME=/miroclaw-data
-# Defaults for local dev (Ollama) - matches config.template.toml
+# Defaults for local dev (Ollama) — profile config holds the Ollama base URL
 ENV PROVIDER="ollama"
 ENV MIROCLAW_MODEL="llama3.2"
 ENV MIROCLAW_GATEWAY_PORT=42617
-
-# Note: API_KEY is intentionally NOT set here to avoid confusion.
-# It is set in config.toml as the Ollama URL.
 
 WORKDIR /miroclaw-data
 USER 1000:1000
@@ -125,14 +119,11 @@ COPY --from=builder /miroclaw-data /miroclaw-data
 # Environment setup
 # Ensure UTF-8 locale so CJK / multibyte input is handled correctly
 ENV LANG=C.UTF-8
-ENV MIROCLAW_WORKSPACE=/miroclaw-data/workspace
 ENV HOME=/miroclaw-data
-# Default provider and model are set in config.toml, not here,
-# so config file edits are not silently overridden
-#ENV PROVIDER=
+# Provider/model live in profiles/main/config.toml — set API_KEY or mount config at runtime
 ENV MIROCLAW_GATEWAY_PORT=42617
 
-# API_KEY must be provided at runtime!
+# API_KEY must be provided at runtime (or edit profiles/main/config.toml via a mounted volume)!
 
 WORKDIR /miroclaw-data
 USER 1000:1000

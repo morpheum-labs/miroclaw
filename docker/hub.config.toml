@@ -1,0 +1,11 @@
+# Hub root config — public gateway + supervisor. Agent runtime lives under profiles/*/.
+[hub]
+enabled = true
+
+[gateway]
+port = 42617
+host = "[::]"
+allow_public_bind = true
+# Hub proxy validates bearer tokens on /ws/chat. Set false for local/docker smoke tests;
+# for production, mount paired_tokens or enable once hub exposes POST /pair.
+require_pairing = false
