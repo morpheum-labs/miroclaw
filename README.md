@@ -33,9 +33,10 @@ If you want a personal, single-user assistant that feels local, fast, and always
 <p align="center">
   <a href="https://miroclawlabs.ai">Website</a> ·
   <a href="docs/README.md">Docs</a> ·
-  <a href="docs/architecture.md">Architecture</a> ·
+  <a href="docs/architecture/agent-profile-hub.md">Architecture</a> ·
   <a href="#quick-start">Getting Started</a> ·
   <a href="#setup-guide">Setup guide</a> ·
+  <a href="#multi-agent-profiles--hub">Multi-agent</a> ·
   <a href="#migrating-from-openclaw">Migrating from OpenClaw</a> ·
   <a href="docs/ops/troubleshooting.md">Troubleshoot</a> ·
   <a href="https://discord.com/invite/wDshRVqRjx">Discord</a>
@@ -188,6 +189,7 @@ Use this board for important notices (breaking changes, security advisories, mai
 - **Fast Cold Starts** — single-binary Rust runtime keeps command and daemon startup near-instant.
 - **Portable Architecture** — one binary across ARM, x86, and RISC-V with swappable providers/channels/tools.
 - **Local-first Gateway** — single control plane for sessions, channels, tools, cron, SOPs, and events.
+- **Multi-agent profiles & hub** — run isolated agents (separate workspaces, channels, models) under one home directory with a single public WebSocket on the hub.
 - **Multi-channel inbox** — WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Matrix, IRC, Email, Bluesky, Nostr, Mattermost, Nextcloud Talk, DingTalk, Lark, QQ, Reddit, LinkedIn, Twitter, MQTT, WeChat Work, WebSocket, and more.
 - **Multi-agent orchestration (Hands)** — autonomous agent swarms that run on schedule and grow smarter over time.
 - **Standard Operating Procedures (SOPs)** — event-driven workflow automation with MQTT, webhook, cron, and peripheral triggers.
@@ -237,7 +239,8 @@ ls -lh target/release/miroclaw
 ### Core platform
 
 - Gateway HTTP/WS/SSE control plane with sessions, presence, config, cron, webhooks, web dashboard, and pairing.
-- CLI surface: `gateway`, `agent`, `onboard`, `doctor`, `status`, `service`, `migrate`, `auth`, `cron`, `channel`, `skills`.
+- Hub supervisor (`[hub].enabled`) — public gateway + per-profile agent workers on localhost internal ports.
+- CLI surface: `gateway`, `agent`, `agents`, `onboard`, `doctor`, `status`, `service`, `migrate`, `auth`, `cron`, `channel`, `skills`.
 - Agent orchestration loop with tool dispatch, prompt construction, message classification, and memory loading.
 - Session model with security policy enforcement, autonomy levels, and approval gating.
 - Resilient provider wrapper with failover, retry, and model routing across 20+ LLM backends.
@@ -307,12 +310,14 @@ React 19 + Vite 6 + Tailwind CSS 4 web dashboard served directly from the Gatewa
 
 ## Configuration
 
-Minimal `~/.miroclaw/config.toml`:
+Minimal `~/.miroclaw/config.toml` (single-profile install):
 
 ```toml
 default_provider = "anthropic"
 api_key = "sk-ant-..."
 ```
+
+With multiple agents, each profile has its own `profiles/<name>/config.toml`; the hub root holds `[hub]` and public gateway bind settings. See [multi-agent setup](docs/setup-guides/multi-agent-profiles.md).
 
 Full configuration reference: [docs/reference/api/config-reference.md](docs/reference/api/config-reference.md).
 
@@ -385,26 +390,43 @@ Login, refresh, and `miroclaw agent --provider …` examples: [Quick start comma
 
 ## Agent workspace + skills
 
-Workspace root: `~/.miroclaw/workspace/` (configurable via config).
+Each agent profile owns its workspace and config. Layout depends on install mode:
 
-Injected prompt files:
+| Mode | Config | Workspace |
+|------|--------|-----------|
+| **Single profile (default)** | `~/.miroclaw/config.toml` | `~/.miroclaw/workspace/` |
+| **Multi-agent profiles** | `~/.miroclaw/profiles/<name>/config.toml` | `~/.miroclaw/profiles/<name>/workspace/` |
+
+Hub root (`~/.miroclaw/config.toml` with `[hub].enabled`) holds supervisor settings; `registry.toml` indexes profiles and internal ports. Set the CLI default with `miroclaw agents use <name>`.
+
+Injected prompt files (under the active profile workspace):
 - `IDENTITY.md` — agent personality and role
 - `USER.md` — user context and preferences
 - `MEMORY.md` — long-term facts and lessons
 - `AGENTS.md` — session conventions and initialization rules
 - `SOUL.md` — core identity and operating principles
 
-Skills: `~/.miroclaw/workspace/skills/<skill>/SKILL.md` or `SKILL.toml`.
+Skills: `<workspace>/skills/<skill>/SKILL.md` or `SKILL.toml`.
 
 ```bash
+miroclaw agents list
 miroclaw skills list
 ```
 
-Install, audit, and remove: [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#skills).
+Multi-agent setup: [multi-agent-profiles.md](docs/setup-guides/multi-agent-profiles.md). Install, audit, and remove skills: [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#skills).
 
 ## CLI commands
 
 Common invocations (gateway, agent, service, channels, cron, memory, migration): [Quick start command reference](docs/setup-guides/quick-start-command-reference.md#cli-cheat-sheet-common-workflows).
+
+Agent profiles:
+
+```bash
+miroclaw agents list
+miroclaw agents create researcher --from main
+miroclaw agents use researcher
+miroclaw migrate profiles --dry-run
+```
 
 Full commands reference: [docs/reference/cli/commands-reference.md](docs/reference/cli/commands-reference.md)
 
@@ -510,7 +532,8 @@ Download the latest assets from:
 Use these when you're past the onboarding flow and want the deeper reference.
 
 - Start with the [docs index](docs/README.md) for navigation and "what's where."
-- Read the [architecture overview](docs/architecture.md) for the full system model.
+- Read the [agent-profile hub architecture](docs/architecture/agent-profile-hub.md) for multi-agent layout and the public WebSocket hub.
+- See the [repository map](docs/maintainers/repo-map.md) and [architecture diagrams](docs/assets/architecture-diagrams.md) for runtime flow and component structure.
 - Use the [configuration reference](docs/reference/api/config-reference.md) when you need every key and example.
 - Run the Gateway by the book with the [operational runbook](docs/ops/operations-runbook.md).
 - Follow [Miroclaw Onboard](#quick-start) for a guided setup.
@@ -520,7 +543,7 @@ Use these when you're past the onboarding flow and want the deeper reference.
 ### Reference docs
 
 - Documentation hub: [docs/README.md](docs/README.md)
-- Unified docs TOC: [docs/SUMMARY.md](docs/SUMMARY.md)
+- Agent-profile hub architecture: [docs/architecture/agent-profile-hub.md](docs/architecture/agent-profile-hub.md)
 - Commands reference: [docs/reference/cli/commands-reference.md](docs/reference/cli/commands-reference.md)
 - Config reference: [docs/reference/api/config-reference.md](docs/reference/api/config-reference.md)
 - Providers reference: [docs/reference/api/providers-reference.md](docs/reference/api/providers-reference.md)
@@ -581,7 +604,7 @@ See [docs/contributing/README.md](docs/contributing/README.md) and the [CLA](doc
 - New `Memory` → `src/memory/`
 - New `Tunnel` → `src/tunnel/`
 - New `Peripheral` → `src/peripherals/`
-- New `Skill` → `~/.miroclaw/workspace/skills/<name>/`
+- New `Skill` → `<profile workspace>/skills/<name>/` (e.g. `~/.miroclaw/profiles/main/workspace/skills/`)
 
 <!-- BEGIN:RECENT_CONTRIBUTORS -->
 <!-- END:RECENT_CONTRIBUTORS -->
