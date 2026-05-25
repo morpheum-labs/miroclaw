@@ -2225,6 +2225,28 @@ fn require_localhost(peer: &SocketAddr) -> Result<(), (StatusCode, Json<serde_js
     }
 }
 
+/// Paircode admin routes also accept RFC1918 / ULA peers (e.g. clawgotcha on the same Docker network).
+fn require_localhost_or_private_network(
+    peer: &SocketAddr,
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    let ip = peer.ip();
+    let allowed = ip.is_loopback()
+        || match ip {
+            std::net::IpAddr::V4(v4) => v4.is_private() || v4.is_link_local(),
+            std::net::IpAddr::V6(v6) => v6.is_unique_local(),
+        };
+    if allowed {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "Admin pairing endpoints are restricted to localhost or private network"
+            })),
+        ))
+    }
+}
+
 /// POST /admin/shutdown — graceful shutdown from CLI (localhost only)
 async fn handle_admin_shutdown(
     State(state): State<AppState>,
@@ -2248,7 +2270,7 @@ async fn handle_admin_paircode(
     State(state): State<AppState>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    require_localhost(&peer)?;
+    require_localhost_or_private_network(&peer)?;
     let code = state.pairing.pairing_code();
 
     let body = if let Some(c) = code {
@@ -2279,7 +2301,7 @@ async fn handle_admin_paircode_new(
     State(state): State<AppState>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    require_localhost(&peer)?;
+    require_localhost_or_private_network(&peer)?;
     match state.pairing.generate_new_pairing_code() {
         Some(code) => {
             tracing::info!("🔐 New pairing code generated via admin endpoint");
@@ -3756,6 +3778,19 @@ mod tests {
             12345,
         ));
         let err = require_localhost(&peer).unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn require_localhost_or_private_network_accepts_rfc1918() {
+        let peer = SocketAddr::from(([172, 18, 0, 2], 12345));
+        assert!(require_localhost_or_private_network(&peer).is_ok());
+    }
+
+    #[test]
+    fn require_localhost_or_private_network_rejects_public_ipv4() {
+        let peer = SocketAddr::from(([8, 8, 8, 8], 12345));
+        let err = require_localhost_or_private_network(&peer).unwrap_err();
         assert_eq!(err.0, StatusCode::FORBIDDEN);
     }
 }

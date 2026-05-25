@@ -18,6 +18,7 @@ That is equivalent to `./install.sh …` run from the repo root (same flags and 
 
 | File | Purpose |
 |------|---------|
+| `check-miroclaw-online.sh` | Probe localhost gateway `/health` (prints URL, exit 0/1) |
 | `install.sh` | Full one-command bootstrap installer (Rust build, gateway, onboarding) |
 | `deploy-rpi.sh` | One-shot cross-compile and deploy script |
 | `rpi-config.toml` | Production config template deployed to `~/.zeroclaw/config.toml` |
@@ -116,6 +117,15 @@ The `.env` is loaded by the systemd service as an `EnvironmentFile`.
 Once the service is running the gateway listens on port **8080**.
 
 ### Health check
+
+Local (from repo root; resolves port from config, default `http://127.0.0.1:42617/health`):
+
+```bash
+bash scripts/check-miroclaw-online.sh
+bash scripts/check-miroclaw-online.sh --quiet   # exit code only; URL on stderr
+```
+
+Remote Pi:
 
 ```bash
 curl http://raspberrypi.local:8080/health
