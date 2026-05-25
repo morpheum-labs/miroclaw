@@ -70,7 +70,7 @@ async fn grok_browser_live_test1() {
         })
     };
 
-    let messages = vec![ChatMessage::user(prompt)];
+    let messages = vec![ChatMessage::user(&prompt)];
     let request = ChatRequest {
         messages: &messages,
         tools: None,
@@ -108,7 +108,7 @@ async fn grok_browser_live_test1() {
 
     // Second turn: short follow-up on same session/tab.
     let follow_messages = vec![
-        ChatMessage::user(prompt),
+        ChatMessage::user(&prompt),
         ChatMessage::assistant(&text),
         ChatMessage::user("Reply with ONLY the novelty_type field value from your JSON, nothing else."),
     ];
