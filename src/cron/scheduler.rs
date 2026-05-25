@@ -1374,6 +1374,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn persist_job_result_clawgotcha_synced_job_hits_delivery_path() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp).await;
+        cron::upsert_clawgotcha_agent_job(
+            &config,
+            "cg-announce",
+            "*/5 * * * *",
+            "deliver this",
+            true,
+            DeliveryConfig {
+                mode: "announce".into(),
+                channel: Some("discord".into()),
+                to: Some("123456".into()),
+                best_effort: false,
+            },
+        )
+        .unwrap();
+        let job = cron::get_job(&config, "cg-announce").unwrap();
+        assert_eq!(job.delivery.mode, "announce");
+        assert_eq!(job.source, "clawgotcha");
+
+        let started = Utc::now();
+        let finished = started + ChronoDuration::milliseconds(10);
+
+        let success =
+            persist_job_result(&config, &job, true, "cron output", started, finished).await;
+        assert!(!success);
+
+        let updated = cron::get_job(&config, "cg-announce").unwrap();
+        assert_eq!(updated.last_status.as_deref(), Some("error"));
+
+        let runs = cron::list_runs(&config, &job.id, 10).unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "error");
+    }
+
+    #[tokio::test]
     async fn persist_job_result_at_schedule_without_delete_after_run_is_disabled() {
         let tmp = TempDir::new().unwrap();
         let config = test_config(&tmp).await;

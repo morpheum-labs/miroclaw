@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use clawgotcha::models::domain::{AgentDefinition, CronJobDefinition, SwarmDefaults};
+use clawgotcha::models::domain::{
+    AgentDefinition, CronDeliveryConfig, CronJobDefinition, SwarmDefaults,
+};
 use clawgotcha::traits::{AgentRuntimeUpdater, ConfigReconciler, CronSchedulerUpdater};
 use clawgotcha::{ChangeEvent, ClawgotchaError};
 use parking_lot::{Mutex, RwLock};
@@ -111,6 +113,15 @@ pub struct HostCron {
     pub config: Arc<Mutex<Config>>,
 }
 
+fn map_delivery(d: &CronDeliveryConfig) -> crate::cron::DeliveryConfig {
+    crate::cron::DeliveryConfig {
+        mode: d.mode.clone(),
+        channel: d.channel.clone(),
+        to: d.to.clone(),
+        best_effort: d.best_effort,
+    }
+}
+
 #[async_trait]
 impl CronSchedulerUpdater for HostCron {
     async fn upsert_job(&self, job: &CronJobDefinition) -> Result<(), ClawgotchaError> {
@@ -122,6 +133,7 @@ impl CronSchedulerUpdater for HostCron {
             &job.expression,
             &prompt,
             job.enabled,
+            map_delivery(&job.delivery),
         )
         .map_err(|e| ClawgotchaError::Validation(format!("cron upsert: {e}")))?;
         tracing::info!(job_id = %job.id, "clawgotcha: upserted cron job");
@@ -239,8 +251,15 @@ mod tests {
         };
         std::fs::create_dir_all(&cfg.workspace_dir).unwrap();
 
-        crate::cron::upsert_clawgotcha_agent_job(&cfg, "w1", "*/5 * * * *", "prompt", true)
-            .unwrap();
+        crate::cron::upsert_clawgotcha_agent_job(
+            &cfg,
+            "w1",
+            "*/5 * * * *",
+            "prompt",
+            true,
+            crate::cron::DeliveryConfig::default(),
+        )
+        .unwrap();
 
         let shared = Arc::new(Mutex::new(cfg.clone()));
         let agents: Arc<dyn AgentRuntimeUpdater> = Arc::new(HostAgents {

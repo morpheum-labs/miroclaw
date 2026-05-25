@@ -361,6 +361,7 @@ pub fn upsert_clawgotcha_agent_job(
     expression: &str,
     prompt: &str,
     enabled: bool,
+    delivery: DeliveryConfig,
 ) -> Result<()> {
     let schedule = Schedule::Cron {
         expr: expression.to_string(),
@@ -368,6 +369,7 @@ pub fn upsert_clawgotcha_agent_job(
     };
     let now = Utc::now();
     validate_schedule(&schedule, now)?;
+    validate_delivery_config(Some(&delivery))?;
 
     if get_job(config, job_id).is_ok() {
         update_job(
@@ -377,6 +379,7 @@ pub fn upsert_clawgotcha_agent_job(
                 schedule: Some(schedule.clone()),
                 prompt: Some(prompt.to_string()),
                 enabled: Some(enabled),
+                delivery: Some(delivery),
                 ..Default::default()
             },
         )?;
@@ -390,11 +393,9 @@ pub fn upsert_clawgotcha_agent_job(
         return Ok(());
     }
 
-    validate_delivery_config(None)?;
     let next_run = next_run_for_schedule(&schedule, now)?;
     let expression_row = schedule_cron_expression(&schedule).unwrap_or_default();
     let schedule_json = serde_json::to_string(&schedule)?;
-    let delivery = DeliveryConfig::default();
     let delivery_json = serde_json::to_string(&delivery)?;
 
     with_connection(config, |conn| {
@@ -1797,13 +1798,114 @@ mod tests {
     fn upsert_clawgotcha_clears_retirement() {
         let tmp = TempDir::new().unwrap();
         let config = test_config(&tmp);
-        upsert_clawgotcha_agent_job(&config, "cg1", "*/10 * * * *", "prompt", true).unwrap();
+        upsert_clawgotcha_agent_job(
+            &config,
+            "cg1",
+            "*/10 * * * *",
+            "prompt",
+            true,
+            DeliveryConfig::default(),
+        )
+        .unwrap();
         retire_job_for_clawgotcha_remove(&config, "cg1").unwrap();
         assert!(get_job(&config, "cg1").unwrap().retired_at.is_some());
-        upsert_clawgotcha_agent_job(&config, "cg1", "*/15 * * * *", "prompt2", true).unwrap();
+        upsert_clawgotcha_agent_job(
+            &config,
+            "cg1",
+            "*/15 * * * *",
+            "prompt2",
+            true,
+            DeliveryConfig::default(),
+        )
+        .unwrap();
         let j = get_job(&config, "cg1").unwrap();
         assert!(j.retired_at.is_none());
         assert_eq!(j.prompt.as_deref(), Some("prompt2"));
+    }
+
+    #[test]
+    fn upsert_clawgotcha_persists_announce_delivery() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let delivery = DeliveryConfig {
+            mode: "announce".into(),
+            channel: Some("discord".into()),
+            to: Some("123".into()),
+            best_effort: true,
+        };
+        upsert_clawgotcha_agent_job(
+            &config,
+            "cg-deliver",
+            "*/5 * * * *",
+            "prompt",
+            true,
+            delivery.clone(),
+        )
+        .unwrap();
+        let stored = get_job(&config, "cg-deliver").unwrap();
+        assert_eq!(stored.delivery.mode, "announce");
+        assert_eq!(stored.delivery.channel.as_deref(), Some("discord"));
+        assert_eq!(stored.delivery.to.as_deref(), Some("123"));
+        assert!(stored.delivery.best_effort);
+    }
+
+    #[test]
+    fn upsert_clawgotcha_updates_delivery_on_reupsert() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        upsert_clawgotcha_agent_job(
+            &config,
+            "cg-upd",
+            "*/5 * * * *",
+            "prompt",
+            true,
+            DeliveryConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(get_job(&config, "cg-upd").unwrap().delivery.mode, "none");
+
+        upsert_clawgotcha_agent_job(
+            &config,
+            "cg-upd",
+            "*/10 * * * *",
+            "prompt2",
+            true,
+            DeliveryConfig {
+                mode: "announce".into(),
+                channel: Some("telegram".into()),
+                to: Some("456".into()),
+                best_effort: false,
+            },
+        )
+        .unwrap();
+        let stored = get_job(&config, "cg-upd").unwrap();
+        assert_eq!(stored.delivery.mode, "announce");
+        assert_eq!(stored.delivery.channel.as_deref(), Some("telegram"));
+        assert_eq!(stored.delivery.to.as_deref(), Some("456"));
+        assert!(!stored.delivery.best_effort);
+        assert_eq!(stored.prompt.as_deref(), Some("prompt2"));
+    }
+
+    #[test]
+    fn upsert_clawgotcha_rejects_invalid_delivery() {
+        let tmp = TempDir::new().unwrap();
+        let config = test_config(&tmp);
+        let err = upsert_clawgotcha_agent_job(
+            &config,
+            "cg-bad",
+            "*/5 * * * *",
+            "prompt",
+            true,
+            DeliveryConfig {
+                mode: "announce".into(),
+                channel: Some("discord".into()),
+                to: None,
+                best_effort: true,
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("delivery.to is required"));
+        assert!(get_job(&config, "cg-bad").is_err());
     }
 
     #[test]
@@ -1825,8 +1927,24 @@ mod tests {
     fn retire_clawgotcha_jobs_not_in_remote_reconciles() {
         let tmp = TempDir::new().unwrap();
         let config = test_config(&tmp);
-        upsert_clawgotcha_agent_job(&config, "snap-a", "*/5 * * * *", "p", true).unwrap();
-        upsert_clawgotcha_agent_job(&config, "snap-b", "*/6 * * * *", "p", true).unwrap();
+        upsert_clawgotcha_agent_job(
+            &config,
+            "snap-a",
+            "*/5 * * * *",
+            "p",
+            true,
+            DeliveryConfig::default(),
+        )
+        .unwrap();
+        upsert_clawgotcha_agent_job(
+            &config,
+            "snap-b",
+            "*/6 * * * *",
+            "p",
+            true,
+            DeliveryConfig::default(),
+        )
+        .unwrap();
         retire_clawgotcha_jobs_not_in_remote(&config, &["snap-a".to_string()]).unwrap();
         assert!(get_job(&config, "snap-a").unwrap().retired_at.is_none());
         assert!(get_job(&config, "snap-b").unwrap().retired_at.is_some());
@@ -1836,7 +1954,15 @@ mod tests {
     fn retire_clawgotcha_jobs_empty_remote_retires_all_active_clawgotcha() {
         let tmp = TempDir::new().unwrap();
         let config = test_config(&tmp);
-        upsert_clawgotcha_agent_job(&config, "snap-x", "*/5 * * * *", "p", true).unwrap();
+        upsert_clawgotcha_agent_job(
+            &config,
+            "snap-x",
+            "*/5 * * * *",
+            "p",
+            true,
+            DeliveryConfig::default(),
+        )
+        .unwrap();
         retire_clawgotcha_jobs_not_in_remote(&config, &[]).unwrap();
         assert!(get_job(&config, "snap-x").unwrap().retired_at.is_some());
     }

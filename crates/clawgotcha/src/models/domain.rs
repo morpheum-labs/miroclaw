@@ -30,6 +30,34 @@ pub struct AgentDefinition {
     pub current_revision: u64,
 }
 
+fn default_true() -> bool {
+    true
+}
+
+/// Cron delivery settings mirrored from Agentbook / host `DeliveryConfig`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CronDeliveryConfig {
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub channel: Option<String>,
+    #[serde(default)]
+    pub to: Option<String>,
+    #[serde(default = "default_true")]
+    pub best_effort: bool,
+}
+
+impl Default for CronDeliveryConfig {
+    fn default() -> Self {
+        Self {
+            mode: "none".to_string(),
+            channel: None,
+            to: None,
+            best_effort: true,
+        }
+    }
+}
+
 /// Cron job definition aligned with host cron persistence.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CronJobDefinition {
@@ -39,6 +67,8 @@ pub struct CronJobDefinition {
     pub prompt: Option<String>,
     pub timeout_seconds: Option<u64>,
     pub enabled: bool,
+    #[serde(default)]
+    pub delivery: CronDeliveryConfig,
     pub current_revision: u64,
 }
 

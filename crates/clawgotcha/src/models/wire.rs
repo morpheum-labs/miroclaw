@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::domain::{AgentDefinition, CronJobDefinition, SwarmDefaults, ToolMetadata};
+use super::domain::{
+    AgentDefinition, CronDeliveryConfig, CronJobDefinition, SwarmDefaults, ToolMetadata,
+};
 
 /// Errors converting wire payloads into domain entities.
 #[derive(Debug, thiserror::Error)]
@@ -46,6 +48,45 @@ pub(crate) struct AgentbookSwarmAgent {
     pub deleted: bool,
 }
 
+/// Agentbook `SwarmCronJob.Delivery` (nested snake_case fields).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct AgentbookCronDelivery {
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub channel: Option<String>,
+    #[serde(default)]
+    pub to: Option<String>,
+    #[serde(default = "default_true")]
+    pub best_effort: bool,
+}
+
+impl Default for AgentbookCronDelivery {
+    fn default() -> Self {
+        Self {
+            mode: String::new(),
+            channel: None,
+            to: None,
+            best_effort: true,
+        }
+    }
+}
+
+impl From<AgentbookCronDelivery> for CronDeliveryConfig {
+    fn from(value: AgentbookCronDelivery) -> Self {
+        Self {
+            mode: if value.mode.is_empty() {
+                "none".to_string()
+            } else {
+                value.mode
+            },
+            channel: value.channel,
+            to: value.to,
+            best_effort: value.best_effort,
+        }
+    }
+}
+
 /// Agentbook `SwarmCronJob` list element.
 #[derive(Debug, Deserialize)]
 pub(crate) struct AgentbookCronJob {
@@ -61,6 +102,8 @@ pub(crate) struct AgentbookCronJob {
     pub timeout_seconds: Option<u64>,
     #[serde(rename = "Active", default = "default_true")]
     pub active: bool,
+    #[serde(rename = "Delivery", default)]
+    pub delivery: AgentbookCronDelivery,
     #[serde(rename = "CurrentRevision", default)]
     pub current_revision: u64,
 }
@@ -148,6 +191,7 @@ impl TryFrom<AgentbookCronJob> for CronJobDefinition {
             prompt: value.prompt,
             timeout_seconds: value.timeout_seconds,
             enabled: value.active,
+            delivery: value.delivery.into(),
             current_revision: value.current_revision,
         })
     }
@@ -251,6 +295,8 @@ pub struct WireCronJob {
     pub enabled: bool,
     #[serde(default)]
     pub current_revision: u64,
+    #[serde(default)]
+    pub delivery: Option<CronDeliveryConfig>,
 }
 
 fn default_true() -> bool {
@@ -272,6 +318,7 @@ impl TryFrom<WireCronJob> for CronJobDefinition {
             prompt: value.prompt,
             timeout_seconds: value.timeout_seconds,
             enabled: value.enabled,
+            delivery: value.delivery.unwrap_or_default(),
             current_revision: value.current_revision,
         })
     }
@@ -310,4 +357,65 @@ pub struct McpBindingReveal {
     pub mcp_server_name: String,
     pub material_kind: String,
     pub payload: serde_json::Value,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agentbook_cron_job_deserializes_delivery() {
+        let json = r#"{
+            "ID": "job-1",
+            "AgentName": "hand",
+            "Schedule": "0 9 * * *",
+            "Delivery": {
+                "mode": "announce",
+                "channel": "discord",
+                "to": "123",
+                "best_effort": true
+            }
+        }"#;
+        let wire: AgentbookCronJob = serde_json::from_str(json).unwrap();
+        let job = CronJobDefinition::try_from(wire).unwrap();
+        assert_eq!(job.delivery.mode, "announce");
+        assert_eq!(job.delivery.channel.as_deref(), Some("discord"));
+        assert_eq!(job.delivery.to.as_deref(), Some("123"));
+        assert!(job.delivery.best_effort);
+    }
+
+    #[test]
+    fn agentbook_cron_job_defaults_missing_delivery() {
+        let json = r#"{
+            "ID": "job-2",
+            "AgentName": "hand",
+            "Schedule": "0 9 * * *"
+        }"#;
+        let wire: AgentbookCronJob = serde_json::from_str(json).unwrap();
+        let job = CronJobDefinition::try_from(wire).unwrap();
+        assert_eq!(job.delivery.mode, "none");
+        assert!(job.delivery.channel.is_none());
+        assert!(job.delivery.to.is_none());
+        assert!(job.delivery.best_effort);
+    }
+
+    #[test]
+    fn wire_cron_job_deserializes_delivery() {
+        let json = r#"{
+            "id": "legacy-1",
+            "expression": "*/5 * * * *",
+            "delivery": {
+                "mode": "announce",
+                "channel": "telegram",
+                "to": "456",
+                "best_effort": false
+            }
+        }"#;
+        let wire: WireCronJob = serde_json::from_str(json).unwrap();
+        let job = CronJobDefinition::try_from(wire).unwrap();
+        assert_eq!(job.delivery.mode, "announce");
+        assert_eq!(job.delivery.channel.as_deref(), Some("telegram"));
+        assert_eq!(job.delivery.to.as_deref(), Some("456"));
+        assert!(!job.delivery.best_effort);
+    }
 }

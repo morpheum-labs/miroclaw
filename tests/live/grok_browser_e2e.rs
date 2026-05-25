@@ -6,8 +6,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 use zeroclaw::config::GrokBrowserConfig;
-use zeroclaw::providers::grok_browser::GrokBrowserProvider;
 use zeroclaw::providers::grok_browser::scheduler::JobStatusKind;
+use zeroclaw::providers::grok_browser::GrokBrowserProvider;
 use zeroclaw::providers::traits::{ChatMessage, ChatRequest, Provider};
 use zeroclaw::providers::ProviderRuntimeOptions;
 
@@ -31,8 +31,8 @@ async fn grok_browser_live_test1() {
         return;
     }
 
-    let prompt = std::fs::read_to_string(TEST1_PATH)
-        .unwrap_or_else(|e| panic!("read {TEST1_PATH}: {e}"));
+    let prompt =
+        std::fs::read_to_string(TEST1_PATH).unwrap_or_else(|e| panic!("read {TEST1_PATH}: {e}"));
     assert!(
         prompt.contains("financial news temporal analyst"),
         "unexpected test1.txt content"
@@ -90,7 +90,10 @@ async fn grok_browser_live_test1() {
 
     let text = response.text.unwrap_or_default();
     assert!(!text.trim().is_empty(), "empty response from grok browser");
-    eprintln!("[test] response preview: {}...", text.chars().take(240).collect::<String>());
+    eprintln!(
+        "[test] response preview: {}...",
+        text.chars().take(240).collect::<String>()
+    );
 
     let session = provider
         .sessions()
@@ -110,7 +113,9 @@ async fn grok_browser_live_test1() {
     let follow_messages = vec![
         ChatMessage::user(&prompt),
         ChatMessage::assistant(&text),
-        ChatMessage::user("Reply with ONLY the novelty_type field value from your JSON, nothing else."),
+        ChatMessage::user(
+            "Reply with ONLY the novelty_type field value from your JSON, nothing else.",
+        ),
     ];
     let follow_request = ChatRequest {
         messages: &follow_messages,

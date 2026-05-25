@@ -78,7 +78,35 @@ Runtime heartbeat (agentbook **`HeartbeatRequest`**). The instance key is in the
 
 **Primary (agentbook):** **`CronJobListResponse`**: **`cron_jobs`** (**`SwarmCronJob`**, PascalCase fields in JSON) plus **`revision_summary`**.
 
-**Legacy fallback:** **`GET /v1/cron`** with **`revision_watermark`** and **`jobs`** shaped like [`WireCronJob`](../../../crates/clawgotcha/src/models/wire.rs).
+Each **`SwarmCronJob`** may include a **`Delivery`** object (PascalCase key). Nested fields use snake_case:
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `Delivery` | object | Omitted → MiroClaw treats as `{ "mode": "none", "best_effort": true }` |
+| `mode` | `"none"` \| `"announce"` | When `"announce"`, job output is sent to a channel after the run completes |
+| `channel` | string | Required for announce; allowed: `telegram`, `discord`, `slack`, `mattermost`, `signal`, `matrix`, `qq` |
+| `to` | string | Channel-specific target (chat id, user id, room id, etc.) |
+| `best_effort` | bool | Default `true`; when `false`, delivery failure marks the cron run as error |
+
+**Example response fragment:**
+
+```json
+{
+  "ID": "job-uuid",
+  "AgentName": "hand",
+  "Schedule": "0 9 * * *",
+  "Delivery": {
+    "mode": "announce",
+    "channel": "discord",
+    "to": "123456789",
+    "best_effort": true
+  }
+}
+```
+
+**MiroClaw delivery semantics:** After a synced agent cron job completes, the scheduler calls [`deliver_if_configured`](../../../src/cron/scheduler.rs) when `delivery.mode == "announce"`. Agentbook is the source of truth; delivery is applied on poll/webhook upsert (same path as schedule, prompt, and enabled). Invalid delivery (e.g. announce without `to`, unsupported channel) causes the sync upsert to fail with the same validation rules as CLI/API create — see [`validate_delivery_config`](../../../src/cron/mod.rs).
+
+**Legacy fallback:** **`GET /v1/cron`** with **`revision_watermark`** and **`jobs`** shaped like [`WireCronJob`](../../../crates/clawgotcha/src/models/wire.rs). Legacy jobs may include an optional snake_case **`delivery`** field with the same nested shape.
 
 **Miroclaw host semantics:** After a successful parse of the cron list body, the sync layer upserts each job, then runs a **snapshot reconcile**: local DB rows with `source = clawgotcha` that are **not** listed in that response are **soft-retired**. Operators should treat each successful response as the **full desired cron set** for the instance (empty list = retire all Clawgotcha cron locally). Partial-delta-only APIs are incompatible unless reconciliation is relaxed.
 

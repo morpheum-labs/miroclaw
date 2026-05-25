@@ -4,6 +4,6 @@ pub mod domain;
 pub mod wire;
 
 pub use domain::{
-    AgentDefinition, ClawgotchaInstance, CronJobDefinition, OfflineSnapshot, RevisionSummary,
-    SwarmDefaults, ToolMetadata,
+    AgentDefinition, ClawgotchaInstance, CronDeliveryConfig, CronJobDefinition, OfflineSnapshot,
+    RevisionSummary, SwarmDefaults, ToolMetadata,
 };
