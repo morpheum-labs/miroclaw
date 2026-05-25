@@ -29,7 +29,9 @@ pub async fn handle_command(command: crate::MigrateCommands, config: &Config) ->
         crate::MigrateCommands::Openclaw { source, dry_run } => {
             migrate_openclaw_memory(config, &source, dry_run).await
         }
-        crate::MigrateCommands::Profiles { dry_run } => profiles::handle_migrate_profiles(dry_run).await,
+        crate::MigrateCommands::Profiles { dry_run } => {
+            profiles::handle_migrate_profiles(dry_run).await
+        }
     }
 }
 

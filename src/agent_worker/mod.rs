@@ -120,9 +120,10 @@ pub async fn run(mut config: Config, internal_port: u16) -> Result<()> {
 
 fn spawn_state_writer(config: Config, agent_name: String) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let state_path = config.workspace_dir.join("state").join(format!(
-            "agent-worker-{agent_name}.json"
-        ));
+        let state_path = config
+            .workspace_dir
+            .join("state")
+            .join(format!("agent-worker-{agent_name}.json"));
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(STATUS_FLUSH_SECONDS)).await;
             let payload = serde_json::json!({

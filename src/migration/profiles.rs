@@ -1,7 +1,9 @@
 //! Migrate legacy flat layout to profile-per-agent structure.
 
-use crate::config::registry::{AgentRegistry, AgentRegistryEntry, DEFAULT_AGENT_NAME, DEFAULT_INTERNAL_PORT_BASE};
-use crate::config::schema::{default_config_dir, DelegateAgentConfig, Config};
+use crate::config::registry::{
+    AgentRegistry, AgentRegistryEntry, DEFAULT_AGENT_NAME, DEFAULT_INTERNAL_PORT_BASE,
+};
+use crate::config::schema::{default_config_dir, Config, DelegateAgentConfig};
 use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -102,7 +104,10 @@ pub async fn migrate_profiles(home_dir: &Path, dry_run: bool) -> Result<()> {
     println!("Migration complete.");
     println!("  Main profile: {}", profile_main.display());
     println!("  Registry: {}", home_dir.join("registry.toml").display());
-    println!("Enable hub mode with [hub] enabled = true in {}", home_dir.join("config.toml").display());
+    println!(
+        "Enable hub mode with [hub] enabled = true in {}",
+        home_dir.join("config.toml").display()
+    );
     Ok(())
 }
 

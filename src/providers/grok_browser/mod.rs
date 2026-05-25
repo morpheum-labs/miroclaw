@@ -1,4 +1,6 @@
 pub mod models;
+pub mod retry;
+pub mod scheduler;
 pub mod session;
 
 use crate::config::schema::{GrokBrowserConfig, GrokBrowserSessionMode};
@@ -8,18 +10,13 @@ use crate::providers::traits::{
 };
 use crate::providers::ProviderRuntimeOptions;
 use async_trait::async_trait;
-use models::{
-    bool_str_arg, disable_search_arg, extract_answer, extract_conversation_id,
-    is_conversation_not_found, map_grok_model,
-};
-use serde_json::{Map, Value};
+use models::{is_conversation_not_found, map_grok_model};
+use retry::{GrokRetryResult, GrokSiteOp};
+use scheduler::{global_job_registry, GrokBrowserScheduler, GrokJobRegistry};
 use session::{GrokBrowserSession, GrokSessionStore};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex;
 
-const GROK_CHAT: &str = "grok/chat";
-const GROK_AGENT_CHAT: &str = "grok/agent-chat";
-const GROK_CHATFOLLOW: &str = "grok/chatfollow";
 const GROK_MODES: &str = "grok/modes";
 const GROK_AGENTS: &str = "grok/agents";
 
@@ -28,11 +25,11 @@ const GROK_BROWSER_SUPPORTED_TEMPERATURES: [f64; 2] = [0.7, 1.0];
 const TEMP_EPSILON: f64 = 1e-9;
 
 pub struct GrokBrowserProvider {
-    client: Mutex<BunBrowserClient>,
+    client: Arc<Mutex<BunBrowserClient>>,
     config: GrokBrowserConfig,
     resolved_agent_id: StdMutex<Option<String>>,
     sessions: Arc<GrokSessionStore>,
-    call_lock: Mutex<()>,
+    scheduler: Arc<GrokBrowserScheduler>,
 }
 
 impl GrokBrowserProvider {
@@ -43,14 +40,27 @@ impl GrokBrowserProvider {
         } else {
             None
         };
-        let client = BunBrowserClient::new_deferred(config.host.clone(), timeout_secs)?;
+        let client = Arc::new(Mutex::new(BunBrowserClient::new_deferred(
+            config.host.clone(),
+            timeout_secs,
+        )?));
+        let max_parallel = if config.max_parallel_tabs > 0 {
+            config.max_parallel_tabs
+        } else {
+            8
+        };
+        let scheduler = GrokBrowserScheduler::new(Arc::clone(&client), max_parallel);
         Ok(Self {
-            client: Mutex::new(client),
+            client,
             config,
             resolved_agent_id: StdMutex::new(None),
             sessions: Arc::new(GrokSessionStore::new()),
-            call_lock: Mutex::new(()),
+            scheduler,
         })
+    }
+
+    pub fn job_registry(&self) -> Arc<GrokJobRegistry> {
+        self.scheduler.registry()
     }
 
     fn effective_agent_id(&self) -> Option<String> {
@@ -125,36 +135,34 @@ impl GrokBrowserProvider {
             .filter(|s| !s.trim().is_empty())
     }
 
-    async fn run_site_locked(&self, name: &str, args: Map<String, Value>) -> anyhow::Result<Value> {
-        let _guard = self.call_lock.lock().await;
-        let mut client = self.client.lock().await;
-        client
-            .run_site_mut(name, args)
-            .await
-            .map_err(|err| anyhow::anyhow!(err))
+    async fn submit_and_wait(
+        &self,
+        op: GrokSiteOp,
+        pinned_tab: Option<String>,
+    ) -> anyhow::Result<GrokRetryResult> {
+        let (request_id, rx) = self
+            .scheduler
+            .submit(op, self.config.disable_search, pinned_tab)
+            .await;
+        tracing::debug!(request_id = %request_id, "grok browser job submitted");
+        GrokBrowserScheduler::wait(rx).await
     }
 
     async fn chat_stateless(
         &self,
         query: &str,
         model: &str,
-    ) -> anyhow::Result<(String, Option<String>)> {
-        let mut args = Map::new();
-        args.insert("query".into(), Value::String(query.to_string()));
-        args.insert(
-            "model".into(),
-            Value::String(map_grok_model(model).to_string()),
-        );
-        args.insert(
-            "disableSearch".into(),
-            disable_search_arg(self.config.disable_search),
-        );
-        args.insert("newChat".into(), bool_str_arg(true));
-
-        let data = self.run_site_locked(GROK_CHAT, args).await?;
-        let answer = extract_answer(&data)
-            .ok_or_else(|| anyhow::anyhow!("Empty response from grok/chat"))?;
-        Ok((answer, extract_conversation_id(&data)))
+        pinned_tab: Option<String>,
+    ) -> anyhow::Result<GrokRetryResult> {
+        self.submit_and_wait(
+            GrokSiteOp::Chat {
+                query: query.to_string(),
+                model: map_grok_model(model),
+                new_chat: true,
+            },
+            pinned_tab,
+        )
+        .await
     }
 
     async fn agent_chat(
@@ -162,24 +170,17 @@ impl GrokBrowserProvider {
         agent_id: &str,
         query: &str,
         model: &str,
-    ) -> anyhow::Result<(String, Option<String>)> {
-        let mut args = Map::new();
-        args.insert("agent".into(), Value::String(agent_id.to_string()));
-        args.insert("query".into(), Value::String(query.to_string()));
-        args.insert(
-            "model".into(),
-            Value::String(map_grok_model(model).to_string()),
-        );
-        args.insert(
-            "disableSearch".into(),
-            disable_search_arg(self.config.disable_search),
-        );
-        args.insert("newChat".into(), bool_str_arg(false));
-
-        let data = self.run_site_locked(GROK_AGENT_CHAT, args).await?;
-        let answer = extract_answer(&data)
-            .ok_or_else(|| anyhow::anyhow!("Empty response from grok/agent-chat"))?;
-        Ok((answer, extract_conversation_id(&data)))
+        pinned_tab: Option<String>,
+    ) -> anyhow::Result<GrokRetryResult> {
+        self.submit_and_wait(
+            GrokSiteOp::AgentChat {
+                agent_id: agent_id.to_string(),
+                query: query.to_string(),
+                model: map_grok_model(model),
+            },
+            pinned_tab,
+        )
+        .await
     }
 
     async fn chat_follow(
@@ -187,26 +188,17 @@ impl GrokBrowserProvider {
         conversation_id: &str,
         query: &str,
         model: &str,
-    ) -> anyhow::Result<(String, Option<String>)> {
-        let mut args = Map::new();
-        args.insert(
-            "conversation".into(),
-            Value::String(conversation_id.to_string()),
-        );
-        args.insert("query".into(), Value::String(query.to_string()));
-        args.insert(
-            "model".into(),
-            Value::String(map_grok_model(model).to_string()),
-        );
-        args.insert(
-            "disableSearch".into(),
-            disable_search_arg(self.config.disable_search),
-        );
-
-        let data = self.run_site_locked(GROK_CHATFOLLOW, args).await?;
-        let answer = extract_answer(&data)
-            .ok_or_else(|| anyhow::anyhow!("Empty response from grok/chatfollow"))?;
-        Ok((answer, extract_conversation_id(&data)))
+        pinned_tab: Option<String>,
+    ) -> anyhow::Result<GrokRetryResult> {
+        self.submit_and_wait(
+            GrokSiteOp::ChatFollow {
+                conversation_id: conversation_id.to_string(),
+                query: query.to_string(),
+                model: map_grok_model(model),
+            },
+            pinned_tab,
+        )
+        .await
     }
 
     async fn resolve_agent_name(&self) -> anyhow::Result<()> {
@@ -223,7 +215,16 @@ impl GrokBrowserProvider {
             return Ok(());
         };
 
-        let data = self.run_site_locked(GROK_AGENTS, Map::new()).await?;
+        let result = self
+            .submit_and_wait(
+                GrokSiteOp::Simple {
+                    adapter: GROK_AGENTS.to_string(),
+                    args: Default::default(),
+                },
+                None,
+            )
+            .await?;
+        let data = &result.data;
         let agents = data
             .get("agents")
             .and_then(|v| v.as_array())
@@ -258,22 +259,31 @@ impl GrokBrowserProvider {
         if let Some(key) = key {
             if let Some(existing) = self.sessions.get(key).await {
                 match self
-                    .chat_follow(&existing.conversation_id, user, effective_model.as_str())
+                    .chat_follow(
+                        &existing.conversation_id,
+                        user,
+                        effective_model.as_str(),
+                        existing.tab_id.clone(),
+                    )
                     .await
                 {
-                    Ok((answer, conv)) => {
-                        let conversation_id = conv.unwrap_or(existing.conversation_id);
+                    Ok(result) => {
+                        let conversation_id = result
+                            .conversation_id
+                            .clone()
+                            .unwrap_or(existing.conversation_id);
                         self.sessions
                             .set(
                                 key,
                                 GrokBrowserSession {
                                     conversation_id,
                                     agent_id: self.effective_agent_id(),
-                                    model: map_grok_model(&effective_model).to_string(),
+                                    model: map_grok_model(&effective_model),
+                                    tab_id: result.tab_id.or(existing.tab_id),
                                 },
                             )
                             .await;
-                        return Ok(answer);
+                        return Ok(result.answer);
                     }
                     Err(err) if is_conversation_not_found(&err) => {
                         self.sessions.clear(key).await;
@@ -288,13 +298,18 @@ impl GrokBrowserProvider {
                 Self::merge_system_user(Self::system_message(messages), user)
             };
 
-            let (answer, conversation_id) = if let Some(agent_id) = self.effective_agent_id() {
-                self.agent_chat(&agent_id, &query, effective_model.as_str())
-                    .await?
-            } else {
-                self.chat_stateless(&query, effective_model.as_str())
-                    .await?
-            };
+            let (answer, conversation_id, tab_id) =
+                if let Some(agent_id) = self.effective_agent_id() {
+                    let result = self
+                        .agent_chat(&agent_id, &query, effective_model.as_str(), None)
+                        .await?;
+                    (result.answer, result.conversation_id, result.tab_id)
+                } else {
+                    let result = self
+                        .chat_stateless(&query, effective_model.as_str(), None)
+                        .await?;
+                    (result.answer, result.conversation_id, result.tab_id)
+                };
 
             if let Some(conversation_id) = conversation_id {
                 self.sessions
@@ -303,7 +318,8 @@ impl GrokBrowserProvider {
                         GrokBrowserSession {
                             conversation_id,
                             agent_id: self.effective_agent_id(),
-                            model: map_grok_model(&effective_model).to_string(),
+                            model: map_grok_model(&effective_model),
+                            tab_id,
                         },
                     )
                     .await;
@@ -313,10 +329,10 @@ impl GrokBrowserProvider {
         }
 
         let query = Self::merge_system_user(Self::system_message(messages), user);
-        let (answer, _) = self
-            .chat_stateless(&query, effective_model.as_str())
+        let result = self
+            .chat_stateless(&query, effective_model.as_str(), None)
             .await?;
-        Ok(answer)
+        Ok(result.answer)
     }
 
     pub fn sessions(&self) -> Arc<GrokSessionStore> {
@@ -336,7 +352,15 @@ impl Provider for GrokBrowserProvider {
 
     async fn warmup(&self) -> anyhow::Result<()> {
         self.resolve_agent_name().await?;
-        let _ = self.run_site_locked(GROK_MODES, Map::new()).await?;
+        let _ = self
+            .submit_and_wait(
+                GrokSiteOp::Simple {
+                    adapter: GROK_MODES.to_string(),
+                    args: Default::default(),
+                },
+                None,
+            )
+            .await?;
         Ok(())
     }
 
@@ -349,10 +373,10 @@ impl Provider for GrokBrowserProvider {
     ) -> anyhow::Result<String> {
         Self::validate_temperature(temperature)?;
         let query = Self::merge_system_user(system_prompt, message);
-        let (answer, _) = self
-            .chat_stateless(&query, self.effective_model(model).as_str())
+        let result = self
+            .chat_stateless(&query, self.effective_model(model).as_str(), None)
             .await?;
-        Ok(answer)
+        Ok(result.answer)
     }
 
     async fn chat_with_history(
@@ -366,10 +390,10 @@ impl Provider for GrokBrowserProvider {
             let system = Self::system_message(messages);
             let user = Self::last_user_message(messages)?;
             let query = Self::merge_system_user(system, user);
-            let (answer, _) = self
-                .chat_stateless(&query, self.effective_model(model).as_str())
+            let result = self
+                .chat_stateless(&query, self.effective_model(model).as_str(), None)
                 .await?;
-            return Ok(answer);
+            return Ok(result.answer);
         }
         self.chat_follow_mode(messages, model, None).await
     }
@@ -406,6 +430,10 @@ impl Provider for GrokBrowserProvider {
     }
 }
 
+pub fn grok_job_registry() -> Option<Arc<GrokJobRegistry>> {
+    global_job_registry()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -428,17 +456,19 @@ mod tests {
 
     #[test]
     fn effective_model_uses_config_default() {
+        let client = Arc::new(Mutex::new(
+            BunBrowserClient::new_deferred(Some("http://127.0.0.1:1".into()), Some(1)).unwrap(),
+        ));
+        let scheduler = GrokBrowserScheduler::new(Arc::clone(&client), 8);
         let provider = GrokBrowserProvider {
-            client: Mutex::new(
-                BunBrowserClient::new_deferred(Some("http://127.0.0.1:1".into()), Some(1)).unwrap(),
-            ),
+            client,
             config: GrokBrowserConfig {
                 model: Some("fast".into()),
                 ..GrokBrowserConfig::default()
             },
             resolved_agent_id: StdMutex::new(None),
             sessions: Arc::new(GrokSessionStore::new()),
-            call_lock: Mutex::new(()),
+            scheduler,
         };
         assert_eq!(provider.effective_model("default"), "fast");
         assert_eq!(provider.effective_model("expert"), "expert");

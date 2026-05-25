@@ -18,7 +18,9 @@ pub struct InternalSessionsResponse {
 }
 
 /// GET /internal/sessions — gateway WS runners + active channel turns.
-pub async fn handle_internal_sessions(State(state): State<AppState>) -> Json<InternalSessionsResponse> {
+pub async fn handle_internal_sessions(
+    State(state): State<AppState>,
+) -> Json<InternalSessionsResponse> {
     let mut sessions = Vec::new();
 
     if let Ok(guard) = state.gateway_sessions.try_lock() {

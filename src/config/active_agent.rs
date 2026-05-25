@@ -129,8 +129,7 @@ pub async fn persist_active_agent_config_dir(
         agent: agent_name.map(str::to_string),
         config_dir: config_dir.to_string_lossy().into_owned(),
     };
-    let serialized =
-        toml::to_string_pretty(&state).context("serializing active agent marker")?;
+    let serialized = toml::to_string_pretty(&state).context("serializing active agent marker")?;
     let temp_path = default_config_dir.join(format!(
         ".{ACTIVE_AGENT_STATE_FILE}.tmp-{}",
         uuid::Uuid::new_v4()

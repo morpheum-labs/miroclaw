@@ -57,7 +57,11 @@ pub async fn run_hub_supervisor(hub_config: Config, host: String, port: u16) -> 
                         dir = %dir.display(),
                         "Starting agent worker"
                     );
-                    Box::pin(crate::agent_worker::run_for_profile_dir(&dir, internal_port)).await
+                    Box::pin(crate::agent_worker::run_for_profile_dir(
+                        &dir,
+                        internal_port,
+                    ))
+                    .await
                 }
             },
         ));

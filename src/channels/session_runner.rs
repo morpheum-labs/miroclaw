@@ -59,10 +59,11 @@ impl ChannelSessionState {
             .find(|(s, _)| *s == seq)
             .map(|(_, v)| v.clone())
             .unwrap_or_else(|| serde_json::json!({"type":"error","message":"replay miss"}));
-        self.subscribers.retain(|tx| match tx.try_send(payload.clone()) {
-            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => false,
-            Ok(()) | Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => true,
-        });
+        self.subscribers
+            .retain(|tx| match tx.try_send(payload.clone()) {
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => false,
+                Ok(()) | Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => true,
+            });
     }
 }
 
@@ -121,7 +122,13 @@ pub fn emit_channel_session_event(key: &str, value: serde_json::Value) {
 pub async fn attach_channel_session(
     key: &str,
     after_seq: Option<u64>,
-) -> Result<(Vec<serde_json::Value>, tokio::sync::mpsc::Receiver<serde_json::Value>), &'static str> {
+) -> Result<
+    (
+        Vec<serde_json::Value>,
+        tokio::sync::mpsc::Receiver<serde_json::Value>,
+    ),
+    &'static str,
+> {
     let (live_tx, live_rx) = tokio::sync::mpsc::channel(256);
     let snapshot = with_store(|g| -> Result<Vec<serde_json::Value>, &'static str> {
         let state = g

@@ -1650,6 +1650,39 @@ pub async fn handle_api_tasks_sse(
         .into_response()
 }
 
+/// GET /api/grok-browser/jobs/:request_id — poll grok-browser job status
+pub async fn handle_api_grok_browser_job(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(request_id): Path<String>,
+) -> impl IntoResponse {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp.into_response();
+    }
+
+    let Some(registry) = crate::providers::grok_browser::grok_job_registry() else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "grok-browser job registry is not available in this process"
+            })),
+        )
+            .into_response();
+    };
+
+    match registry.poll(request_id.trim()).await {
+        Some(snapshot) => Json(snapshot).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "job not found",
+                "request_id": request_id
+            })),
+        )
+            .into_response(),
+    }
+}
+
 // ── Claude Code hook endpoint ────────────────────────────────────
 
 /// POST /hooks/claude-code — receives HTTP hook events from Claude Code

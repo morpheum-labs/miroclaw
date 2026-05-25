@@ -1086,6 +1086,10 @@ pub async fn run_gateway(
         .route("/api/tasks/stream", get(api::handle_api_tasks_sse))
         .route("/api/tasks/{id}", get(api::handle_api_tasks_get))
         .route("/api/tasks/{id}/kill", post(api::handle_api_tasks_kill))
+        .route(
+            "/api/grok-browser/jobs/{request_id}",
+            get(api::handle_api_grok_browser_job),
+        )
         .route("/api/integrations", get(api::handle_api_integrations))
         .route(
             "/api/integrations/settings",

@@ -72,9 +72,7 @@ impl AgentRegistry {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
-            bail!(
-                "agent name must contain only alphanumeric characters, hyphens, or underscores"
-            );
+            bail!("agent name must contain only alphanumeric characters, hyphens, or underscores");
         }
         Ok(())
     }
@@ -104,7 +102,8 @@ impl AgentRegistry {
             .await
             .with_context(|| format!("creating {}", home_config_dir.display()))?;
         let serialized = toml::to_string_pretty(self).context("serializing registry")?;
-        let temp = home_config_dir.join(format!(".{REGISTRY_FILENAME}.tmp-{}", uuid::Uuid::new_v4()));
+        let temp =
+            home_config_dir.join(format!(".{REGISTRY_FILENAME}.tmp-{}", uuid::Uuid::new_v4()));
         tokio::fs::write(&temp, serialized)
             .await
             .with_context(|| format!("writing {}", temp.display()))?;
@@ -201,7 +200,9 @@ impl AgentRegistry {
 
 /// Build delegate settings from a profile's primary runtime config.
 #[must_use]
-pub fn delegate_config_from_profile(config: &crate::config::Config) -> crate::config::DelegateAgentConfig {
+pub fn delegate_config_from_profile(
+    config: &crate::config::Config,
+) -> crate::config::DelegateAgentConfig {
     crate::config::DelegateAgentConfig {
         provider: config
             .default_provider

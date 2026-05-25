@@ -100,7 +100,10 @@ fn parse_ws_fresh_query(raw: Option<&str>) -> bool {
 ///
 /// Browsers cannot set custom headers on `new WebSocket(url)`, so the query
 /// parameter and subprotocol paths are required for browser-based clients.
-pub(crate) fn extract_ws_token<'a>(headers: &'a HeaderMap, query_token: Option<&'a str>) -> Option<&'a str> {
+pub(crate) fn extract_ws_token<'a>(
+    headers: &'a HeaderMap,
+    query_token: Option<&'a str>,
+) -> Option<&'a str> {
     // 1. Authorization header
     if let Some(t) = headers
         .get(header::AUTHORIZATION)
@@ -304,23 +307,21 @@ async fn handle_channel_session_attach(
     session_key: String,
     last_event_seq: Option<u64>,
 ) {
-    let (snapshot, mut live_rx) = match crate::channels::session_runner::attach_channel_session(
-        &session_key,
-        last_event_seq,
-    )
-    .await
-    {
-        Ok(x) => x,
-        Err(msg) => {
-            let err = serde_json::json!({
-                "type": "error",
-                "message": msg,
-                "code": "CHANNEL_ATTACH_FAILED",
-            });
-            let _ = sender.send(Message::Text(err.to_string().into())).await;
-            return;
-        }
-    };
+    let (snapshot, mut live_rx) =
+        match crate::channels::session_runner::attach_channel_session(&session_key, last_event_seq)
+            .await
+        {
+            Ok(x) => x,
+            Err(msg) => {
+                let err = serde_json::json!({
+                    "type": "error",
+                    "message": msg,
+                    "code": "CHANNEL_ATTACH_FAILED",
+                });
+                let _ = sender.send(Message::Text(err.to_string().into())).await;
+                return;
+            }
+        };
 
     let ack = serde_json::json!({
         "type": "connected",
@@ -336,7 +337,8 @@ async fn handle_channel_session_attach(
             .await
             .is_err()
         {
-            let _ = crate::channels::session_runner::unregister_channel_subscriber(&session_key).await;
+            let _ =
+                crate::channels::session_runner::unregister_channel_subscriber(&session_key).await;
             return;
         }
     }
@@ -437,7 +439,9 @@ async fn handle_socket(
                         {
                             session_id = sid.to_string();
                         } else if let Some(ref key) = attach_session_key {
-                            if let Some(sid) = key.strip_prefix(crate::agent::session_record::GATEWAY_SESSION_PREFIX) {
+                            if let Some(sid) = key
+                                .strip_prefix(crate::agent::session_record::GATEWAY_SESSION_PREFIX)
+                            {
                                 session_id = sid.to_string();
                             }
                         }

@@ -4049,9 +4049,12 @@ pub struct GrokBrowserConfig {
     /// Disable Grok web search for adapter calls.
     #[serde(default = "default_grok_browser_disable_search")]
     pub disable_search: bool,
-    /// HTTP request timeout for bun-browser site adapter calls.
+    /// HTTP request timeout ceiling for bun-browser site adapter calls (per-call timeout is mode-aware).
     #[serde(default = "default_grok_browser_request_timeout_secs")]
     pub request_timeout_secs: u64,
+    /// Maximum concurrent grok.com tabs for parallel site runs.
+    #[serde(default = "default_grok_browser_max_parallel_tabs")]
+    pub max_parallel_tabs: usize,
     /// Optional bun-browser daemon host override.
     #[serde(default)]
     pub host: Option<String>,
@@ -4066,7 +4069,11 @@ fn default_grok_browser_disable_search() -> bool {
 }
 
 fn default_grok_browser_request_timeout_secs() -> u64 {
-    120
+    40 * 60 + 300
+}
+
+fn default_grok_browser_max_parallel_tabs() -> usize {
+    8
 }
 
 impl Default for GrokBrowserConfig {
@@ -4078,6 +4085,7 @@ impl Default for GrokBrowserConfig {
             model: default_grok_browser_model(),
             disable_search: default_grok_browser_disable_search(),
             request_timeout_secs: default_grok_browser_request_timeout_secs(),
+            max_parallel_tabs: default_grok_browser_max_parallel_tabs(),
             host: None,
         }
     }
@@ -8895,12 +8903,14 @@ async fn persist_legacy_active_workspace_marker_in(
         return Ok(());
     }
 
-    fs::create_dir_all(default_config_dir).await.with_context(|| {
-        format!(
-            "Failed to create default config directory: {}",
-            default_config_dir.display()
-        )
-    })?;
+    fs::create_dir_all(default_config_dir)
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to create default config directory: {}",
+                default_config_dir.display()
+            )
+        })?;
 
     let state = ActiveWorkspaceState {
         config_dir: config_dir.to_string_lossy().into_owned(),

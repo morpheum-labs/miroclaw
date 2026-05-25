@@ -87,12 +87,15 @@ credential is not reused for fallback providers.
 - Distinct from `xai` / `grok` API provider (`XAI_API_KEY`)
 - Requires [bun-browser](https://github.com/epiral/bun-browser) daemon plus a logged-in [grok.com](https://grok.com/) browser session
 - Auth: `BUN_BROWSER_TOKEN` or `~/.bun-browser/daemon.json` (`token` field); optional host override via `BUN_BROWSER_HOST`
-- Configure via `[grok_browser]` (`session_mode`, optional `agent_id` / `agent_name`, `disable_search`)
-- `session_mode = "follow"` (default): persists Grok `conversationId` and uses `grok/chatfollow` for follow-ups
+- Configure via `[grok_browser]` (`session_mode`, optional `agent_id` / `agent_name`, `disable_search`, `max_parallel_tabs`, `request_timeout_secs`)
+- `session_mode = "follow"` (default): persists Grok `conversationId` and pinned `tab_id`; uses `grok/chatfollow` for follow-ups
 - `session_mode = "stateless"`: each call starts a fresh `grok/chat` thread
-- Models map to Grok web modes: `fast`, `auto`, `expert` (aliases: `grok-3` → `fast`, `grok-4` → `expert`)
+- Models map to Grok web modes: `fast`, `auto`, `expert`, `heavy`, `beta`, `grok-420-computer-use-sa` (aliases: `grok-3` → `fast`, `grok-4` → `expert`, `grok-4-heavy` / `team-of-experts` → `heavy`)
+- Long-running replies use in-adapter `waitOnly` polling across multiple `/site/run` calls (mode-aware HTTP timeouts: fast/auto/beta 15m, expert 25m, heavy 40m, plus buffer)
+- Up to `max_parallel_tabs` (default **8**) concurrent grok.com tabs; additional jobs queue FIFO with a `request_id` assigned at submit
+- Poll job status: `GET /api/grok-browser/jobs/{request_id}` (same gateway bearer auth as other `/api/*` routes)
 - No native tool calling; agentic tool loops should use an API-based provider instead
-- Typical latency: 5–30s per turn (browser automation)
+- Typical latency: 5–30s per turn for fast modes; expert/heavy can take many minutes
 
 ### Ollama Vision Notes
 

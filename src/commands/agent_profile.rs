@@ -48,7 +48,9 @@ pub async fn handle_command(command: AgentProfileCommands) -> Result<()> {
         }
         AgentProfileCommands::Use { name } => cmd_use(&home_dir, &name).await,
         AgentProfileCommands::Show { name } => cmd_show(&home_dir, &name).await,
-        AgentProfileCommands::Worker { profile, port } => cmd_worker(&home_dir, &profile, port).await,
+        AgentProfileCommands::Worker { profile, port } => {
+            cmd_worker(&home_dir, &profile, port).await
+        }
     }
 }
 
@@ -70,14 +72,17 @@ async fn cmd_list(home_dir: &Path) -> Result<()> {
         println!("Create one with: miroclaw agents create main");
         return Ok(());
     }
-    let active = crate::config::active_agent::load_persisted_active_agent_config_dir(
-        home_dir,
-        |s| PathBuf::from(shellexpand::tilde(s).as_ref()),
-    )
-    .await?
-    .map(|p| p.to_string_lossy().into_owned());
+    let active =
+        crate::config::active_agent::load_persisted_active_agent_config_dir(home_dir, |s| {
+            PathBuf::from(shellexpand::tilde(s).as_ref())
+        })
+        .await?
+        .map(|p| p.to_string_lossy().into_owned());
 
-    println!("{:<16} {:<8} {:<8} {}", "NAME", "ENABLED", "PORT", "CONFIG_DIR");
+    println!(
+        "{:<16} {:<8} {:<8} {}",
+        "NAME", "ENABLED", "PORT", "CONFIG_DIR"
+    );
     for entry in &registry.agents {
         let dir = crate::config::registry::resolve_profile_path(home_dir, &entry.config_dir);
         let marker = active
@@ -102,7 +107,10 @@ async fn cmd_create(home_dir: &Path, name: &str, from: Option<&str>) -> Result<(
 
     let profile_dir = registry.profile_config_dir(home_dir, name);
     if profile_dir.exists() {
-        bail!("profile directory already exists: {}", profile_dir.display());
+        bail!(
+            "profile directory already exists: {}",
+            profile_dir.display()
+        );
     }
 
     tokio::fs::create_dir_all(profile_dir.join("workspace")).await?;
@@ -140,7 +148,10 @@ async fn cmd_create(home_dir: &Path, name: &str, from: Option<&str>) -> Result<(
     }
     registry.save_to(home_dir).await?;
 
-    println!("Created agent profile '{name}' at {}", profile_dir.display());
+    println!(
+        "Created agent profile '{name}' at {}",
+        profile_dir.display()
+    );
     println!("Internal port: {port}");
     println!("Activate with: miroclaw agents use {name}");
     Ok(())

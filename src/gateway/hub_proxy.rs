@@ -20,8 +20,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
-use crate::security::pairing::PairingGuard;
 use super::ws::{extract_ws_token, WsQuery, WS_PROTOCOL};
+use crate::security::pairing::PairingGuard;
 
 #[derive(Clone)]
 pub struct HubState {
@@ -139,8 +139,9 @@ pub async fn handle_hub_ws_chat(
     let ws = if headers
         .get("sec-websocket-protocol")
         .and_then(|v| v.to_str().ok())
-        .map_or(false, |protos| protos.split(',').any(|p| p.trim() == WS_PROTOCOL))
-    {
+        .map_or(false, |protos| {
+            protos.split(',').any(|p| p.trim() == WS_PROTOCOL)
+        }) {
         ws.protocols([WS_PROTOCOL])
     } else {
         ws
@@ -306,10 +307,7 @@ async fn run_backend_relay(
         bail!("agent '{agent_id}' is disabled");
     }
     let mut url = format!("ws://127.0.0.1:{}/ws/chat", entry.internal_port);
-    let session_id = params
-        .session_id
-        .as_deref()
-        .or(query.session_id.as_deref());
+    let session_id = params.session_id.as_deref().or(query.session_id.as_deref());
     let mut qs = Vec::new();
     if let Some(sid) = session_id {
         qs.push(format!("session_id={}", urlencoding::encode(sid)));

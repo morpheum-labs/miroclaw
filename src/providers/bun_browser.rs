@@ -1,4 +1,4 @@
-//! HTTP client for the bun-browser daemon (`POST /site/run`).
+//! HTTP client for the bun-browser daemon (`POST /site/run`, `POST /command`).
 //!
 //! Auth and host resolution mirrors taxonomy-processor's `bun_browser.py`.
 
@@ -10,13 +10,15 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 pub const DEFAULT_HOST: &str = "http://127.0.0.1:19824";
-pub const DEFAULT_TIMEOUT_SECS: u64 = 120;
+/// Upper bound for expert/heavy grok modes (40m + buffer).
+pub const DEFAULT_TIMEOUT_SECS: u64 = 40 * 60 + 300;
 
 pub const BUN_BROWSER_HOST_ENV: &str = "BUN_BROWSER_HOST";
 pub const BUN_BROWSER_TOKEN_ENV: &str = "BUN_BROWSER_TOKEN";
 pub const BUN_BROWSER_TIMEOUT_ENV: &str = "BUN_BROWSER_TIMEOUT";
 
 const DAEMON_CONFIG_REL: &str = ".bun-browser/daemon.json";
+const GROK_ORIGIN: &str = "https://grok.com";
 
 #[derive(Debug, Clone)]
 pub struct BunBrowserConfig {
@@ -36,6 +38,18 @@ impl BunBrowserConfig {
             timeout,
         })
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RunSiteOptions {
+    pub tab_id: Option<String>,
+    pub timeout: Option<Duration>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TabInfo {
+    pub tab_id: String,
+    pub url: String,
 }
 
 fn resolve_host(host_override: Option<&str>) -> String {
@@ -105,6 +119,8 @@ struct SiteRunRequest<'a> {
     name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     args: Option<&'a Map<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tabId: Option<&'a str>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,6 +132,41 @@ struct SiteRunEnvelope {
     error: Option<String>,
     #[serde(default)]
     hint: Option<String>,
+    #[serde(default)]
+    tab: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct CommandRequest {
+    id: String,
+    action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommandResponse {
+    success: bool,
+    #[serde(default)]
+    data: Option<CommandData>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommandData {
+    #[serde(default)]
+    tabs: Vec<CommandTab>,
+    #[serde(default)]
+    tabId: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommandTab {
+    #[serde(default)]
+    tabId: Option<Value>,
+    #[serde(default)]
+    url: Option<String>,
 }
 
 pub fn format_site_error(error: &str, hint: Option<&str>) -> String {
@@ -124,6 +175,16 @@ pub fn format_site_error(error: &str, hint: Option<&str>) -> String {
     } else {
         error.to_string()
     }
+}
+
+fn value_to_tab_id(value: &Value) -> Option<String> {
+    if let Some(s) = value.as_str() {
+        let trimmed = s.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    value.as_u64().map(|n| n.to_string())
 }
 
 #[derive(Debug, Clone)]
@@ -167,7 +228,7 @@ impl BunBrowserClient {
         Self::new(BunBrowserConfig::resolve(host_override, timeout_secs)?)
     }
 
-    fn ensure_config(&mut self) -> Result<&BunBrowserConfig> {
+    fn ensure_config(&mut self) -> Result<BunBrowserConfig> {
         if self.config.is_none() {
             self.config = Some(BunBrowserConfig::resolve(
                 self.host_override.as_deref(),
@@ -178,7 +239,7 @@ impl BunBrowserClient {
                 .build()
                 .context("build bun-browser HTTP client")?;
         }
-        Ok(self.config.as_ref().expect("config initialized"))
+        Ok(self.config.as_ref().expect("config initialized").clone())
     }
 
     pub async fn run_site(&self, name: &str, args: Map<String, Value>) -> Result<Value> {
@@ -187,12 +248,79 @@ impl BunBrowserClient {
                 "bun-browser client requires run_site_mut before deferred auth is resolved"
             )
         })?;
-        Self::post_site_run(&self.http, config, name, args).await
+        Self::post_site_run(&self.http, config, name, args, RunSiteOptions::default()).await
     }
 
     pub async fn run_site_mut(&mut self, name: &str, args: Map<String, Value>) -> Result<Value> {
-        let config = self.ensure_config()?.clone();
-        Self::post_site_run(&self.http, &config, name, args).await
+        let config = self.ensure_config()?;
+        Self::post_site_run(&self.http, &config, name, args, RunSiteOptions::default()).await
+    }
+
+    pub async fn run_site_with_options(
+        &mut self,
+        name: &str,
+        args: Map<String, Value>,
+        options: RunSiteOptions,
+    ) -> Result<Value> {
+        let config = self.ensure_config()?;
+        Self::post_site_run(&self.http, &config, name, args, options).await
+    }
+
+    pub async fn tab_list(&mut self) -> Result<Vec<TabInfo>> {
+        let config = self.ensure_config()?;
+        let response = Self::post_command(
+            &self.http,
+            &config,
+            CommandRequest {
+                id: uuid::Uuid::new_v4().to_string(),
+                action: "tab_list".into(),
+                url: None,
+            },
+            None,
+        )
+        .await?;
+        let tabs = response.data.map(|d| d.tabs).unwrap_or_default();
+        Ok(tabs
+            .into_iter()
+            .filter_map(|tab| {
+                let tab_id = tab.tabId.as_ref().and_then(value_to_tab_id)?;
+                Some(TabInfo {
+                    tab_id,
+                    url: tab.url.unwrap_or_default(),
+                })
+            })
+            .collect())
+    }
+
+    pub async fn tab_new(&mut self, url: &str) -> Result<String> {
+        let config = self.ensure_config()?;
+        let response = Self::post_command(
+            &self.http,
+            &config,
+            CommandRequest {
+                id: uuid::Uuid::new_v4().to_string(),
+                action: "tab_new".into(),
+                url: Some(url.to_string()),
+            },
+            None,
+        )
+        .await?;
+        response
+            .data
+            .and_then(|d| d.tabId)
+            .and_then(|v| value_to_tab_id(&v))
+            .ok_or_else(|| anyhow::anyhow!("tab_new returned no tabId"))
+    }
+
+    pub async fn ensure_grok_tab(&mut self, preferred: Option<&str>) -> Result<String> {
+        if let Some(tab_id) = preferred.map(str::trim).filter(|s| !s.is_empty()) {
+            return Ok(tab_id.to_string());
+        }
+        let tabs = self.tab_list().await?;
+        if let Some(tab) = tabs.iter().find(|t| tab_matches_grok(&t.url)) {
+            return Ok(tab.tab_id.clone());
+        }
+        self.tab_new(GROK_ORIGIN).await
     }
 
     async fn post_site_run(
@@ -200,15 +328,20 @@ impl BunBrowserClient {
         config: &BunBrowserConfig,
         name: &str,
         args: Map<String, Value>,
+        options: RunSiteOptions,
     ) -> Result<Value> {
         let url = format!("{}/site/run", config.host);
+        let tab_ref = options.tab_id.as_deref();
         let payload = SiteRunRequest {
             name,
             args: if args.is_empty() { None } else { Some(&args) },
+            tabId: tab_ref,
         };
 
+        let timeout = options.timeout.unwrap_or(config.timeout);
         let response = http
             .post(&url)
+            .timeout(timeout)
             .header(
                 reqwest::header::AUTHORIZATION,
                 format!("Bearer {}", config.token),
@@ -234,6 +367,7 @@ impl BunBrowserClient {
                     Some(format!("HTTP {}", status.as_u16()))
                 },
                 hint: Some(body_text.chars().take(200).collect()),
+                tab: None,
             });
 
         if !envelope.success {
@@ -244,8 +378,65 @@ impl BunBrowserClient {
             anyhow::bail!(format_site_error(&error, envelope.hint.as_deref()));
         }
 
-        Ok(envelope.data)
+        let mut data = envelope.data;
+        if data.is_object() {
+            if let Some(obj) = data.as_object_mut() {
+                if !obj.contains_key("tab") {
+                    if let Some(tab) = envelope.tab {
+                        obj.insert("tab".into(), tab);
+                    }
+                }
+            }
+        }
+        Ok(data)
     }
+
+    async fn post_command(
+        http: &Client,
+        config: &BunBrowserConfig,
+        request: CommandRequest,
+        timeout: Option<Duration>,
+    ) -> Result<CommandResponse> {
+        let url = format!("{}/command", config.host);
+        let response = http
+            .post(&url)
+            .timeout(timeout.unwrap_or(config.timeout))
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("Bearer {}", config.token),
+            )
+            .json(&request)
+            .send()
+            .await
+            .with_context(|| format!("bun-browser command '{}' failed", request.action))?;
+
+        let status = response.status();
+        let body_text = response
+            .text()
+            .await
+            .context("read bun-browser command response")?;
+        let parsed: CommandResponse = serde_json::from_str(&body_text).unwrap_or(CommandResponse {
+            success: status.is_success(),
+            data: None,
+            error: if status.is_success() {
+                None
+            } else {
+                Some(format!("HTTP {}", status.as_u16()))
+            },
+        });
+        if !parsed.success {
+            let error = parsed
+                .error
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "Unknown command error".to_string());
+            anyhow::bail!(error);
+        }
+        Ok(parsed)
+    }
+}
+
+fn tab_matches_grok(url: &str) -> bool {
+    url.contains("grok.com")
 }
 
 #[cfg(test)]
@@ -318,7 +509,8 @@ mod tests {
     }
 
     #[test]
-    fn format_site_error_without_hint() {
-        assert_eq!(format_site_error("HTTP 500", None), "HTTP 500");
+    fn tab_matches_grok_origin() {
+        assert!(tab_matches_grok("https://grok.com/c/abc"));
+        assert!(!tab_matches_grok("https://example.com"));
     }
 }

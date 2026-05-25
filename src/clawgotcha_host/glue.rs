@@ -13,7 +13,10 @@ use parking_lot::{Mutex, RwLock};
 use crate::config::registry::AgentRegistry;
 use crate::config::{Config, DelegateAgentConfig};
 
-async fn write_profile_config(profile_dir: &std::path::Path, agent: &DelegateAgentConfig) -> Result<(), ClawgotchaError> {
+async fn write_profile_config(
+    profile_dir: &std::path::Path,
+    agent: &DelegateAgentConfig,
+) -> Result<(), ClawgotchaError> {
     let mut cfg = Config::default();
     cfg.default_provider = Some(agent.provider.clone());
     cfg.default_model = Some(agent.model.clone());
@@ -56,12 +59,14 @@ impl AgentRuntimeUpdater for HostAgents {
         let profile_dir = registry.profile_config_dir(&home_dir, &def.name);
         write_profile_config(&profile_dir, &agent_cfg).await?;
         if registry.get(&def.name).is_none() {
-            registry.agents.push(crate::config::registry::AgentRegistryEntry {
-                name: def.name.clone(),
-                config_dir: format!("{}/{}", registry.profiles_dir, def.name),
-                enabled: true,
-                internal_port: registry.next_internal_port(),
-            });
+            registry
+                .agents
+                .push(crate::config::registry::AgentRegistryEntry {
+                    name: def.name.clone(),
+                    config_dir: format!("{}/{}", registry.profiles_dir, def.name),
+                    enabled: true,
+                    internal_port: registry.next_internal_port(),
+                });
         }
         registry
             .save_to(&home_dir)

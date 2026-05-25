@@ -11,6 +11,8 @@ pub struct GrokBrowserSession {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
     pub model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -172,6 +174,7 @@ mod tests {
             conversation_id: "conv-1".into(),
             agent_id: None,
             model: "fast".into(),
+            tab_id: None,
         };
         store.set("cli:test", session.clone()).await;
         let loaded = store.get("cli:test").await;
@@ -191,6 +194,7 @@ mod tests {
             conversation_id: "abc".into(),
             agent_id: Some("agent".into()),
             model: "auto".into(),
+            tab_id: Some("c416".into()),
         };
         let json = serde_json::to_string(&session).unwrap();
         let parsed: GrokBrowserSession = serde_json::from_str(&json).unwrap();
