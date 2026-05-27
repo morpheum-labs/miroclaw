@@ -347,7 +347,14 @@ mod tests {
         use crate::providers::bun_browser::BunBrowserClient;
 
         let client = Arc::new(Mutex::new(
-            BunBrowserClient::new_deferred(Some("http://127.0.0.1:1".into()), Some(1)).unwrap(),
+            BunBrowserClient::new_deferred(
+                Some("http://127.0.0.1:1".into()),
+                Some(1),
+                None,
+                false,
+                None,
+            )
+            .unwrap(),
         ));
         let scheduler = GrokBrowserScheduler::new(client, 2);
         let (request_id, rx) = scheduler

@@ -43,6 +43,9 @@ impl GrokBrowserProvider {
         let client = Arc::new(Mutex::new(BunBrowserClient::new_deferred(
             config.host.clone(),
             timeout_secs,
+            options.config_path.clone(),
+            options.secrets_encrypt,
+            config.token.clone(),
         )?));
         let max_parallel = if config.max_parallel_tabs > 0 {
             config.max_parallel_tabs
@@ -457,7 +460,14 @@ mod tests {
     #[test]
     fn effective_model_uses_config_default() {
         let client = Arc::new(Mutex::new(
-            BunBrowserClient::new_deferred(Some("http://127.0.0.1:1".into()), Some(1)).unwrap(),
+            BunBrowserClient::new_deferred(
+                Some("http://127.0.0.1:1".into()),
+                Some(1),
+                None,
+                false,
+                None,
+            )
+            .unwrap(),
         ));
         let scheduler = GrokBrowserScheduler::new(Arc::clone(&client), 8);
         let provider = GrokBrowserProvider {

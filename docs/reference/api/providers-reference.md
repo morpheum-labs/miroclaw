@@ -56,7 +56,7 @@ credential is not reused for fallback providers.
 | `perplexity` | — | No | `PERPLEXITY_API_KEY` |
 | `cohere` | — | No | `COHERE_API_KEY` |
 | `copilot` | `github-copilot` | No | (use config/`API_KEY` fallback with GitHub token) |
-| `grok-browser` | `grok_browser`, `grok-web` | Yes | `BUN_BROWSER_TOKEN`, `BUN_BROWSER_HOST` (or `~/.bun-browser/daemon.json`) |
+| `grok-browser` | `grok_browser`, `grok-web` | Yes | `[grok_browser].token`, `BUN_BROWSER_TOKEN`, `BUN_BROWSER_HOST`, or `~/.bun-browser/daemon.json` |
 | `lmstudio` | `lm-studio` | Yes | (optional; local by default) |
 | `llamacpp` | `llama.cpp` | Yes | `LLAMACPP_API_KEY` (optional; only if server auth is enabled) |
 | `sglang` | — | Yes | `SGLANG_API_KEY` (optional) |
@@ -86,8 +86,10 @@ credential is not reused for fallback providers.
 - Provider ID: `grok-browser` (aliases: `grok_browser`, `grok-web`)
 - Distinct from `xai` / `grok` API provider (`XAI_API_KEY`)
 - Requires [bun-browser](https://github.com/epiral/bun-browser) daemon plus a logged-in [grok.com](https://grok.com/) browser session
-- Auth: `BUN_BROWSER_TOKEN` or `~/.bun-browser/daemon.json` (`token` field); optional host override via `BUN_BROWSER_HOST`
-- Configure via `[grok_browser]` (`session_mode`, optional `agent_id` / `agent_name`, `disable_search`, `max_parallel_tabs`, `request_timeout_secs`)
+- Auth precedence: `BUN_BROWSER_TOKEN` (env) → `[grok_browser].token` in `config.toml` → `~/.bun-browser/daemon.json` (`token` field). Legacy TOML key `api` is accepted as an alias for `token`.
+- On bun-browser auth failure (`401`/`403` or token-related errors), the client re-reads `[grok_browser].token` from disk and retries the request once (no process restart required for `scripts/tokenupdate.sh`).
+- Optional host override via `BUN_BROWSER_HOST` or `[grok_browser].host`
+- Configure via `[grok_browser]` (`token`, `session_mode`, optional `agent_id` / `agent_name`, `disable_search`, `max_parallel_tabs`, `request_timeout_secs`)
 - `session_mode = "follow"` (default): persists Grok `conversationId` and pinned `tab_id`; uses `grok/chatfollow` for follow-ups
 - `session_mode = "stateless"`: each call starts a fresh `grok/chat` thread
 - Models map to Grok web modes: `fast`, `auto`, `expert`, `heavy`, `beta`, `grok-420-computer-use-sa` (aliases: `grok-3` → `fast`, `grok-4` → `expert`, `grok-4-heavy` / `team-of-experts` → `heavy`)

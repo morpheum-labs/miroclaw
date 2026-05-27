@@ -705,6 +705,8 @@ pub struct ProviderRuntimeOptions {
     pub native_tool_calling: Option<bool>,
     /// Grok browser provider settings (`[grok_browser]`).
     pub grok_browser: crate::config::GrokBrowserConfig,
+    /// On-disk config path for grok-browser token refresh on auth failure.
+    pub config_path: Option<PathBuf>,
 }
 
 impl Default for ProviderRuntimeOptions {
@@ -721,6 +723,7 @@ impl Default for ProviderRuntimeOptions {
             api_path: None,
             native_tool_calling: None,
             grok_browser: crate::config::GrokBrowserConfig::default(),
+            config_path: None,
         }
     }
 }
@@ -740,6 +743,7 @@ pub fn provider_runtime_options_from_config(
         api_path: config.api_path.clone(),
         native_tool_calling: config.native_tool_calling,
         grok_browser: config.grok_browser.clone(),
+        config_path: Some(config.config_path.clone()),
     }
 }
 
@@ -3056,6 +3060,38 @@ mod tests {
         assert!(create_provider("grok-browser", None).is_ok());
         assert!(create_provider("grok_browser", None).is_ok());
         assert!(create_provider("grok-web", None).is_ok());
+    }
+
+    #[test]
+    fn factory_grok_browser_with_toml_token_only() {
+        let _guard = env_lock();
+        let orig = std::env::var(crate::providers::bun_browser::BUN_BROWSER_TOKEN_ENV).ok();
+        std::env::remove_var(crate::providers::bun_browser::BUN_BROWSER_TOKEN_ENV);
+        let orig_home = std::env::var("HOME").ok();
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", tmp.path());
+
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+        std::fs::write(&config_path, "[grok_browser]\ntoken = \"only-toml\"\n").unwrap();
+
+        let options = ProviderRuntimeOptions {
+            grok_browser: crate::config::GrokBrowserConfig {
+                token: Some("only-toml".into()),
+                ..crate::config::GrokBrowserConfig::default()
+            },
+            config_path: Some(config_path),
+            ..ProviderRuntimeOptions::default()
+        };
+        assert!(create_provider_with_options("grok-browser", None, &options).is_ok());
+
+        if let Some(v) = orig {
+            std::env::set_var(crate::providers::bun_browser::BUN_BROWSER_TOKEN_ENV, v);
+        }
+        match orig_home {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
     }
 
     #[test]

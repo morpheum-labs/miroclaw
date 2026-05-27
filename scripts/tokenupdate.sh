@@ -3,7 +3,7 @@
 #
 #   1. bash scripts/buntoken.sh  → latest token on stdout
 #   2. agentbook taxonomy settings.toml  → [bun_browser] token
-#   3. miroclaw config.toml              → [grok_browser] api
+#   3. miroclaw config.toml              → [grok_browser] token
 #
 # Usage:
 #   bash scripts/tokenupdate.sh
@@ -90,7 +90,7 @@ echo "bun-browser token: ${token}"
 [[ -f "$MIROCLAW_CONFIG_TOML" ]] || die "missing ${MIROCLAW_CONFIG_TOML}"
 
 update_toml_string_key "$AGENTBOOK_SETTINGS_TOML" "bun_browser" "token" "$token"
-update_toml_string_key "$MIROCLAW_CONFIG_TOML" "grok_browser" "api" "$token"
+update_toml_string_key "$MIROCLAW_CONFIG_TOML" "grok_browser" "token" "$token"
 
 echo "updated [bun_browser].token in ${AGENTBOOK_SETTINGS_TOML}"
-echo "updated [grok_browser].api in ${MIROCLAW_CONFIG_TOML}"
+echo "updated [grok_browser].token in ${MIROCLAW_CONFIG_TOML}"

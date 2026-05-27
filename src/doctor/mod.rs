@@ -767,6 +767,7 @@ fn grok_browser_config_error(cfg: &crate::config::GrokBrowserConfig) -> Option<S
     crate::providers::bun_browser::BunBrowserConfig::resolve(
         cfg.host.as_deref(),
         Some(cfg.request_timeout_secs),
+        cfg.token.as_deref(),
     )
     .err()
     .map(|err| err.to_string())

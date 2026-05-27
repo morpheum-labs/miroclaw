@@ -4058,6 +4058,9 @@ pub struct GrokBrowserConfig {
     /// Optional bun-browser daemon host override.
     #[serde(default)]
     pub host: Option<String>,
+    /// Bun-browser daemon bearer token (grok-browser credential).
+    #[serde(default, alias = "api")]
+    pub token: Option<String>,
 }
 
 fn default_grok_browser_model() -> Option<String> {
@@ -4087,8 +4090,36 @@ impl Default for GrokBrowserConfig {
             request_timeout_secs: default_grok_browser_request_timeout_secs(),
             max_parallel_tabs: default_grok_browser_max_parallel_tabs(),
             host: None,
+            token: None,
         }
     }
+}
+
+/// Re-read `[grok_browser].token` from an on-disk config file (for bun-browser auth refresh).
+pub fn read_grok_browser_token_from_config(
+    path: &std::path::Path,
+    secrets_encrypt: bool,
+) -> Result<Option<String>> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("read config at {}", path.display()))?;
+    let mut config = parse_stored_config_contents(path, &contents)?;
+    if secrets_encrypt {
+        let zeroclaw_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let store = crate::security::SecretStore::new(zeroclaw_dir, true);
+        decrypt_optional_secret(
+            &store,
+            &mut config.grok_browser.token,
+            "config.grok_browser.token",
+        )?;
+    }
+    Ok(config
+        .grok_browser
+        .token
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty()))
 }
 
 // ── OpenCode CLI ───────────────────────────────────────────────
@@ -9697,6 +9728,12 @@ impl Config {
                 &store,
                 &mut config.web_search.brave_api_key,
                 "config.web_search.brave_api_key",
+            )?;
+
+            decrypt_optional_secret(
+                &store,
+                &mut config.grok_browser.token,
+                "config.grok_browser.token",
             )?;
 
             decrypt_optional_secret(

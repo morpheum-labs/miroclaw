@@ -434,6 +434,27 @@ Notes:
 - `allow_remote_endpoint = false` (default) rejects any non-loopback endpoint to prevent accidental public exposure.
 - Use `window_allowlist` to restrict which OS windows the sidecar can interact with.
 
+## `[grok_browser]`
+
+Grok browser provider (`default_provider = "grok-browser"`): uses the local [bun-browser](https://github.com/epiral/bun-browser) daemon and a logged-in [grok.com](https://grok.com/) session. Distinct from the `xai` HTTP API provider.
+
+| Key | Default | Purpose |
+|---|---|---|
+| `token` | unset | Bun-browser daemon bearer token (alias: `api` for legacy configs). Precedence after `BUN_BROWSER_TOKEN` env; re-read from disk on auth failure |
+| `host` | `http://127.0.0.1:19824` | Bun-browser daemon base URL (overridable via `BUN_BROWSER_HOST`) |
+| `model` | `auto` | Default Grok web mode when request model is `default` or empty |
+| `session_mode` | `follow` | `follow` (persist conversation/tab) or `stateless` |
+| `agent_id` | unset | Optional Grok Project Agent UUID or project URL |
+| `agent_name` | unset | Optional Grok Project Agent name (resolved at warmup) |
+| `disable_search` | `true` | Disable Grok web search in adapter calls |
+| `max_parallel_tabs` | `8` | Max concurrent grok.com tabs |
+| `request_timeout_secs` | `2700` | HTTP timeout ceiling for site adapter calls |
+
+Notes:
+
+- Treat `token` like other secrets in `config.toml` (`chmod 600`, optional `[secrets] encrypt = true`).
+- `BUN_BROWSER_TOKEN` env always overrides `[grok_browser].token` when set.
+
 ## `[http_request]`
 
 | Key | Default | Purpose |
